@@ -24,7 +24,7 @@ export default function Login() {
   return (
     <div className="center">
       <form className="card auth" onSubmit={submit}>
-        <div className="brand">Stay<span>Sync</span></div>
+        <div className="brand">Simon<span>Stays</span></div>
         <p className="muted small">Property calendars, synced across channels.</p>
 
         {mode === 'register' && (

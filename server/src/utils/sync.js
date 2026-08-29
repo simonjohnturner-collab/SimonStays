@@ -22,6 +22,15 @@ async function syncUnit(unitId) {
   });
   const summary = { unitId, channels: channels.length, added: 0, updated: 0, removed: 0, failed: 0 };
 
+  // Guest names harvested from this host's Airbnb emails, keyed by reservation code.
+  const unitRec = await prisma.unit.findUnique({ where: { id: unitId }, include: { property: true } });
+  const hostId = unitRec?.property?.hostId;
+  const nameByCode = {};
+  if (hostId) {
+    const lookups = await prisma.guestLookup.findMany({ where: { hostId } });
+    lookups.forEach((l) => { nameByCode[l.resCode] = l.guestName; });
+  }
+
   for (const ch of channels) {
     const source = SOURCE_FOR[ch.type] || 'import';
     let events;
@@ -42,7 +51,8 @@ async function syncUnit(unitId) {
     for (const ev of events) {
       const uid = ev.uid || `${ch.type}|${ev.start.toISOString()}|${ev.end.toISOString()}`;
       seen.add(uid);
-      const guestName = isGenericTitle(ev.summary) ? channelLabel(ch.type) : ev.summary;
+      const code = ev.resCode || null;
+      const guestName = resolveName(ev, code, nameByCode, ch.type);
 
       const existing = await prisma.booking.findUnique({
         where: { unitId_externalUid: { unitId, externalUid: uid } },
@@ -54,7 +64,8 @@ async function syncUnit(unitId) {
             checkIn: ev.start, checkOut: ev.end,
             // keep a hand-typed name; only fill placeholders
             guestName: isPlaceholder(existing.guestName) ? guestName : existing.guestName,
-            comments: ev.resCode ? mergeResCode(existing.comments, ev.resCode) : existing.comments,
+            resCode: code || existing.resCode,
+            comments: code ? mergeResCode(existing.comments, code) : existing.comments,
             status: 'confirmed',
           },
         });
@@ -64,7 +75,7 @@ async function syncUnit(unitId) {
           data: {
             unitId, source, channelType: ch.type, status: 'confirmed',
             guestName, checkIn: ev.start, checkOut: ev.end, paid: true,
-            externalUid: uid, comments: ev.resCode ? `ResCode: ${ev.resCode}` : null,
+            externalUid: uid, resCode: code, comments: code ? `ResCode: ${code}` : null,
           },
         });
         added++;
@@ -128,12 +139,50 @@ async function checkAvailability(unitId, checkIn, checkOut, excludeBookingId) {
   return { available: conflicts.length === 0, conflicts };
 }
 
+/**
+ * Decide a booking's display name:
+ *   1. real guest name from the email lookup (best)
+ *   2. a name the channel actually put in the feed (rare)
+ *   3. a reservation with unknown name  → the channel label ("Airbnb")
+ *   4. no reservation code = a host block → "Blocked" (there is no guest)
+ */
+function resolveName(ev, code, nameByCode, type) {
+  if (code && nameByCode[code]) return nameByCode[code];
+  if (!isGenericTitle(ev.summary)) return ev.summary;
+  if (code) return channelLabel(type);
+  return 'Blocked';
+}
+
+/**
+ * Re-apply harvested guest names to existing bookings (used right after an email
+ * is ingested, so the board updates without waiting for the next sync).
+ * Returns how many bookings were renamed.
+ */
+async function applyGuestNames(hostId, onlyCode) {
+  const where = { hostId };
+  if (onlyCode) where.resCode = onlyCode;
+  const lookups = await prisma.guestLookup.findMany({ where });
+  let updated = 0;
+  for (const l of lookups) {
+    const bookings = await prisma.booking.findMany({
+      where: { resCode: l.resCode, unit: { property: { hostId } } },
+    });
+    for (const b of bookings) {
+      if (isPlaceholder(b.guestName)) {
+        await prisma.booking.update({ where: { id: b.id }, data: { guestName: l.guestName } });
+        updated++;
+      }
+    }
+  }
+  return updated;
+}
+
 function channelLabel(type) {
   return ({ airbnb: 'Airbnb', booking: 'Booking.com', lekkeslaap: 'LekkeSlaap', other: 'External' })[type] || 'External';
 }
 function isPlaceholder(name) {
   const t = (name || '').trim().toLowerCase();
-  return t === '' || ['airbnb', 'booking.com', 'lekkeslaap', 'external', 'reserved'].indexOf(t) !== -1;
+  return t === '' || ['airbnb', 'booking.com', 'lekkeslaap', 'external', 'reserved', 'blocked', 'booked'].indexOf(t) !== -1;
 }
 function mergeResCode(comments, code) {
   const s = comments || '';
@@ -142,4 +191,4 @@ function mergeResCode(comments, code) {
   return (s ? `${s} | ` : '') + `ResCode: ${code}`;
 }
 
-module.exports = { syncUnit, syncAll, checkAvailability };
+module.exports = { syncUnit, syncAll, checkAvailability, applyGuestNames };

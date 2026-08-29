@@ -24,7 +24,8 @@ button.danger.ghost { background: transparent; color: var(--red); }
 button.mini { padding: 3px 8px; font-size: 12px; background: #eef1f4; color: var(--ink); }
 button.mini.danger { color: var(--red); background: #fdeaea; }
 button.wide, .wide { width: 100%; }
-input, select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; width: 100%; background: #fff; }
+input, select, textarea { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; width: 100%; background: #fff; }
+textarea { resize: vertical; font-family: inherit; }
 a { color: var(--green); cursor: pointer; text-decoration: none; }
 h3, h4 { margin: 0 0 8px; }
 .muted { color: var(--muted); }

@@ -51,6 +51,9 @@ export const api = {
   addChannel: (unitId, type, importUrl, label) => req('POST', `/units/${unitId}/channels`, { type, importUrl, label }),
   deleteChannel: (channelId) => req('DELETE', `/channels/${channelId}`),
 
+  // guest-name email ingest
+  ingestEmail: (subject, body) => req('POST', '/email/ingest', { subject, body }),
+
   // bookings
   availability: (unitId, checkIn, checkOut) =>
     req('GET', `/units/${unitId}/availability?checkIn=${checkIn}&checkOut=${checkOut}`),

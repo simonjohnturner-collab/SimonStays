@@ -5,6 +5,7 @@ import { today, addDays, ymd } from '../dates.js';
 import Board from './Board.jsx';
 import BookingModal from './BookingModal.jsx';
 import UnitPanel from './UnitPanel.jsx';
+import EmailModal from './EmailModal.jsx';
 
 const WINDOW_DAYS = 35;
 
@@ -18,6 +19,7 @@ export default function Main() {
 
   const [bookingCtx, setBookingCtx] = useState(null); // { unit } | { booking, unit }
   const [panelUnit, setPanelUnit] = useState(null);
+  const [emailOpen, setEmailOpen] = useState(false);
   const [msg, setMsg] = useState('');
 
   const from = ymd(start);
@@ -46,7 +48,17 @@ export default function Main() {
   async function addProperty() {
     const name = window.prompt('Property name (e.g. Firenza)');
     if (!name) return;
-    await api.createProperty(name.trim());
+    const ical = window.prompt('Airbnb iCal link for this property (optional — paste the calendar export URL, or leave blank to add units/channels later):');
+    const { property } = await api.createProperty(name.trim());
+    if (ical && ical.trim()) {
+      try {
+        const { unit } = await api.createUnit(property.id, 'Main');
+        await api.addChannel(unit.id, 'airbnb', ical.trim());
+        await api.syncUnit(unit.id);
+      } catch (e) {
+        window.alert('Property created, but the iCal link couldn’t be connected: ' + e.message);
+      }
+    }
     refresh();
   }
   async function addUnit(propertyId) {
@@ -84,12 +96,13 @@ export default function Main() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">Stay<span>Sync</span></div>
+        <div className="brand">Simon<span>Stays</span></div>
         <div className="spacer" />
         <button className="ghost" onClick={() => setStart(addDays(start, -7))}>← week</button>
         <button className="ghost" onClick={() => setStart(addDays(today(), -3))}>Today</button>
         <button className="ghost" onClick={() => setStart(addDays(start, 7))}>week →</button>
         <button className="ghost" onClick={syncAll} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync channels'}</button>
+        <button className="ghost" onClick={() => setEmailOpen(true)}>✉ Guest name</button>
         <span className="host">{host.email}</span>
         <button className="ghost" onClick={logout}>Log out</button>
       </header>
@@ -102,7 +115,6 @@ export default function Main() {
             <span>Properties</span>
             <button className="mini" onClick={addProperty}>+ Property</button>
           </div>
-          <p className="muted small hint">A <b>property</b> is a building; add <b>units</b> (rooms/apartments) inside it — those are the rows on the grid.</p>
           {properties.map((p) => (
             <div key={p.id} className="prop">
               <div className="prop-name">
@@ -149,6 +161,13 @@ export default function Main() {
           booking={bookingCtx.booking}
           onClose={() => setBookingCtx(null)}
           onSaved={async () => { setBookingCtx(null); await loadBookings(properties); }}
+        />
+      )}
+
+      {emailOpen && (
+        <EmailModal
+          onClose={() => setEmailOpen(false)}
+          onDone={async () => { await loadBookings(properties); }}
         />
       )}
 

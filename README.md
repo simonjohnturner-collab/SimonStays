@@ -1,6 +1,6 @@
-# StaySync
+# SimonStays
 
-A **multi-tenant property calendar + channel manager**. Any host signs up, adds
+(Internal project/folder name: StaySync.) A **multi-tenant property calendar + channel manager**. Any host signs up, adds
 their properties and units, keeps one master calendar per unit, and syncs it
 two-way with OTA channels (Airbnb, Booking.com, LekkeSlaap) over iCal.
 

@@ -18,6 +18,7 @@ app.get('/health', (req, res) => res.json({ ok: true, service: 'staysync', time:
 app.use('/feed', require('./routes/feed'));
 
 app.use('/auth', require('./routes/auth'));
+app.use('/email', require('./routes/email'));
 app.use('/properties', require('./routes/properties'));
 app.use('/units', require('./routes/units'));
 // channels + bookings routers mount their own /units/:unitId/... and top-level paths

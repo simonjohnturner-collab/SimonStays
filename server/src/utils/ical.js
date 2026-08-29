@@ -57,8 +57,8 @@ function isGenericTitle(summary) {
  */
 function buildFeed({ unitName, bookings, excludeSource, prodId }) {
   const cal = icalGenerator({
-    name: `StaySync — ${unitName || 'Unit'}`,
-    prodId: prodId || { company: 'StaySync', product: 'channel-manager' },
+    name: `SimonStays — ${unitName || 'Unit'}`,
+    prodId: prodId || { company: 'SimonStays', product: 'channel-manager' },
     ttl: 60 * 60, // suggest hourly refresh
   });
   bookings.forEach((b) => {
