@@ -1,0 +1,121 @@
+// StaySync data model — multi-tenant property calendar + channel manager.
+// Host owns Properties, each Property has Units, each Unit has a calendar of
+// Bookings and any number of ChannelConnections (Airbnb/Booking/LekkeSlaap/manual).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Host {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime   @default(now())
+  properties   Property[]
+}
+
+model Property {
+  id        String   @id @default(uuid())
+  hostId    String
+  host      Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  name      String
+  address   String?
+  createdAt DateTime @default(now())
+  units     Unit[]
+
+  @@index([hostId])
+}
+
+model Unit {
+  id           String              @id @default(uuid())
+  propertyId   String
+  property     Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  name         String
+  capacity     Int?
+  publishToken String              @default(cuid()) // secret in the export-feed URL
+  createdAt    DateTime            @default(now())
+  bookings     Booking[]
+  channels     ChannelConnection[]
+  syncLogs     SyncLog[]
+
+  @@index([propertyId])
+}
+
+model ChannelConnection {
+  id           String      @id @default(uuid())
+  unitId       String
+  unit         Unit        @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  type         ChannelType
+  label        String?
+  importUrl    String? // the channel's iCal export URL we pull FROM
+  lastSyncedAt DateTime?
+  lastStatus   String?
+  createdAt    DateTime    @default(now())
+
+  @@index([unitId])
+}
+
+model Booking {
+  id           String        @id @default(uuid())
+  unitId       String
+  unit         Unit          @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  source       BookingSource @default(manual)
+  channelType  ChannelType?
+  status       BookingStatus @default(confirmed)
+  guestName    String?
+  checkIn      DateTime // date-only (stored at noon UTC)
+  checkOut     DateTime // checkout day = exclusive of last night; the clean day
+  paid         Boolean       @default(false)
+  cleaner      String?
+  comments     String?
+  leavingEarly Boolean       @default(false)
+  externalUid  String? // channel event UID, for idempotent upsert
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([unitId, externalUid])
+  @@index([unitId, checkIn, checkOut])
+}
+
+model SyncLog {
+  id          String       @id @default(uuid())
+  unitId      String
+  unit        Unit         @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  channelType ChannelType?
+  ranAt       DateTime     @default(now())
+  added       Int          @default(0)
+  updated     Int          @default(0)
+  removed     Int          @default(0)
+  ok          Boolean      @default(true)
+  message     String?
+
+  @@index([unitId, ranAt])
+}
+
+enum ChannelType {
+  airbnb
+  booking
+  lekkeslaap
+  other
+  manual
+}
+
+enum BookingSource {
+  manual
+  airbnb
+  booking
+  lekkeslaap
+  import
+}
+
+enum BookingStatus {
+  confirmed
+  floating
+  cancelled
+}
