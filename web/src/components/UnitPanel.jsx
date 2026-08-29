@@ -31,7 +31,9 @@ export default function UnitPanel({ unit, onClose, onChanged, onNewBooking }) {
       setImportUrl('');
       await load();
       setMsg('Channel added. Run Sync to pull its calendar in.');
-    } catch (e) { setMsg(e.message); } finally { setBusy(false); }
+    } catch (e) {
+      setMsg(e.message === 'channel_already_connected' ? 'That iCal URL is already connected to this unit.' : e.message);
+    } finally { setBusy(false); }
   }
   async function removeChannel(id) {
     if (!window.confirm('Remove this channel connection?')) return;
@@ -58,9 +60,15 @@ export default function UnitPanel({ unit, onClose, onChanged, onNewBooking }) {
 
         <button className="wide" onClick={onNewBooking}>➕ New booking for this unit</button>
 
+        <div className="direction-note">
+          <b>Two directions, both needed:</b>
+          <div>⬇ <b>Import</b> pulls a channel’s bookings <i>into</i> StaySync (below).</div>
+          <div>⬆ <b>Export</b> blocks a channel — paste StaySync’s feed <i>into</i> that channel’s <b>Import Calendar</b> (bottom). Airbnb re-pulls it every few hours.</div>
+        </div>
+
         <section>
-          <h4>Import channels</h4>
-          <p className="muted small">Paste each channel’s iCal <b>export</b> URL. StaySync pulls reservations from it.</p>
+          <h4>⬇ Import channels (pull bookings in)</h4>
+          <p className="muted small">Paste each channel’s iCal <b>export</b> URL. “Sync now” pulls its reservations <b>into</b> StaySync — it does not change the channel.</p>
           {channels.length === 0 && <p className="muted small">No channels connected yet.</p>}
           {channels.map((c) => (
             <div key={c.id} className="chan-row">
@@ -81,8 +89,8 @@ export default function UnitPanel({ unit, onClose, onChanged, onNewBooking }) {
         </section>
 
         <section>
-          <h4>Export feed (block these dates on channels)</h4>
-          <p className="muted small">Paste this URL into each channel’s <b>Import calendar</b>. It blocks the dates of this unit’s confirmed bookings.</p>
+          <h4>⬆ Export feed (push blocks out to channels)</h4>
+          <p className="muted small">Copy this URL and paste it into each channel’s <b>Import Calendar</b> (on Airbnb: Listing ▸ Availability ▸ Sync calendars ▸ Import Calendar). It blocks the dates of this unit’s confirmed StaySync bookings. This is the step that makes your bookings show as unavailable on Airbnb.</p>
           <div className="feed-box">
             <code>{feedUrl}</code>
             <button className="mini" onClick={copyFeed}>copy</button>

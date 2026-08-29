@@ -20,6 +20,8 @@ router.post('/units/:unitId/channels', requireOwnedUnit, async (req, res) => {
   const { type, importUrl, label } = req.body || {};
   if (!TYPES.includes(type)) return res.status(400).json({ error: 'invalid_type', allowed: TYPES });
   if (!importUrl) return res.status(400).json({ error: 'importUrl_required' });
+  const dup = await prisma.channelConnection.findFirst({ where: { unitId: req.unit.id, importUrl } });
+  if (dup) return res.status(409).json({ error: 'channel_already_connected' });
   const channel = await prisma.channelConnection.create({
     data: { unitId: req.unit.id, type, importUrl, label: label || null },
   });

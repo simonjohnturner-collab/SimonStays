@@ -24,9 +24,14 @@ function coverage(bookings) {
   return map;
 }
 
-export default function Board({ properties, bookingsByUnit, start, days, onNewBooking, onEditBooking, onOpenUnit }) {
+export default function Board({ properties, bookingsByUnit, start, days, onNewBooking, onEditBooking, onOpenUnit, onAddUnit }) {
   const dates = useMemo(() => range(start, days), [start, days]);
-  const rows = properties.flatMap((p) => p.units.map((u) => ({ ...u, propertyName: p.name })));
+  // Include properties with no units as a placeholder row, so adding one is visible.
+  const rows = properties.flatMap((p) =>
+    p.units.length
+      ? p.units.map((u) => ({ ...u, propertyName: p.name }))
+      : [{ placeholder: true, id: `empty-${p.id}`, propertyId: p.id, name: '', propertyName: p.name }]
+  );
 
   return (
     <div className="board-scroll">
@@ -44,8 +49,19 @@ export default function Board({ properties, bookingsByUnit, start, days, onNewBo
         </thead>
         <tbody>
           {rows.map((u, i) => {
-            const cov = coverage(bookingsByUnit[u.id] || []);
             const first = i === 0 || rows[i - 1].propertyName !== u.propertyName;
+            if (u.placeholder) {
+              return (
+                <tr key={u.id}>
+                  <th className={`prop-cell ${first ? 'sep' : ''}`}>{first ? u.propertyName : ''}</th>
+                  <th className="unit-cell">
+                    <button className="unit-link add" onClick={() => onAddUnit(u.propertyId)}>+ unit</button>
+                  </th>
+                  <td className="cell empty-row" colSpan={dates.length}>No units yet — click “+ unit” to add one.</td>
+                </tr>
+              );
+            }
+            const cov = coverage(bookingsByUnit[u.id] || []);
             return (
               <tr key={u.id}>
                 <th className={`prop-cell ${first ? 'sep' : ''}`}>{first ? u.propertyName : ''}</th>

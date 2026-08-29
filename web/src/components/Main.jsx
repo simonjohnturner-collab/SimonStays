@@ -55,6 +55,16 @@ export default function Main() {
     await api.createUnit(propertyId, name.trim());
     refresh();
   }
+  async function deleteProperty(p) {
+    if (!window.confirm(`Delete property “${p.name}” and all its units/bookings?`)) return;
+    await api.deleteProperty(p.id);
+    refresh();
+  }
+  async function deleteUnit(u) {
+    if (!window.confirm(`Delete unit “${u.name}” and its bookings?`)) return;
+    await api.deleteUnit(u.id);
+    refresh();
+  }
   async function syncAll() {
     setSyncing(true); setMsg('');
     try {
@@ -90,14 +100,21 @@ export default function Main() {
         <aside className="sidebar">
           <div className="side-head">
             <span>Properties</span>
-            <button className="mini" onClick={addProperty}>+ Add</button>
+            <button className="mini" onClick={addProperty}>+ Property</button>
           </div>
+          <p className="muted small hint">A <b>property</b> is a building; add <b>units</b> (rooms/apartments) inside it — those are the rows on the grid.</p>
           {properties.map((p) => (
             <div key={p.id} className="prop">
-              <div className="prop-name">{p.name}</div>
+              <div className="prop-name">
+                <span>{p.name}</span>
+                <button className="del" title="Delete property" onClick={() => deleteProperty(p)}>×</button>
+              </div>
               <div className="units">
                 {p.units.map((u) => (
-                  <button key={u.id} className="unit-chip" onClick={() => setPanelUnit(u)}>{u.name}</button>
+                  <span key={u.id} className="unit-chip-wrap">
+                    <button className="unit-chip" onClick={() => setPanelUnit(u)}>{u.name}</button>
+                    <button className="del sm" title="Delete unit" onClick={() => deleteUnit(u)}>×</button>
+                  </span>
                 ))}
                 <button className="mini" onClick={() => addUnit(p.id)}>+ unit</button>
               </div>
@@ -120,6 +137,7 @@ export default function Main() {
               onNewBooking={(unit) => setBookingCtx({ unit })}
               onEditBooking={(booking, unit) => setBookingCtx({ booking, unit })}
               onOpenUnit={(unit) => setPanelUnit(unit)}
+              onAddUnit={addUnit}
             />
           )}
         </main>

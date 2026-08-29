@@ -54,10 +54,18 @@ h3, h4 { margin: 0 0 8px; }
 .sidebar { width: 220px; border-right: 1px solid var(--line); background: #fff; padding: 12px; overflow: auto; }
 .side-head { display: flex; align-items: center; justify-content: space-between; font-weight: 700; margin-bottom: 8px; }
 .prop { margin-bottom: 12px; }
-.prop-name { font-weight: 600; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; margin-bottom: 4px; }
-.units { display: flex; flex-wrap: wrap; gap: 6px; }
+.prop-name { display: flex; align-items: center; justify-content: space-between; font-weight: 600; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; margin-bottom: 4px; }
+.units { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.unit-chip-wrap { display: inline-flex; align-items: center; }
 .unit-chip { background: #eef1f4; color: var(--ink); padding: 4px 10px; font-size: 13px; }
 .unit-chip:hover { background: #dfe4ea; }
+.hint { line-height: 1.4; margin: 0 0 10px; }
+.del { background: transparent; color: var(--muted); padding: 0 5px; font-size: 15px; line-height: 1; }
+.del:hover { background: transparent; color: var(--red); }
+.del.sm { font-size: 12px; padding: 0 3px; }
+.unit-link.add { color: var(--green); font-weight: 600; }
+td.cell.empty-row { text-align: left; color: var(--muted); font-style: italic; cursor: default; background: #fafbfc; padding-left: 10px; }
+td.cell.empty-row:hover { outline: none; }
 
 /* Board */
 .board-wrap { flex: 1; min-width: 0; overflow: auto; padding: 12px; }
@@ -111,6 +119,8 @@ td.cell.yellow { background: var(--yellow); }
 .conflicts { margin-top: 10px; border: 1px solid #f0c4cf; background: #fff5f8; border-radius: 8px; padding: 10px; font-size: 13px; }
 .conflicts ul { margin: 6px 0 10px; padding-left: 18px; }
 .chip-note { background: #eef4fb; color: #34618e; font-size: 12px; padding: 8px 10px; border-radius: 7px; margin-bottom: 10px; }
+.direction-note { background: #f4f8fb; border: 1px solid #dbe7f1; color: #34618e; font-size: 12px; padding: 10px 12px; border-radius: 8px; margin-bottom: 6px; line-height: 1.5; }
+.direction-note > div { margin-top: 3px; }
 
 /* Drawer sections */
 .drawer section { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
