@@ -92,6 +92,13 @@ model Booking {
   cleaner      String?
   comments     String?
   leavingEarly Boolean       @default(false)
+  // Guest requests / add-ons
+  earlyCheckIn      Boolean  @default(false)
+  lateCheckOut      Boolean  @default(false)
+  extraCleaning     Boolean  @default(false)
+  extraCleaningPaid Boolean  @default(false)
+  extraMattress     Boolean  @default(false)
+  hairDryer         Boolean  @default(false)
   externalUid  String? // channel event UID, for idempotent upsert
   resCode      String? // Airbnb reservation code, for guest-name lookup
   createdAt    DateTime      @default(now())

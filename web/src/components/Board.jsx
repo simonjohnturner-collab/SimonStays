@@ -105,6 +105,14 @@ export default function Board({ properties, bookingsByUnit, start, days, onNewBo
 function cellTitle(c) {
   const b = c.booking;
   const paid = b.paid ? 'paid' : 'UNPAID';
+  const reqs = [];
+  if (b.earlyCheckIn) reqs.push('early check-in');
+  if (b.lateCheckOut) reqs.push('late check-out');
+  if (b.extraMattress) reqs.push('extra mattress');
+  if (b.hairDryer) reqs.push('hair dryer');
+  if (b.extraCleaning) reqs.push(`extra cleaning (${b.extraCleaningPaid ? 'paid' : 'unpaid'})`);
   return `${c.name} · ${b.checkIn.slice(0, 10)} → ${b.checkOut.slice(0, 10)} · ${b.source} · ${paid}` +
-    (b.cleaner ? ` · cleaner: ${b.cleaner}` : '') + (b.comments ? `\n${b.comments}` : '');
+    (b.cleaner ? ` · cleaner: ${b.cleaner}` : '') +
+    (reqs.length ? `\nRequests: ${reqs.join(', ')}` : '') +
+    (b.comments ? `\n${b.comments}` : '');
 }

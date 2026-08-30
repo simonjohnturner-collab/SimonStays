@@ -6,6 +6,7 @@ import Board from './Board.jsx';
 import BookingModal from './BookingModal.jsx';
 import UnitPanel from './UnitPanel.jsx';
 import EmailModal from './EmailModal.jsx';
+import ManageDrawer from './ManageDrawer.jsx';
 
 const WINDOW_DAYS = 35;
 
@@ -20,6 +21,7 @@ export default function Main() {
   const [bookingCtx, setBookingCtx] = useState(null); // { unit } | { booking, unit }
   const [panelUnit, setPanelUnit] = useState(null);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [msg, setMsg] = useState('');
 
   const from = ymd(start);
@@ -67,6 +69,12 @@ export default function Main() {
     await api.createUnit(propertyId, name.trim());
     refresh();
   }
+  async function renameProperty(p) {
+    const name = window.prompt('Rename property', p.name);
+    if (!name || !name.trim() || name.trim() === p.name) return;
+    await api.updateProperty(p.id, name.trim());
+    refresh();
+  }
   async function deleteProperty(p) {
     if (!window.confirm(`Delete property “${p.name}” and all its units/bookings?`)) return;
     await api.deleteProperty(p.id);
@@ -96,6 +104,7 @@ export default function Main() {
   return (
     <div className="app">
       <header className="topbar">
+        <button className="ghost hamburger" title="Manage properties" onClick={() => setMenuOpen(true)}>☰</button>
         <div className="brand">Simon<span>Stays</span></div>
         <div className="spacer" />
         <button className="ghost" onClick={() => setStart(addDays(start, -7))}>← week</button>
@@ -110,36 +119,13 @@ export default function Main() {
       {msg && <div className="banner">{msg}</div>}
 
       <div className="body">
-        <aside className="sidebar">
-          <div className="side-head">
-            <span>Properties</span>
-            <button className="mini" onClick={addProperty}>+ Property</button>
-          </div>
-          {properties.map((p) => (
-            <div key={p.id} className="prop">
-              <div className="prop-name">
-                <span>{p.name}</span>
-                <button className="del" title="Delete property" onClick={() => deleteProperty(p)}>×</button>
-              </div>
-              <div className="units">
-                {p.units.map((u) => (
-                  <span key={u.id} className="unit-chip-wrap">
-                    <button className="unit-chip" onClick={() => setPanelUnit(u)}>{u.name}</button>
-                    <button className="del sm" title="Delete unit" onClick={() => deleteUnit(u)}>×</button>
-                  </span>
-                ))}
-                <button className="mini" onClick={() => addUnit(p.id)}>+ unit</button>
-              </div>
-            </div>
-          ))}
-          {!properties.length && !loading && <p className="muted small">Add your first property to begin.</p>}
-        </aside>
-
         <main className="board-wrap">
           {loading ? (
             <div className="center muted">Loading board…</div>
           ) : !hasUnits ? (
-            <div className="center muted">No units yet. Add a property and a unit from the left.</div>
+            <div className="center muted">
+              No units yet. Open <b>☰ Manage properties</b> (top left) to add a property and units.
+            </div>
           ) : (
             <Board
               properties={properties}
@@ -161,6 +147,20 @@ export default function Main() {
           booking={bookingCtx.booking}
           onClose={() => setBookingCtx(null)}
           onSaved={async () => { setBookingCtx(null); await loadBookings(properties); }}
+        />
+      )}
+
+      {menuOpen && (
+        <ManageDrawer
+          properties={properties}
+          onClose={() => setMenuOpen(false)}
+          onAddProperty={addProperty}
+          onRenameProperty={renameProperty}
+          onDeleteProperty={deleteProperty}
+          onAddUnit={addUnit}
+          onDeleteUnit={deleteUnit}
+          onOpenUnit={(unit) => { setMenuOpen(false); setPanelUnit(unit); }}
+          onAddBooking={(unit) => { setMenuOpen(false); setBookingCtx({ unit }); }}
         />
       )}
 

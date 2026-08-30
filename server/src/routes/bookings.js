@@ -35,6 +35,9 @@ router.post('/units/:unitId/bookings', requireOwnedUnit, async (req, res) => {
       checkIn: dateOnly(b.checkIn), checkOut: dateOnly(b.checkOut),
       paid: !!b.paid, cleaner: b.cleaner || null, comments: b.comments || null,
       leavingEarly: !!b.leavingEarly,
+      earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut,
+      extraCleaning: !!b.extraCleaning, extraCleaningPaid: !!b.extraCleaningPaid,
+      extraMattress: !!b.extraMattress, hairDryer: !!b.hairDryer,
     },
   });
   res.status(201).json({ booking });
@@ -46,7 +49,8 @@ router.patch('/bookings/:id', async (req, res) => {
   const b = req.body || {};
   const data = {};
   ['guestName', 'cleaner', 'comments'].forEach((k) => { if (k in b) data[k] = b[k]; });
-  ['paid', 'leavingEarly'].forEach((k) => { if (k in b) data[k] = !!b[k]; });
+  ['paid', 'leavingEarly', 'earlyCheckIn', 'lateCheckOut', 'extraCleaning', 'extraCleaningPaid', 'extraMattress', 'hairDryer']
+    .forEach((k) => { if (k in b) data[k] = !!b[k]; });
   if ('status' in b) data.status = b.status;
   if ('checkIn' in b) data.checkIn = dateOnly(b.checkIn);
   if ('checkOut' in b) data.checkOut = dateOnly(b.checkOut);

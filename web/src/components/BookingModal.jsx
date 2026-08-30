@@ -7,14 +7,30 @@ export default function BookingModal({ unit, booking, onClose, onSaved }) {
   const [guestName, setGuestName] = useState(booking?.guestName || '');
   const [checkIn, setCheckIn] = useState(booking?.checkIn?.slice(0, 10) || '');
   const [checkOut, setCheckOut] = useState(booking?.checkOut?.slice(0, 10) || '');
-  const [paid, setPaid] = useState(booking?.paid || false);
   const [cleaner, setCleaner] = useState(booking?.cleaner || '');
   const [comments, setComments] = useState(booking?.comments || '');
-  const [leavingEarly, setLeavingEarly] = useState(booking?.leavingEarly || false);
+
+  // Payment + requests / add-ons
+  const [paid, setPaid] = useState(booking?.paid || false);
+  const [earlyCheckIn, setEarlyCheckIn] = useState(booking?.earlyCheckIn || false);
+  const [lateCheckOut, setLateCheckOut] = useState(booking?.lateCheckOut || false);
+  const [extraCleaning, setExtraCleaning] = useState(booking?.extraCleaning || false);
+  const [extraCleaningPaid, setExtraCleaningPaid] = useState(booking?.extraCleaningPaid || false);
+  const [extraMattress, setExtraMattress] = useState(booking?.extraMattress || false);
+  const [hairDryer, setHairDryer] = useState(booking?.hairDryer || false);
 
   const [msg, setMsg] = useState(null); // { text, kind }
   const [conflicts, setConflicts] = useState(null);
   const [busy, setBusy] = useState(false);
+
+  function payload(extra = {}) {
+    return {
+      guestName, checkIn, checkOut, cleaner, comments,
+      paid, earlyCheckIn, lateCheckOut,
+      extraCleaning, extraCleaningPaid: extraCleaning ? extraCleaningPaid : false,
+      extraMattress, hairDryer, ...extra,
+    };
+  }
 
   async function checkAvail() {
     if (!checkIn || !checkOut) { setMsg({ text: 'Pick both dates first.', kind: 'err' }); return; }
@@ -31,11 +47,8 @@ export default function BookingModal({ unit, booking, onClose, onSaved }) {
     if (!checkIn || !checkOut) { setMsg({ text: 'Pick both dates.', kind: 'err' }); return; }
     setBusy(true); setMsg(null); setConflicts(null);
     try {
-      if (editing) {
-        await api.updateBooking(booking.id, { guestName, checkIn, checkOut, paid, cleaner, comments, leavingEarly });
-      } else {
-        await api.createBooking(unit.id, { guestName, checkIn, checkOut, paid, cleaner, comments, leavingEarly, override: !!override });
-      }
+      if (editing) await api.updateBooking(booking.id, payload());
+      else await api.createBooking(unit.id, payload({ override: !!override }));
       onSaved();
     } catch (e) {
       if (e.status === 409 && e.data?.conflicts) {
@@ -69,12 +82,30 @@ export default function BookingModal({ unit, booking, onClose, onSaved }) {
           <label>Check-out<input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} /></label>
         </div>
         <label>Guest<input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Guest name" /></label>
+
+        <fieldset>
+          <legend>Payment</legend>
+          <label className="chk"><input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} /> Booking paid for</label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Requests & add-ons</legend>
+          <div className="checks wrap">
+            <label className="chk"><input type="checkbox" checked={earlyCheckIn} onChange={(e) => setEarlyCheckIn(e.target.checked)} /> Early check-in</label>
+            <label className="chk"><input type="checkbox" checked={lateCheckOut} onChange={(e) => setLateCheckOut(e.target.checked)} /> Late check-out</label>
+            <label className="chk"><input type="checkbox" checked={extraMattress} onChange={(e) => setExtraMattress(e.target.checked)} /> Extra mattress</label>
+            <label className="chk"><input type="checkbox" checked={hairDryer} onChange={(e) => setHairDryer(e.target.checked)} /> Hair dryer</label>
+          </div>
+          <div className="checks">
+            <label className="chk"><input type="checkbox" checked={extraCleaning} onChange={(e) => setExtraCleaning(e.target.checked)} /> Additional cleaning</label>
+            <label className={`chk ${extraCleaning ? '' : 'disabled'}`}>
+              <input type="checkbox" disabled={!extraCleaning} checked={extraCleaning && extraCleaningPaid} onChange={(e) => setExtraCleaningPaid(e.target.checked)} /> Additional cleaning paid
+            </label>
+          </div>
+        </fieldset>
+
         <label>Cleaner<input value={cleaner} onChange={(e) => setCleaner(e.target.value)} placeholder="Optional" /></label>
-        <label>Comments<input value={comments} onChange={(e) => setComments(e.target.value)} placeholder="hair dryer, extra mattress, late checkout…" /></label>
-        <div className="checks">
-          <label className="chk"><input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} /> Payment allocated</label>
-          <label className="chk"><input type="checkbox" checked={leavingEarly} onChange={(e) => setLeavingEarly(e.target.checked)} /> Leaving early</label>
-        </div>
+        <label>Comments<input value={comments} onChange={(e) => setComments(e.target.value)} placeholder="Anything else…" /></label>
 
         {msg && <div className={`msg ${msg.kind}`}>{msg.text}</div>}
         {conflicts && (

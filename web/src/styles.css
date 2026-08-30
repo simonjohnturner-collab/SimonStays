@@ -48,6 +48,9 @@ h3, h4 { margin: 0 0 8px; }
 .topbar .brand { color: #fff; }
 .topbar .brand span { color: #cfeed9; }
 .topbar .host { font-size: 13px; opacity: .9; margin: 0 4px; }
+.hamburger { font-size: 20px; line-height: 1; padding: 4px 10px; margin-right: 4px; }
+.prop.manage { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
+.drawer > button.wide { margin-bottom: 6px; }
 .banner { background: #eafaf0; color: var(--green-d); padding: 8px 16px; font-size: 13px; border-bottom: 1px solid #d6efe0; }
 .body { display: flex; flex: 1; min-height: 0; }
 
@@ -109,9 +112,14 @@ td.cell.yellow { background: var(--yellow); }
 .modal label input { margin-top: 3px; }
 .row2 { display: flex; gap: 10px; }
 .row2 label { flex: 1; }
-.checks { display: flex; gap: 16px; margin-top: 10px; }
+.checks { display: flex; gap: 16px; margin-top: 8px; }
+.checks.wrap { flex-wrap: wrap; gap: 8px 18px; }
 .chk { display: flex !important; align-items: center; gap: 6px; color: var(--ink) !important; font-size: 13px !important; }
 .chk input { width: auto; }
+.chk.disabled { color: var(--muted) !important; }
+.modal fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 10px; margin: 12px 0 0; }
+.modal legend { font-size: 12px; color: var(--muted); font-weight: 700; padding: 0 4px; }
+.prop-actions { display: inline-flex; gap: 2px; }
 .modal-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
 .msg { margin-top: 10px; font-size: 13px; padding: 8px 10px; border-radius: 7px; }
 .msg.ok { background: #eafaf0; color: var(--green-d); }
