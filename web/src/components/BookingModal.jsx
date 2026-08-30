@@ -31,18 +31,18 @@ export default function BookingModal({ unit, booking, onClose, onSaved, onInvoic
   const [busy, setBusy] = useState(false);
   const [quote, setQuote] = useState(null);
 
-  // Live rate-card price when dates + property are known.
+  // Live rate-card price when dates are known.
   useEffect(() => {
     let cancelled = false;
-    if (!checkIn || !checkOut || !unit.propertyId) { setQuote(null); return; }
+    if (!checkIn || !checkOut || !unit.id) { setQuote(null); return; }
     const t = setTimeout(async () => {
       try {
-        const r = await api.quoteProperty(unit.propertyId, { checkIn, checkOut, mattress: extraMattress, cleaning: true });
+        const r = await api.quoteUnit(unit.id, { checkIn, checkOut, mattress: extraMattress, earlyCheckIn, lateCheckOut, cleans: 1 });
         if (!cancelled) setQuote(r.quote);
       } catch { if (!cancelled) setQuote(null); }
     }, 300);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [checkIn, checkOut, extraMattress, unit.propertyId]);
+  }, [checkIn, checkOut, extraMattress, earlyCheckIn, lateCheckOut, unit.id]);
 
   function payload(extra = {}) {
     return {
@@ -106,7 +106,10 @@ export default function BookingModal({ unit, booking, onClose, onSaved, onInvoic
           <div className="quote-hint">
             💲 Rate card: <b>{fmtR(quote.totalCents)}</b> · {quote.nights} night{quote.nights > 1 ? 's' : ''} @ {fmtR(quote.avgNightlyCents)}/night
             {quote.discountPercent ? ` · ${quote.discountPercent}% discount` : ''}
-            {quote.cleaningCents ? ` · +clean ${fmtR(quote.cleaningCents)}` : ''}
+            {quote.cleaningCents ? ` · clean ${fmtR(quote.cleaningCents)}` : ''}
+            {quote.earlyCents ? ` · early ${fmtR(quote.earlyCents)}` : ''}
+            {quote.lateCents ? ` · late ${fmtR(quote.lateCents)}` : ''}
+            {quote.breakageCents ? ` · breakage ${fmtR(quote.breakageCents)}` : ''}
           </div>
         )}
 

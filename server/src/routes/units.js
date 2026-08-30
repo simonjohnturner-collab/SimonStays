@@ -2,9 +2,13 @@ const express = require('express');
 const prisma = require('../lib/prisma');
 const { authHost, requireOwnedProperty, requireOwnedUnit } = require('../middleware/auth');
 const { syncUnit } = require('../utils/sync');
+const { quote } = require('../utils/pricing');
 
 const router = express.Router();
 router.use(authHost);
+
+const RATE_INT = ['breakageDepositCents', 'nights1Cents', 'nights2Cents', 'nights3Cents', 'nights4PlusCents', 'earlyCheckInCents', 'lateCheckOutCents', 'cleaningCents', 'mattressCents'];
+const RATE_FLOAT = ['weeklyDiscountPercent', 'monthlyDiscountPercent', 'weekendFlexPercent', 'flex1Percent', 'flex2Percent', 'flex3Percent'];
 
 // POST /units { propertyId, name, capacity }
 router.post('/', async (req, res) => {
@@ -57,6 +61,36 @@ router.post('/:id/sync', requireOwnedUnit, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: 'sync_failed', message: e.message });
   }
+});
+
+// ---- Rate card (pricing sheet), per unit ----
+
+// GET /units/:id/ratecard
+router.get('/:id/ratecard', requireOwnedUnit, async (req, res) => {
+  const rateCard = await prisma.rateCard.findUnique({ where: { unitId: req.unit.id } });
+  res.json({ rateCard: rateCard || { unitId: req.unit.id } });
+});
+
+// PUT /units/:id/ratecard
+router.put('/:id/ratecard', requireOwnedUnit, async (req, res) => {
+  const b = req.body || {};
+  const data = {};
+  RATE_INT.forEach((k) => { if (k in b) data[k] = b[k] === '' || b[k] == null ? null : Math.round(Number(b[k])); });
+  RATE_FLOAT.forEach((k) => { if (k in b) data[k] = Number(b[k]) || 0; });
+  if ('specialDates' in b) data.specialDates = b.specialDates;
+  const rateCard = await prisma.rateCard.upsert({
+    where: { unitId: req.unit.id }, update: data, create: { unitId: req.unit.id, ...data },
+  });
+  res.json({ rateCard });
+});
+
+// POST /units/:id/quote { checkIn, checkOut, mattress, earlyCheckIn, lateCheckOut, cleans }
+router.post('/:id/quote', requireOwnedUnit, async (req, res) => {
+  const rc = await prisma.rateCard.findUnique({ where: { unitId: req.unit.id } });
+  if (!rc) return res.status(404).json({ error: 'no_rate_card' });
+  const q = quote(rc, req.body || {});
+  if (!q) return res.status(400).json({ error: 'invalid_dates' });
+  res.json({ quote: q });
 });
 
 function withFeedUrl(unit) {

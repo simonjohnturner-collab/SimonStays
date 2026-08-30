@@ -25,7 +25,7 @@ export default function Main() {
   const [emailOpen, setEmailOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [invoices, setInvoices] = useState(null); // { initialId } when open
-  const [pricingProperty, setPricingProperty] = useState(null);
+  const [pricingUnit, setPricingUnit] = useState(null);
   const [msg, setMsg] = useState('');
 
   const from = ymd(start);
@@ -177,15 +177,14 @@ export default function Main() {
           onAddBooking={(unit) => { setMenuOpen(false); setBookingCtx({ unit }); }}
           onEditBooking={(booking, unit) => { setMenuOpen(false); setBookingCtx({ booking, unit }); }}
           onOpenInvoices={() => { setMenuOpen(false); setInvoices({ initialId: null }); }}
-          onEditPricing={(p) => { setMenuOpen(false); setPricingProperty(p); }}
         />
       )}
 
-      {pricingProperty && (
+      {pricingUnit && (
         <RateCardModal
-          property={pricingProperty}
-          onClose={() => setPricingProperty(null)}
-          onSaved={() => setPricingProperty(null)}
+          unit={pricingUnit}
+          onClose={() => setPricingUnit(null)}
+          onSaved={() => setPricingUnit(null)}
         />
       )}
 
@@ -202,6 +201,7 @@ export default function Main() {
           onClose={() => setPanelUnit(null)}
           onChanged={async () => { await loadBookings(properties); }}
           onNewBooking={() => { setBookingCtx({ unit: panelUnit }); setPanelUnit(null); }}
+          onEditPricing={(u) => { setPanelUnit(null); setPricingUnit(u); }}
         />
       )}
     </div>

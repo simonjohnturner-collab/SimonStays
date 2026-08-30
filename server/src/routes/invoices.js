@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../lib/prisma');
 const { authHost } = require('../middleware/auth');
+const { quote } = require('../utils/pricing');
 
 const router = express.Router();
 router.use(authHost);
@@ -102,6 +103,7 @@ function snapshot(b) {
 }
 
 // Build prefilled invoice fields from a booking (guest, dates, nights, add-ons).
+// If the unit has a rate card, amounts are priced automatically.
 async function buildFromBooking(hostId, bookingId, biller) {
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
@@ -110,25 +112,42 @@ async function buildFromBooking(hostId, bookingId, biller) {
   if (!booking) return { error: 'booking_not_found', status: 404 };
   if (booking.unit.property.hostId !== hostId) return { error: 'forbidden', status: 403 };
 
-  const nights = Math.max(1, Math.round((new Date(booking.checkOut) - new Date(booking.checkIn)) / 86400000));
   const iso = (d) => new Date(d).toISOString().slice(0, 10);
+  const nights = Math.max(1, Math.round((new Date(booking.checkOut) - new Date(booking.checkIn)) / 86400000));
+  const rc = await prisma.rateCard.findUnique({ where: { unitId: booking.unitId } });
+  const prepaidCleans = booking.cleans.filter((c) => c.paymentMethod !== 'direct').length;
+  const q = rc ? quote(rc, {
+    checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut),
+    mattress: booking.extraMattress, earlyCheckIn: booking.earlyCheckIn, lateCheckOut: booking.lateCheckOut,
+    cleans: 1 + prepaidCleans,
+  }) : null;
 
+  // Accommodation line — nightly is the discount-net average so the total matches the quote.
+  const nightlyCents = q ? Math.round((q.accommodationCents - q.discountCents) / q.nights) : 0;
   const lineItems = [{
     description: `${booking.unit.property.name} · ${booking.unit.name}`,
     dateIn: iso(booking.checkIn), dateOut: iso(booking.checkOut),
-    qty: nights, nightlyCents: 0, amountCents: 0,
+    qty: q ? q.nights : nights, nightlyCents, amountCents: 0,
   }];
-  const addService = (label) => lineItems.push({ description: label, dateIn: '', dateOut: '', qty: 1, nightlyCents: 0, amountCents: 0 });
-  if (booking.extraMattress) addService('Extra mattress');
-  if (booking.hairDryer) addService('Hair dryer');
-  booking.cleans.forEach((c) => addService(`Additional cleaning${c.date ? ' (' + iso(c.date) + ')' : ''}${c.paymentMethod === 'direct' ? ' — paid directly' : ''}`));
+  const line = (label, amountCents) => lineItems.push({ description: label, dateIn: '', dateOut: '', qty: 1, nightlyCents: 0, amountCents: amountCents || 0 });
 
-  return {
+  line(`Cleaning${prepaidCleans ? ` (${1 + prepaidCleans} cleans)` : ''}`, q ? q.cleaningCents : 0);
+  if (booking.earlyCheckIn) line('Early check-in', q ? q.earlyCents : 0);
+  if (booking.lateCheckOut) line('Late checkout', q ? q.lateCents : 0);
+  if (booking.extraMattress) line('Extra mattress', q ? q.mattressCents : 0);
+  if (booking.hairDryer) line('Hair dryer', 0);
+  booking.cleans.filter((c) => c.paymentMethod === 'direct').forEach((c) =>
+    line(`Insta clean${c.date ? ' (' + iso(c.date) + ')' : ''} — paid directly to cleaner`, 0));
+  if (q && q.breakageCents) line('Refundable breakage deposit', q.breakageCents);
+
+  const out = {
     bookingId,
     billToName: booking.guestName || '',
     lineItems,
     specialConditions: biller?.specialConditions || null,
   };
+  if (q) out.dueNowCents = Math.round(q.totalCents / 2); // 50% deposit default
+  return out;
 }
 
 module.exports = router;

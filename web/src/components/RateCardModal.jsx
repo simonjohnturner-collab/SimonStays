@@ -2,48 +2,56 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { centsToRand, randToCents } from '../money.js';
 
-// Per-property pricing sheet. Rates entered in Rand, stored as cents.
-export default function RateCardModal({ property, onClose, onSaved }) {
+const FLEXES = [
+  { key: 'flex1', pct: 'flex1Percent', label: 'Seasonal flex 1' },
+  { key: 'flex2', pct: 'flex2Percent', label: 'Seasonal flex 2' },
+  { key: 'flex3', pct: 'flex3Percent', label: 'Seasonal flex 3' },
+];
+
+// Per-unit pricing sheet matching Simon's template.
+export default function RateCardModal({ unit, onClose, onSaved }) {
   const [f, setF] = useState(null);
-  const [pubs, setPubs] = useState([]);
+  const [periods, setPeriods] = useState({ flex1: [], flex2: [], flex3: [] }); // flex -> [{start,end}]
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
-      const { rateCard: rc } = await api.getRateCard(property.id);
+      const { rateCard: rc } = await api.getRateCard(unit.id);
       const specials = Array.isArray(rc.specialDates) ? rc.specialDates : [];
-      const xmas = specials.find((s) => s.category === 'christmas') || {};
-      const easter = specials.find((s) => s.category === 'easter') || {};
-      setPubs(specials.filter((s) => s.category === 'public').map((s) => ({ start: s.start || '', end: s.end || '' })));
+      const grp = { flex1: [], flex2: [], flex3: [] };
+      specials.forEach((s) => { if (grp[s.flex]) grp[s.flex].push({ start: s.start || '', end: s.end || '' }); });
+      setPeriods(grp);
       setF({
-        n1: r(rc.nights1Cents), n2: r(rc.nights2Cents), n3: r(rc.nights3Cents), n4: r(rc.nights4Cents), n5: r(rc.nights5PlusCents),
+        breakage: r(rc.breakageDepositCents),
+        n1: r(rc.nights1Cents), n2: r(rc.nights2Cents), n3: r(rc.nights3Cents), n4: r(rc.nights4PlusCents),
         weeklyDiscountPercent: rc.weeklyDiscountPercent || 0, monthlyDiscountPercent: rc.monthlyDiscountPercent || 0,
-        cleaning: r(rc.cleaningCents), mattress: r(rc.mattressCents),
-        weekend: rc.weekendSurchargePercent || 0, publicH: rc.publicHolidaySurchargePercent || 0,
-        christmas: rc.christmasSurchargePercent || 0, easter: rc.easterSurchargePercent || 0,
-        xmasStart: xmas.start || '', xmasEnd: xmas.end || '', easterStart: easter.start || '', easterEnd: easter.end || '',
+        weekendFlexPercent: rc.weekendFlexPercent || 0,
+        flex1Percent: rc.flex1Percent || 0, flex2Percent: rc.flex2Percent || 0, flex3Percent: rc.flex3Percent || 0,
+        early: r(rc.earlyCheckInCents), late: r(rc.lateCheckOutCents), cleaning: r(rc.cleaningCents), mattress: r(rc.mattressCents),
       });
     })();
     // eslint-disable-next-line
-  }, [property.id]);
+  }, [unit.id]);
 
   const set = (k, v) => setF({ ...f, [k]: v });
+  const setPeriod = (flex, i, k, v) => setPeriods({ ...periods, [flex]: periods[flex].map((p, j) => (j === i ? { ...p, [k]: v } : p)) });
+  const addPeriod = (flex) => setPeriods({ ...periods, [flex]: [...periods[flex], { start: '', end: '' }] });
+  const rmPeriod = (flex, i) => setPeriods({ ...periods, [flex]: periods[flex].filter((_, j) => j !== i) });
   if (!f) return null;
 
   async function save() {
     setBusy(true);
     const specialDates = [];
-    if (f.xmasStart && f.xmasEnd) specialDates.push({ category: 'christmas', start: f.xmasStart, end: f.xmasEnd });
-    if (f.easterStart && f.easterEnd) specialDates.push({ category: 'easter', start: f.easterStart, end: f.easterEnd });
-    pubs.forEach((p) => { if (p.start && p.end) specialDates.push({ category: 'public', start: p.start, end: p.end }); });
+    FLEXES.forEach(({ key }) => periods[key].forEach((p) => { if (p.start && p.end) specialDates.push({ flex: key, start: p.start, end: p.end }); }));
     try {
-      const { rateCard } = await api.saveRateCard(property.id, {
-        nights1Cents: randToCents(f.n1), nights2Cents: randToCents(f.n2), nights3Cents: randToCents(f.n3),
-        nights4Cents: randToCents(f.n4), nights5PlusCents: randToCents(f.n5),
+      const { rateCard } = await api.saveRateCard(unit.id, {
+        breakageDepositCents: randToCents(f.breakage),
+        nights1Cents: randToCents(f.n1), nights2Cents: randToCents(f.n2), nights3Cents: randToCents(f.n3), nights4PlusCents: randToCents(f.n4),
         weeklyDiscountPercent: num(f.weeklyDiscountPercent), monthlyDiscountPercent: num(f.monthlyDiscountPercent),
+        weekendFlexPercent: num(f.weekendFlexPercent),
+        flex1Percent: num(f.flex1Percent), flex2Percent: num(f.flex2Percent), flex3Percent: num(f.flex3Percent),
+        earlyCheckInCents: randToCents(f.early), lateCheckOutCents: randToCents(f.late),
         cleaningCents: randToCents(f.cleaning), mattressCents: randToCents(f.mattress),
-        weekendSurchargePercent: num(f.weekend), publicHolidaySurchargePercent: num(f.publicH),
-        christmasSurchargePercent: num(f.christmas), easterSurchargePercent: num(f.easter),
         specialDates,
       });
       onSaved && onSaved(rateCard);
@@ -53,53 +61,51 @@ export default function RateCardModal({ property, onClose, onSaved }) {
   return (
     <div className="overlay" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head"><h3>Pricing sheet · {property.name}</h3><button className="x" onClick={onClose}>×</button></div>
-        <p className="muted small">Used by the booking form and invoices. Rates in Rand, per night.</p>
+        <div className="modal-head"><h3>Pricing · {unit.propertyName ? `${unit.propertyName} · ` : ''}{unit.name}</h3><button className="x" onClick={onClose}>×</button></div>
+        <p className="muted small">Used by bookings and invoices (and later guest self-booking). Amounts in Rand.</p>
 
         <fieldset>
           <legend>Nightly rate by length of stay</legend>
           <div className="rate-grid">
-            <label>1 night<input value={f.n1} onChange={(e) => set('n1', e.target.value)} placeholder="0.00" /></label>
-            <label>2 nights<input value={f.n2} onChange={(e) => set('n2', e.target.value)} placeholder="0.00" /></label>
-            <label>3 nights<input value={f.n3} onChange={(e) => set('n3', e.target.value)} placeholder="0.00" /></label>
-            <label>4 nights<input value={f.n4} onChange={(e) => set('n4', e.target.value)} placeholder="0.00" /></label>
-            <label>5+ nights<input value={f.n5} onChange={(e) => set('n5', e.target.value)} placeholder="0.00" /></label>
+            <label>1 night<input value={f.n1} onChange={(e) => set('n1', e.target.value)} placeholder="0" /></label>
+            <label>2 nights<input value={f.n2} onChange={(e) => set('n2', e.target.value)} placeholder="0" /></label>
+            <label>3 nights<input value={f.n3} onChange={(e) => set('n3', e.target.value)} placeholder="0" /></label>
+            <label>4 nights & more<input value={f.n4} onChange={(e) => set('n4', e.target.value)} placeholder="0" /></label>
           </div>
-          <p className="muted small">Blank tiers fall back to the nearest one set.</p>
         </fieldset>
 
         <fieldset>
-          <legend>Discounts & fees</legend>
+          <legend>Discounts, deposit & fees</legend>
           <div className="rate-grid">
             <label>Weekly discount %<input value={f.weeklyDiscountPercent} onChange={(e) => set('weeklyDiscountPercent', e.target.value)} /></label>
             <label>Monthly discount %<input value={f.monthlyDiscountPercent} onChange={(e) => set('monthlyDiscountPercent', e.target.value)} /></label>
-            <label>Cleaning (R)<input value={f.cleaning} onChange={(e) => set('cleaning', e.target.value)} /></label>
+            <label>Breakage deposit (R)<input value={f.breakage} onChange={(e) => set('breakage', e.target.value)} /></label>
+            <label>Cleaning per clean (R)<input value={f.cleaning} onChange={(e) => set('cleaning', e.target.value)} /></label>
+            <label>Early check-in (R)<input value={f.early} onChange={(e) => set('early', e.target.value)} /></label>
+            <label>Late checkout (R)<input value={f.late} onChange={(e) => set('late', e.target.value)} /></label>
             <label>Extra mattress (R)<input value={f.mattress} onChange={(e) => set('mattress', e.target.value)} /></label>
           </div>
         </fieldset>
 
         <fieldset>
-          <legend>Seasonal surcharges (% on the nightly rate)</legend>
+          <legend>Upward flexes (% on the nightly rate)</legend>
           <div className="rate-grid">
-            <label>Weekend % <span className="muted small">(Fri/Sat)</span><input value={f.weekend} onChange={(e) => set('weekend', e.target.value)} /></label>
-            <label>Public holiday %<input value={f.publicH} onChange={(e) => set('publicH', e.target.value)} /></label>
-            <label>Christmas %<input value={f.christmas} onChange={(e) => set('christmas', e.target.value)} /></label>
-            <label>Easter %<input value={f.easter} onChange={(e) => set('easter', e.target.value)} /></label>
+            <label>Weekend flex % <span className="muted small">(Fri/Sat)</span><input value={f.weekendFlexPercent} onChange={(e) => set('weekendFlexPercent', e.target.value)} /></label>
           </div>
-          <div className="row2">
-            <label>Christmas from<input type="date" value={f.xmasStart} onChange={(e) => set('xmasStart', e.target.value)} /></label>
-            <label>Christmas to<input type="date" value={f.xmasEnd} onChange={(e) => set('xmasEnd', e.target.value)} /></label>
-          </div>
-          <div className="row2">
-            <label>Easter from<input type="date" value={f.easterStart} onChange={(e) => set('easterStart', e.target.value)} /></label>
-            <label>Easter to<input type="date" value={f.easterEnd} onChange={(e) => set('easterEnd', e.target.value)} /></label>
-          </div>
-          <div className="insta-head"><span>Public holidays</span><button type="button" className="mini" onClick={() => setPubs([...pubs, { start: '', end: '' }])}>+ Add</button></div>
-          {pubs.map((p, i) => (
-            <div key={i} className="row2 ph-row">
-              <input type="date" value={p.start} onChange={(e) => setPubs(pubs.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)))} />
-              <input type="date" value={p.end} onChange={(e) => setPubs(pubs.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)))} />
-              <button className="del sm" onClick={() => setPubs(pubs.filter((_, j) => j !== i))}>×</button>
+          {FLEXES.map(({ key, pct, label }) => (
+            <div key={key} className="flex-block">
+              <div className="rate-grid">
+                <label>{label} %<input value={f[pct]} onChange={(e) => set(pct, e.target.value)} /></label>
+              </div>
+              <div className="insta-head"><span className="muted small">{label} periods</span><button type="button" className="mini" onClick={() => addPeriod(key)}>+ Add period</button></div>
+              {periods[key].length === 0 && <p className="muted small">No periods — this flex won’t apply until you add one.</p>}
+              {periods[key].map((p, i) => (
+                <div key={i} className="row2 ph-row">
+                  <input type="date" value={p.start} onChange={(e) => setPeriod(key, i, 'start', e.target.value)} />
+                  <input type="date" value={p.end} onChange={(e) => setPeriod(key, i, 'end', e.target.value)} />
+                  <button className="del sm" onClick={() => rmPeriod(key, i)}>×</button>
+                </div>
+              ))}
             </div>
           ))}
         </fieldset>

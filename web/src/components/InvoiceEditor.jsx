@@ -57,11 +57,15 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
           if (idx >= 0) next[idx] = { ...next[idx], nightly: '', amount: cents / 100 };
           else next.push({ description: label, dateIn: '', dateOut: '', qty: 1, nightly: '', amount: cents / 100 });
         };
-        setSvc('mattress', 'Extra mattress', q.mattressCents);
         setSvc('clean', 'Cleaning', q.cleaningCents);
+        setSvc('early', 'Early check-in', q.earlyCents);
+        setSvc('late', 'Late checkout', q.lateCents);
+        setSvc('mattress', 'Extra mattress', q.mattressCents);
+        setSvc('breakage', 'Refundable breakage deposit', q.breakageCents);
         return next;
       });
       setDiscountPercent(0);
+      setDueNow(centsToRand(Math.round(q.totalCents / 2)));
       setMsg(`Applied rate card · ${q.nights} nights` + (q.discountPercent ? ` · ${q.discountPercent}% length discount` : ''));
     } catch (e) {
       setMsg(e.message === 'no_rate_card' ? 'No rate card for this property yet — set one via ☰ → property → $ Pricing.' : e.message);

@@ -73,15 +73,30 @@ router.patch('/bookings/:id', async (req, res) => {
   res.json({ booking: updated });
 });
 
-// GET /bookings/:id/quote — price this booking from its property's rate card.
+// GET /bookings/:id/quote — price this booking from its unit's rate card.
 router.get('/bookings/:id/quote', async (req, res) => {
-  const booking = await loadOwned(req, res); if (!booking) return;
-  const rc = await prisma.rateCard.findUnique({ where: { propertyId: booking.unit.propertyId } });
+  const booking = await loadOwnedWithCleans(req, res); if (!booking) return;
+  const rc = await prisma.rateCard.findUnique({ where: { unitId: booking.unitId } });
   if (!rc) return res.status(404).json({ error: 'no_rate_card' });
   const iso = (d) => new Date(d).toISOString().slice(0, 10);
-  const q = quote(rc, { checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut), mattress: booking.extraMattress, cleaning: true });
+  const prepaidCleans = (booking.cleans || []).filter((c) => c.paymentMethod !== 'direct').length;
+  const q = quote(rc, {
+    checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut),
+    mattress: booking.extraMattress, earlyCheckIn: booking.earlyCheckIn, lateCheckOut: booking.lateCheckOut,
+    cleans: 1 + prepaidCleans,
+  });
   res.json({ quote: q });
 });
+
+async function loadOwnedWithCleans(req, res) {
+  const booking = await prisma.booking.findUnique({
+    where: { id: req.params.id },
+    include: { unit: { include: { property: true } }, cleans: true },
+  });
+  if (!booking) { res.status(404).json({ error: 'not_found' }); return null; }
+  if (booking.unit.property.hostId !== req.hostId) { res.status(403).json({ error: 'forbidden' }); return null; }
+  return booking;
+}
 
 // DELETE /bookings/:id
 router.delete('/bookings/:id', async (req, res) => {

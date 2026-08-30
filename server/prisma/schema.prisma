@@ -95,34 +95,37 @@ model Property {
   address   String?
   createdAt DateTime @default(now())
   units     Unit[]
-  rateCard  RateCard?
 
   @@index([hostId])
 }
 
-// Per-property pricing sheet, shared by the booking form and invoices.
+// Per-UNIT pricing sheet, shared by the booking form and invoices (and later the
+// guest self-booking flow). Matches Simon's pricing template.
 model RateCard {
-  id                String    @id @default(uuid())
-  propertyId        String    @unique
-  property          Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  // per-night rate by length of stay (cents); null tiers fall back to the nearest set one
-  nights1Cents      Int?
-  nights2Cents      Int?
-  nights3Cents      Int?
-  nights4Cents      Int?
-  nights5PlusCents  Int?
+  id                   String @id @default(uuid())
+  unitId               String @unique
+  unit                 Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  breakageDepositCents Int    @default(0)
+  // nightly rate by length of stay (cents); null tiers fall back to the nearest set one
+  nights1Cents     Int?
+  nights2Cents     Int?
+  nights3Cents     Int?
+  nights4PlusCents Int? // "4 nights and more"
   weeklyDiscountPercent  Float @default(0) // 7+ nights
   monthlyDiscountPercent Float @default(0) // 28+ nights
-  cleaningCents     Int       @default(0)
-  mattressCents     Int       @default(0)
-  // per-night surcharges (%)
-  weekendSurchargePercent       Float @default(0) // Fri & Sat nights
-  publicHolidaySurchargePercent Float @default(0)
-  christmasSurchargePercent     Float @default(0)
-  easterSurchargePercent        Float @default(0)
-  // date ranges the surcharges apply to: [{category:'public'|'christmas'|'easter', start, end, label}]
-  specialDates      Json?
-  updatedAt         DateTime  @updatedAt
+  // per-night upward flexes (%)
+  weekendFlexPercent Float @default(0) // Fri & Sat nights
+  flex1Percent       Float @default(0) // Seasonal upward Flex 1
+  flex2Percent       Float @default(0) // Seasonal upward Flex 2
+  flex3Percent       Float @default(0) // Seasonal upward Flex 3
+  // fees
+  earlyCheckInCents Int @default(0)
+  lateCheckOutCents Int @default(0)
+  cleaningCents     Int @default(0) // per clean
+  mattressCents     Int @default(0)
+  // each seasonal flex can apply to MULTIPLE periods: [{flex:'flex1'|'flex2'|'flex3', start, end}]
+  specialDates Json?
+  updatedAt    DateTime @updatedAt
 }
 
 model Unit {
@@ -136,6 +139,7 @@ model Unit {
   bookings     Booking[]
   channels     ChannelConnection[]
   syncLogs     SyncLog[]
+  rateCard     RateCard?
 
   @@index([propertyId])
 }

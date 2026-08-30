@@ -1,53 +1,48 @@
 /**
- * Quote engine — turns a property's RateCard + a stay into a priced breakdown.
- * Used by both the booking form (suggested price) and invoices (fill amounts).
+ * Quote engine — turns a unit's RateCard + a stay into a priced breakdown.
+ * Used by the booking form, invoices, and (later) guest self-booking.
+ * Matches Simon's pricing template.
  */
 
 function eachNight(checkIn, checkOut) {
   const nights = [];
   const start = new Date(checkIn + 'T12:00:00Z');
   const end = new Date(checkOut + 'T12:00:00Z');
-  for (let d = new Date(start); d.getTime() < end.getTime(); d.setUTCDate(d.getUTCDate() + 1)) {
-    nights.push(new Date(d));
-  }
+  for (let d = new Date(start); d.getTime() < end.getTime(); d.setUTCDate(d.getUTCDate() + 1)) nights.push(new Date(d));
   return nights;
 }
+function inRange(iso, start, end) { return start && end && iso >= start && iso <= end; }
 
-function inRange(dateStr, start, end) {
-  return start && end && dateStr >= start && dateStr <= end;
-}
-
-// Per-night base rate for a given total stay length.
+// Per-night base rate for the whole stay length: 1, 2, 3, or 4+ nights.
 function baseRateFor(rc, nights) {
-  const tiers = [rc.nights1Cents, rc.nights2Cents, rc.nights3Cents, rc.nights4Cents, rc.nights5PlusCents];
-  const idx = Math.min(nights, 5) - 1; // 1..5+ -> 0..4
+  const tiers = [rc.nights1Cents, rc.nights2Cents, rc.nights3Cents, rc.nights4PlusCents];
+  const idx = Math.min(nights, 4) - 1;
   if (tiers[idx] != null) return tiers[idx];
-  // fall back to the nearest defined tier (prefer the 5+ nightly, then walk down)
   for (let i = tiers.length - 1; i >= 0; i--) if (tiers[i] != null) return tiers[i];
   return 0;
 }
 
-// Surcharge % for one night: special-date category wins over weekend.
-function nightSurcharge(rc, date) {
+// Highest applicable upward flex % for a night (weekend + any seasonal flex whose
+// period covers it). We take the MAX so surcharges never silently stack.
+function nightFlex(rc, date) {
   const iso = date.toISOString().slice(0, 10);
+  let max = 0;
   const specials = Array.isArray(rc.specialDates) ? rc.specialDates : [];
   for (const s of specials) {
-    if (inRange(iso, s.start, s.end)) {
-      if (s.category === 'christmas') return rc.christmasSurchargePercent || 0;
-      if (s.category === 'easter') return rc.easterSurchargePercent || 0;
-      return rc.publicHolidaySurchargePercent || 0; // 'public'
-    }
+    if (!inRange(iso, s.start, s.end)) continue;
+    const p = s.flex === 'flex1' ? rc.flex1Percent : s.flex === 'flex2' ? rc.flex2Percent : s.flex === 'flex3' ? rc.flex3Percent : 0;
+    if ((p || 0) > max) max = p;
   }
   const dow = date.getUTCDay(); // 5 Fri, 6 Sat
-  if (dow === 5 || dow === 6) return rc.weekendSurchargePercent || 0;
-  return 0;
+  if ((dow === 5 || dow === 6) && (rc.weekendFlexPercent || 0) > max) max = rc.weekendFlexPercent;
+  return max;
 }
 
 /**
- * quote(rateCard, { checkIn, checkOut, mattress, cleaning })
- * cleaning defaults true (checkout clean is normal); mattress default false.
+ * quote(rc, { checkIn, checkOut, mattress, earlyCheckIn, lateCheckOut, cleans })
+ * cleans = number of chargeable cleans (defaults to 1 — the checkout clean).
  */
-function quote(rc, { checkIn, checkOut, mattress = false, cleaning = true }) {
+function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, lateCheckOut = false, cleans = 1 }) {
   if (!rc || !checkIn || !checkOut) return null;
   const nights = eachNight(checkIn, checkOut);
   const n = nights.length;
@@ -56,10 +51,10 @@ function quote(rc, { checkIn, checkOut, mattress = false, cleaning = true }) {
   const base = baseRateFor(rc, n);
   let accommodation = 0;
   const nightLines = nights.map((d) => {
-    const sur = nightSurcharge(rc, d);
-    const cents = Math.round(base * (1 + sur / 100));
+    const flex = nightFlex(rc, d);
+    const cents = Math.round(base * (1 + flex / 100));
     accommodation += cents;
-    return { date: d.toISOString().slice(0, 10), baseCents: base, surchargePercent: sur, cents };
+    return { date: d.toISOString().slice(0, 10), baseCents: base, flexPercent: flex, cents };
   });
 
   let discountPercent = 0;
@@ -67,16 +62,20 @@ function quote(rc, { checkIn, checkOut, mattress = false, cleaning = true }) {
   else if (n >= 7) discountPercent = rc.weeklyDiscountPercent || 0;
   const discountCents = Math.round(accommodation * discountPercent / 100);
 
-  const cleaningCents = cleaning ? (rc.cleaningCents || 0) : 0;
+  const cleaningCents = (rc.cleaningCents || 0) * Math.max(0, cleans);
+  const earlyCents = earlyCheckIn ? (rc.earlyCheckInCents || 0) : 0;
+  const lateCents = lateCheckOut ? (rc.lateCheckOutCents || 0) : 0;
   const mattressCents = mattress ? (rc.mattressCents || 0) : 0;
+  const breakageCents = rc.breakageDepositCents || 0;
 
-  const totalCents = accommodation - discountCents + cleaningCents + mattressCents;
+  const totalCents = accommodation - discountCents + cleaningCents + earlyCents + lateCents + mattressCents + breakageCents;
   const avgNightlyCents = Math.round(accommodation / n);
 
   return {
     nights: n, baseNightlyCents: base, avgNightlyCents,
     accommodationCents: accommodation, discountPercent, discountCents,
-    cleaningCents, mattressCents, totalCents, nightLines,
+    cleaningCents, earlyCents, lateCents, mattressCents, breakageCents,
+    totalCents, nightLines,
   };
 }
 
