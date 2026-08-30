@@ -2,6 +2,9 @@ import { useMemo } from 'react';
 import { range, ymd, weekday, dayMonth, isWeekend } from '../dates.js';
 
 // Build a per-date cell map for one unit's bookings.
+// Occupancy (guest name) covers the nights stayed: check-in .. check-out-1.
+// The check-out day itself is the departure morning — clean needed, and free for
+// a new check-in — so it gets a blue highlight with NO guest name.
 function coverage(bookings) {
   const map = {}; // ymd -> { name, blue, red, floating, booking }
   for (const b of bookings) {
@@ -9,16 +12,23 @@ function coverage(bookings) {
     const start = new Date(b.checkIn);
     const end = new Date(b.checkOut);
     const floating = b.status === 'floating';
-    for (let d = new Date(start); d.getTime() <= end.getTime(); d.setUTCDate(d.getUTCDate() + 1)) {
+
+    // Nights actually occupied (name shown).
+    for (let d = new Date(start); d.getTime() < end.getTime(); d.setUTCDate(d.getUTCDate() + 1)) {
       const key = ymd(d);
-      const isCheckout = key === ymd(end);
       map[key] = {
+        ...map[key],
         name: b.guestName || (b.source === 'manual' ? '(guest)' : 'Booked'),
-        blue: isCheckout && !floating,
         red: !b.paid,
         floating,
         booking: b,
       };
+    }
+
+    // Check-out day: blue "clean needed / available", no name from this booking.
+    if (!floating) {
+      const key = ymd(end);
+      map[key] = { ...map[key], blue: true, booking: map[key]?.booking || b };
     }
   }
   return map;
@@ -71,6 +81,7 @@ export default function Board({ properties, bookingsByUnit, start, days, onNewBo
                 {dates.map((d) => {
                   const key = ymd(d);
                   const c = cov[key];
+                  const hasGuest = !!(c && c.name);
                   const cls = ['cell'];
                   if (isWeekend(d)) cls.push('weekend');
                   if (c?.blue) cls.push('blue');
@@ -79,10 +90,10 @@ export default function Board({ properties, bookingsByUnit, start, days, onNewBo
                     <td
                       key={key}
                       className={cls.join(' ')}
-                      onClick={() => (c ? onEditBooking(c.booking, u) : onNewBooking(u))}
-                      title={c ? cellTitle(c) : 'Click to add a booking'}
+                      onClick={() => (hasGuest ? onEditBooking(c.booking, u) : onNewBooking(u))}
+                      title={hasGuest ? cellTitle(c) : c?.blue ? 'Checkout — clean needed · free for a new check-in' : 'Click to add a booking'}
                     >
-                      {c && <span className={c.red ? 'name red' : 'name'}>{c.name}</span>}
+                      {hasGuest && <span className={c.red ? 'name red' : 'name'}>{c.name}</span>}
                     </td>
                   );
                 })}
