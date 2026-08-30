@@ -166,6 +166,7 @@ export default function Main() {
       {menuOpen && (
         <ManageDrawer
           properties={properties}
+          bookingsByUnit={bookingsByUnit}
           onClose={() => setMenuOpen(false)}
           onAddProperty={addProperty}
           onRenameProperty={renameProperty}
@@ -174,6 +175,7 @@ export default function Main() {
           onDeleteUnit={deleteUnit}
           onOpenUnit={(unit) => { setMenuOpen(false); setPanelUnit(unit); }}
           onAddBooking={(unit) => { setMenuOpen(false); setBookingCtx({ unit }); }}
+          onEditBooking={(booking, unit) => { setMenuOpen(false); setBookingCtx({ booking, unit }); }}
           onOpenInvoices={() => { setMenuOpen(false); setInvoices({ initialId: null }); }}
           onEditPricing={(p) => { setMenuOpen(false); setPricingProperty(p); }}
         />
