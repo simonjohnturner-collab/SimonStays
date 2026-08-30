@@ -98,8 +98,11 @@ td.cell.blue.late { background: #cdb4f0; }        /* late checkout (purple) */
 /* corner markers */
 .cico { position: absolute; font-size: 10px; line-height: 1; }
 .cico.clean { right: 2px; bottom: 1px; cursor: pointer; }
-.cico.clean.unassigned { opacity: .35; }
-.cico.clean:hover { transform: scale(1.25); }
+.cico.clean.unassigned { opacity: .4; }
+.cico.clean:hover { transform: scale(1.3); }
+/* pure checkout cells (no guest name): center the broom + enlarge for easy hover */
+.cico.clean.centered { left: 50%; top: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); font-size: 15px; }
+.cico.clean.centered:hover { transform: translate(-50%, -50%) scale(1.3); }
 .cico.insta { right: 2px; top: 1px; }
 .badge.early { position: absolute; left: 1px; top: 0; font-size: 9px; }
 /* legend swatches */

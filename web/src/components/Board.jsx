@@ -114,7 +114,7 @@ export default function Board({ properties, bookingsByUnit, start, days, onNewBo
                       )}
                       {c?.blue && (
                         <span
-                          className={`cico clean ${c.cleanerCheckout ? '' : 'unassigned'}`}
+                          className={`cico clean ${c.cleanerCheckout ? '' : 'unassigned'} ${hasGuest ? '' : 'centered'}`}
                           title={(c.cleanerCheckout ? `Checkout clean: ${c.cleanerCheckout}` : 'Checkout clean — click to assign a cleaner')
                             + (c.lateCheckout ? '\n⏰ Late checkout' : '')}
                           onClick={(e) => { e.stopPropagation(); onEditBooking(c.checkoutBooking, u); }}
