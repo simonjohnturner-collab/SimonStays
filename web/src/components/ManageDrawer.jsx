@@ -5,7 +5,7 @@ import { useState } from 'react';
 export default function ManageDrawer({
   properties, onClose,
   onAddProperty, onRenameProperty, onDeleteProperty,
-  onAddUnit, onDeleteUnit, onOpenUnit, onAddBooking, onOpenInvoices,
+  onAddUnit, onDeleteUnit, onOpenUnit, onAddBooking, onOpenInvoices, onEditPricing,
 }) {
   const units = properties.flatMap((p) => p.units.map((u) => ({ ...u, label: `${p.name} · ${u.name}` })));
   const [pickUnit, setPickUnit] = useState('');
@@ -44,6 +44,7 @@ export default function ManageDrawer({
               <div className="prop-name">
                 <span>{p.name}</span>
                 <span className="prop-actions">
+                  <button className="del" title="Pricing sheet" onClick={() => onEditPricing(p)}>$</button>
                   <button className="del" title="Rename property" onClick={() => onRenameProperty(p)}>✎</button>
                   <button className="del" title="Delete property" onClick={() => onDeleteProperty(p)}>×</button>
                 </span>

@@ -95,8 +95,34 @@ model Property {
   address   String?
   createdAt DateTime @default(now())
   units     Unit[]
+  rateCard  RateCard?
 
   @@index([hostId])
+}
+
+// Per-property pricing sheet, shared by the booking form and invoices.
+model RateCard {
+  id                String    @id @default(uuid())
+  propertyId        String    @unique
+  property          Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  // per-night rate by length of stay (cents); null tiers fall back to the nearest set one
+  nights1Cents      Int?
+  nights2Cents      Int?
+  nights3Cents      Int?
+  nights4Cents      Int?
+  nights5PlusCents  Int?
+  weeklyDiscountPercent  Float @default(0) // 7+ nights
+  monthlyDiscountPercent Float @default(0) // 28+ nights
+  cleaningCents     Int       @default(0)
+  mattressCents     Int       @default(0)
+  // per-night surcharges (%)
+  weekendSurchargePercent       Float @default(0) // Fri & Sat nights
+  publicHolidaySurchargePercent Float @default(0)
+  christmasSurchargePercent     Float @default(0)
+  easterSurchargePercent        Float @default(0)
+  // date ranges the surcharges apply to: [{category:'public'|'christmas'|'easter', start, end, label}]
+  specialDates      Json?
+  updatedAt         DateTime  @updatedAt
 }
 
 model Unit {

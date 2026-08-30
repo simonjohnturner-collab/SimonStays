@@ -8,6 +8,7 @@ import UnitPanel from './UnitPanel.jsx';
 import EmailModal from './EmailModal.jsx';
 import ManageDrawer from './ManageDrawer.jsx';
 import InvoicesView from './InvoicesView.jsx';
+import RateCardModal from './RateCardModal.jsx';
 
 const WINDOW_DAYS = 35;
 
@@ -24,6 +25,7 @@ export default function Main() {
   const [emailOpen, setEmailOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [invoices, setInvoices] = useState(null); // { initialId } when open
+  const [pricingProperty, setPricingProperty] = useState(null);
   const [msg, setMsg] = useState('');
 
   const from = ymd(start);
@@ -173,6 +175,15 @@ export default function Main() {
           onOpenUnit={(unit) => { setMenuOpen(false); setPanelUnit(unit); }}
           onAddBooking={(unit) => { setMenuOpen(false); setBookingCtx({ unit }); }}
           onOpenInvoices={() => { setMenuOpen(false); setInvoices({ initialId: null }); }}
+          onEditPricing={(p) => { setMenuOpen(false); setPricingProperty(p); }}
+        />
+      )}
+
+      {pricingProperty && (
+        <RateCardModal
+          property={pricingProperty}
+          onClose={() => setPricingProperty(null)}
+          onSaved={() => setPricingProperty(null)}
         />
       )}
 

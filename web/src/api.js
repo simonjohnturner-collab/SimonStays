@@ -65,6 +65,12 @@ export const api = {
   duplicateInvoice: (id) => req('POST', `/invoices/${id}/duplicate`),
   deleteInvoice: (id) => req('DELETE', `/invoices/${id}`),
 
+  // rate card (pricing sheet) + quotes
+  getRateCard: (propertyId) => req('GET', `/properties/${propertyId}/ratecard`),
+  saveRateCard: (propertyId, data) => req('PUT', `/properties/${propertyId}/ratecard`, data),
+  quoteProperty: (propertyId, body) => req('POST', `/properties/${propertyId}/quote`, body),
+  quoteBooking: (bookingId) => req('GET', `/bookings/${bookingId}/quote`),
+
   // bookings
   availability: (unitId, checkIn, checkOut) =>
     req('GET', `/units/${unitId}/availability?checkIn=${checkIn}&checkOut=${checkOut}`),

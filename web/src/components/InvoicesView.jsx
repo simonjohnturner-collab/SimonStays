@@ -39,11 +39,11 @@ export default function InvoicesView({ onClose, initialInvoiceId }) {
   return (
     <div className="invoices-view">
       <header className="topbar no-print">
-        <div className="brand">Simon<span>Stays</span></div>
+        <button className="brand linklike" onClick={onClose} title="Back to the board">Simon<span>Stays</span></button>
         <span className="host">Invoices</span>
         <div className="spacer" />
         <button className="ghost" onClick={newInvoice}>＋ New invoice</button>
-        <button className="ghost" onClick={onClose}>✕ Close</button>
+        <button className="ghost" onClick={onClose}>🏠 Home</button>
       </header>
 
       <div className="invoices-body">

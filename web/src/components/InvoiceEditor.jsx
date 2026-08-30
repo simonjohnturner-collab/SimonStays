@@ -2,6 +2,13 @@ import { useState } from 'react';
 import { api } from '../api.js';
 import { fmtR, randToCents, centsToRand } from '../money.js';
 
+// Nights between two YYYY-MM-DD dates (checkout exclusive). null if not both valid.
+function nightsBetween(a, b) {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(a || '') || !/^\d{4}-\d{2}-\d{2}/.test(b || '')) return null;
+  const n = Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 86400000);
+  return n > 0 ? n : null;
+}
+
 // Editable, printable invoice document. Inputs look like plain text and lose
 // their borders when printed, so the same view edits and prints cleanly.
 export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onDuplicated, onEditBiller }) {
@@ -28,9 +35,38 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
   const totalCents = subtotal - discountCents;
 
   const setB = (k, v) => setBill({ ...bill, [k]: v });
-  const setLine = (i, k, v) => setLines(lines.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
+  const setLine = (i, k, v) => setLines(lines.map((l, j) => {
+    if (j !== i) return l;
+    const nl = { ...l, [k]: v };
+    if (k === 'dateIn' || k === 'dateOut') { const n = nightsBetween(nl.dateIn, nl.dateOut); if (n != null) nl.qty = n; }
+    return nl;
+  }));
   const addLine = () => setLines([...lines, { description: '', dateIn: '', dateOut: '', qty: '', nightly: '', amount: '' }]);
   const removeLine = (i) => setLines(lines.filter((_, j) => j !== i));
+
+  async function applyRateCard() {
+    try {
+      const { quote: q } = await api.quoteBooking(invoice.bookingId);
+      if (!q) return;
+      const nightly = q.nights ? Math.round((q.accommodationCents - q.discountCents) / q.nights) / 100 : 0;
+      setLines((prev) => {
+        const next = prev.map((l, i) => (i === 0 ? { ...l, qty: q.nights, nightly, amount: '' } : { ...l }));
+        const setSvc = (kw, label, cents) => {
+          if (cents <= 0) return;
+          const idx = next.findIndex((l) => l.description.toLowerCase().includes(kw));
+          if (idx >= 0) next[idx] = { ...next[idx], nightly: '', amount: cents / 100 };
+          else next.push({ description: label, dateIn: '', dateOut: '', qty: 1, nightly: '', amount: cents / 100 });
+        };
+        setSvc('mattress', 'Extra mattress', q.mattressCents);
+        setSvc('clean', 'Cleaning', q.cleaningCents);
+        return next;
+      });
+      setDiscountPercent(0);
+      setMsg(`Applied rate card · ${q.nights} nights` + (q.discountPercent ? ` · ${q.discountPercent}% length discount` : ''));
+    } catch (e) {
+      setMsg(e.message === 'no_rate_card' ? 'No rate card for this property yet — set one via ☰ → property → $ Pricing.' : e.message);
+    }
+  }
 
   async function save() {
     setBusy(true); setMsg('');
@@ -66,6 +102,7 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
     <div className="invoice-wrap">
       <div className="invoice-actions no-print">
         <button className="secondary" onClick={onEditBiller}>Biller settings</button>
+        {invoice.bookingId && <button className="secondary" onClick={applyRateCard}>Apply rate card</button>}
         <div className="spacer" />
         {msg && <span className="muted small">{msg}</span>}
         <button className="secondary" onClick={duplicate} disabled={busy}>Duplicate</button>
@@ -110,9 +147,9 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
             {lines.map((l, i) => (
               <tr key={i}>
                 <td><input value={l.description} onChange={(e) => setLine(i, 'description', e.target.value)} placeholder="Item" /></td>
-                <td><input className="sm" value={l.dateIn} onChange={(e) => setLine(i, 'dateIn', e.target.value)} placeholder="—" /></td>
-                <td><input className="sm" value={l.dateOut} onChange={(e) => setLine(i, 'dateOut', e.target.value)} placeholder="—" /></td>
-                <td><input className="xs" value={l.qty} onChange={(e) => setLine(i, 'qty', e.target.value)} placeholder="—" /></td>
+                <td><input className="sm" type="date" value={l.dateIn} onChange={(e) => setLine(i, 'dateIn', e.target.value)} /></td>
+                <td><input className="sm" type="date" value={l.dateOut} onChange={(e) => setLine(i, 'dateOut', e.target.value)} /></td>
+                <td><input className="xs" value={l.qty} onChange={(e) => setLine(i, 'qty', e.target.value)} placeholder="—" title="Auto-calculated from In/Out" /></td>
                 <td className="rt"><input className="num" value={l.nightly} onChange={(e) => setLine(i, 'nightly', e.target.value)} placeholder="0.00" /></td>
                 <td className="rt">{Number(l.nightly) > 0 ? fmtR(lineCents(l)) : <input className="num" value={l.amount} onChange={(e) => setLine(i, 'amount', e.target.value)} placeholder="0.00" />}</td>
                 <td className="no-print"><button className="del sm" onClick={() => removeLine(i)}>×</button></td>

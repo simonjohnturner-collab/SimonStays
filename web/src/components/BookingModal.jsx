@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { prettyDate } from '../dates.js';
+import { fmtR } from '../money.js';
 
 export default function BookingModal({ unit, booking, onClose, onSaved, onInvoice }) {
   const editing = !!booking;
@@ -28,6 +29,20 @@ export default function BookingModal({ unit, booking, onClose, onSaved, onInvoic
   const [msg, setMsg] = useState(null); // { text, kind }
   const [conflicts, setConflicts] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [quote, setQuote] = useState(null);
+
+  // Live rate-card price when dates + property are known.
+  useEffect(() => {
+    let cancelled = false;
+    if (!checkIn || !checkOut || !unit.propertyId) { setQuote(null); return; }
+    const t = setTimeout(async () => {
+      try {
+        const r = await api.quoteProperty(unit.propertyId, { checkIn, checkOut, mattress: extraMattress, cleaning: true });
+        if (!cancelled) setQuote(r.quote);
+      } catch { if (!cancelled) setQuote(null); }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [checkIn, checkOut, extraMattress, unit.propertyId]);
 
   function payload(extra = {}) {
     return {
@@ -87,6 +102,14 @@ export default function BookingModal({ unit, booking, onClose, onSaved, onInvoic
           <label>Check-in<input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} /></label>
           <label>Check-out<input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} /></label>
         </div>
+        {quote && (
+          <div className="quote-hint">
+            💲 Rate card: <b>{fmtR(quote.totalCents)}</b> · {quote.nights} night{quote.nights > 1 ? 's' : ''} @ {fmtR(quote.avgNightlyCents)}/night
+            {quote.discountPercent ? ` · ${quote.discountPercent}% discount` : ''}
+            {quote.cleaningCents ? ` · +clean ${fmtR(quote.cleaningCents)}` : ''}
+          </div>
+        )}
+
         <label>Guest<input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Guest name" /></label>
 
         <fieldset>

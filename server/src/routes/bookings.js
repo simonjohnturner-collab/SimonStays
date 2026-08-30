@@ -3,6 +3,7 @@ const prisma = require('../lib/prisma');
 const { authHost, requireOwnedUnit } = require('../middleware/auth');
 const { checkAvailability, syncUnit } = require('../utils/sync');
 const { dateOnly } = require('../utils/ical');
+const { quote } = require('../utils/pricing');
 
 const router = express.Router();
 router.use(authHost);
@@ -70,6 +71,16 @@ router.patch('/bookings/:id', async (req, res) => {
   if ('cleans' in b) data.cleans = { deleteMany: {}, create: normalizeCleans(b.cleans) };
   const updated = await prisma.booking.update({ where: { id: booking.id }, data, include: { cleans: true } });
   res.json({ booking: updated });
+});
+
+// GET /bookings/:id/quote — price this booking from its property's rate card.
+router.get('/bookings/:id/quote', async (req, res) => {
+  const booking = await loadOwned(req, res); if (!booking) return;
+  const rc = await prisma.rateCard.findUnique({ where: { propertyId: booking.unit.propertyId } });
+  if (!rc) return res.status(404).json({ error: 'no_rate_card' });
+  const iso = (d) => new Date(d).toISOString().slice(0, 10);
+  const q = quote(rc, { checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut), mattress: booking.extraMattress, cleaning: true });
+  res.json({ quote: q });
 });
 
 // DELETE /bookings/:id
