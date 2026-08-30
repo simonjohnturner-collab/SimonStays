@@ -19,6 +19,56 @@ model Host {
   createdAt    DateTime      @default(now())
   properties   Property[]
   guestLookups GuestLookup[]
+  biller       BillerProfile?
+  invoices     Invoice[]
+}
+
+// The host's own "invoice from" details + bank info (one per host, editable).
+model BillerProfile {
+  id                 String   @id @default(uuid())
+  hostId             String   @unique
+  host               Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  companyName        String?
+  registrationNo     String?
+  addressLines       String? // multi-line
+  email              String?
+  phone              String?
+  bankName           String?
+  accountNumber      String?
+  branch             String?
+  swiftCode          String?
+  paymentInstruction String? // e.g. "Pls Pay Catwalk Property Services"
+  specialConditions  String? // default special conditions block
+  invoiceSeq         Int      @default(0) // running invoice number
+  updatedAt          DateTime @updatedAt
+}
+
+// A saved invoice. Line items + biller details are snapshotted as JSON so a
+// historical invoice never changes when the profile is later edited.
+model Invoice {
+  id              String   @id @default(uuid())
+  hostId          String
+  host            Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  number          String
+  date            DateTime @default(now())
+  invoiceType     String   @default("Accommodation")
+  bookingId       String?
+  billToName      String?
+  billToAddress   String?
+  billToAttention String?
+  billToEmail     String?
+  billToPhone     String?
+  lineItems       Json // [{description,dateIn,dateOut,qty,nightlyCents,amountCents}]
+  discountPercent Float    @default(0)
+  totalCents      Int      @default(0)
+  dueNowCents     Int      @default(0)
+  specialConditions String?
+  billerSnapshot  Json?
+  status          String   @default("draft")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([hostId])
 }
 
 // Guest name for a reservation code, harvested from the host's Airbnb emails

@@ -55,6 +55,16 @@ export const api = {
   // guest-name email ingest
   ingestEmail: (subject, body) => req('POST', '/email/ingest', { subject, body }),
 
+  // biller profile + invoices
+  getBiller: () => req('GET', '/biller'),
+  saveBiller: (data) => req('PUT', '/biller', data),
+  listInvoices: () => req('GET', '/invoices'),
+  getInvoice: (id) => req('GET', `/invoices/${id}`),
+  createInvoice: (payload) => req('POST', '/invoices', payload),
+  updateInvoice: (id, payload) => req('PATCH', `/invoices/${id}`, payload),
+  duplicateInvoice: (id) => req('POST', `/invoices/${id}/duplicate`),
+  deleteInvoice: (id) => req('DELETE', `/invoices/${id}`),
+
   // bookings
   availability: (unitId, checkIn, checkOut) =>
     req('GET', `/units/${unitId}/availability?checkIn=${checkIn}&checkOut=${checkOut}`),

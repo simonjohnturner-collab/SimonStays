@@ -5,7 +5,7 @@ import { useState } from 'react';
 export default function ManageDrawer({
   properties, onClose,
   onAddProperty, onRenameProperty, onDeleteProperty,
-  onAddUnit, onDeleteUnit, onOpenUnit, onAddBooking,
+  onAddUnit, onDeleteUnit, onOpenUnit, onAddBooking, onOpenInvoices,
 }) {
   const units = properties.flatMap((p) => p.units.map((u) => ({ ...u, label: `${p.name} · ${u.name}` })));
   const [pickUnit, setPickUnit] = useState('');
@@ -19,6 +19,7 @@ export default function ManageDrawer({
         </div>
 
         <button className="wide" onClick={onAddProperty}>➕ Add a property</button>
+        <button className="wide secondary" onClick={onOpenInvoices} style={{ marginTop: 6 }}>🧾 Invoices</button>
 
         <section>
           <h4>Add a booking</h4>

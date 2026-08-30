@@ -7,6 +7,7 @@ import BookingModal from './BookingModal.jsx';
 import UnitPanel from './UnitPanel.jsx';
 import EmailModal from './EmailModal.jsx';
 import ManageDrawer from './ManageDrawer.jsx';
+import InvoicesView from './InvoicesView.jsx';
 
 const WINDOW_DAYS = 35;
 
@@ -22,6 +23,7 @@ export default function Main() {
   const [panelUnit, setPanelUnit] = useState(null);
   const [emailOpen, setEmailOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [invoices, setInvoices] = useState(null); // { initialId } when open
   const [msg, setMsg] = useState('');
 
   const from = ymd(start);
@@ -101,6 +103,10 @@ export default function Main() {
 
   const hasUnits = properties.some((p) => p.units.length);
 
+  if (invoices) {
+    return <InvoicesView initialInvoiceId={invoices.initialId} onClose={() => setInvoices(null)} />;
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -147,6 +153,11 @@ export default function Main() {
           booking={bookingCtx.booking}
           onClose={() => setBookingCtx(null)}
           onSaved={async () => { setBookingCtx(null); await loadBookings(properties); }}
+          onInvoice={async (booking) => {
+            const r = await api.createInvoice({ fromBookingId: booking.id });
+            setBookingCtx(null);
+            setInvoices({ initialId: r.invoice.id });
+          }}
         />
       )}
 
@@ -161,6 +172,7 @@ export default function Main() {
           onDeleteUnit={deleteUnit}
           onOpenUnit={(unit) => { setMenuOpen(false); setPanelUnit(unit); }}
           onAddBooking={(unit) => { setMenuOpen(false); setBookingCtx({ unit }); }}
+          onOpenInvoices={() => { setMenuOpen(false); setInvoices({ initialId: null }); }}
         />
       )}
 

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { api } from '../api.js';
 import { prettyDate } from '../dates.js';
 
-export default function BookingModal({ unit, booking, onClose, onSaved }) {
+export default function BookingModal({ unit, booking, onClose, onSaved, onInvoice }) {
   const editing = !!booking;
   const [guestName, setGuestName] = useState(booking?.guestName || '');
   const [checkIn, setCheckIn] = useState(booking?.checkIn?.slice(0, 10) || '');
@@ -141,6 +141,7 @@ export default function BookingModal({ unit, booking, onClose, onSaved }) {
 
         <div className="modal-actions">
           {editing && <button className="danger ghost" disabled={busy} onClick={remove}>Delete</button>}
+          {editing && onInvoice && <button className="secondary" disabled={busy} onClick={() => onInvoice(booking)}>🧾 Invoice</button>}
           <div className="spacer" />
           <button className="secondary" disabled={busy} onClick={checkAvail}>Check availability</button>
           <button disabled={busy} onClick={() => save(false)}>{editing ? 'Save' : 'Create booking'}</button>
