@@ -36,12 +36,25 @@ router.post('/units/:unitId/bookings', requireOwnedUnit, async (req, res) => {
       paid: !!b.paid, cleaner: b.cleaner || null, comments: b.comments || null,
       leavingEarly: !!b.leavingEarly,
       earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut,
-      extraCleaning: !!b.extraCleaning, extraCleaningPaid: !!b.extraCleaningPaid,
       extraMattress: !!b.extraMattress, hairDryer: !!b.hairDryer,
+      cleans: { create: normalizeCleans(b.cleans) },
     },
+    include: { cleans: true },
   });
   res.status(201).json({ booking });
 });
+
+// Normalize insta-clean rows from the client into Prisma create-inputs.
+function normalizeCleans(cleans) {
+  if (!Array.isArray(cleans)) return [];
+  return cleans
+    .filter((c) => c && (c.date || c.cleaner || c.paymentMethod))
+    .map((c) => ({
+      date: c.date ? dateOnly(c.date) : null,
+      paymentMethod: c.paymentMethod === 'direct' ? 'direct' : 'prepaid',
+      cleaner: c.cleaner || null,
+    }));
+}
 
 // PATCH /bookings/:id — edit any field the host owns (guest, paid, cleaner, dates, status…).
 router.patch('/bookings/:id', async (req, res) => {
@@ -49,12 +62,13 @@ router.patch('/bookings/:id', async (req, res) => {
   const b = req.body || {};
   const data = {};
   ['guestName', 'cleaner', 'comments'].forEach((k) => { if (k in b) data[k] = b[k]; });
-  ['paid', 'leavingEarly', 'earlyCheckIn', 'lateCheckOut', 'extraCleaning', 'extraCleaningPaid', 'extraMattress', 'hairDryer']
+  ['paid', 'leavingEarly', 'earlyCheckIn', 'lateCheckOut', 'extraMattress', 'hairDryer']
     .forEach((k) => { if (k in b) data[k] = !!b[k]; });
   if ('status' in b) data.status = b.status;
   if ('checkIn' in b) data.checkIn = dateOnly(b.checkIn);
   if ('checkOut' in b) data.checkOut = dateOnly(b.checkOut);
-  const updated = await prisma.booking.update({ where: { id: booking.id }, data });
+  if ('cleans' in b) data.cleans = { deleteMany: {}, create: normalizeCleans(b.cleans) };
+  const updated = await prisma.booking.update({ where: { id: booking.id }, data, include: { cleans: true } });
   res.json({ booking: updated });
 });
 

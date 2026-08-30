@@ -14,10 +14,16 @@ export default function BookingModal({ unit, booking, onClose, onSaved }) {
   const [paid, setPaid] = useState(booking?.paid || false);
   const [earlyCheckIn, setEarlyCheckIn] = useState(booking?.earlyCheckIn || false);
   const [lateCheckOut, setLateCheckOut] = useState(booking?.lateCheckOut || false);
-  const [extraCleaning, setExtraCleaning] = useState(booking?.extraCleaning || false);
-  const [extraCleaningPaid, setExtraCleaningPaid] = useState(booking?.extraCleaningPaid || false);
   const [extraMattress, setExtraMattress] = useState(booking?.extraMattress || false);
   const [hairDryer, setHairDryer] = useState(booking?.hairDryer || false);
+
+  // Insta (mid-stay) cleans — the checkout clean is the "Checkout cleaner" field.
+  const [cleans, setCleans] = useState(
+    (booking?.cleans || []).map((c) => ({ date: c.date?.slice(0, 10) || '', paymentMethod: c.paymentMethod || 'prepaid', cleaner: c.cleaner || '' }))
+  );
+  const addClean = () => setCleans([...cleans, { date: '', paymentMethod: 'prepaid', cleaner: '' }]);
+  const updateClean = (i, field, val) => setCleans(cleans.map((c, j) => (j === i ? { ...c, [field]: val } : c)));
+  const removeClean = (i) => setCleans(cleans.filter((_, j) => j !== i));
 
   const [msg, setMsg] = useState(null); // { text, kind }
   const [conflicts, setConflicts] = useState(null);
@@ -26,9 +32,9 @@ export default function BookingModal({ unit, booking, onClose, onSaved }) {
   function payload(extra = {}) {
     return {
       guestName, checkIn, checkOut, cleaner, comments,
-      paid, earlyCheckIn, lateCheckOut,
-      extraCleaning, extraCleaningPaid: extraCleaning ? extraCleaningPaid : false,
-      extraMattress, hairDryer, ...extra,
+      paid, earlyCheckIn, lateCheckOut, extraMattress, hairDryer,
+      cleans: cleans.filter((c) => c.date || c.cleaner),
+      ...extra,
     };
   }
 
@@ -96,15 +102,30 @@ export default function BookingModal({ unit, booking, onClose, onSaved }) {
             <label className="chk"><input type="checkbox" checked={extraMattress} onChange={(e) => setExtraMattress(e.target.checked)} /> Extra mattress</label>
             <label className="chk"><input type="checkbox" checked={hairDryer} onChange={(e) => setHairDryer(e.target.checked)} /> Hair dryer</label>
           </div>
-          <div className="checks">
-            <label className="chk"><input type="checkbox" checked={extraCleaning} onChange={(e) => setExtraCleaning(e.target.checked)} /> Additional cleaning</label>
-            <label className={`chk ${extraCleaning ? '' : 'disabled'}`}>
-              <input type="checkbox" disabled={!extraCleaning} checked={extraCleaning && extraCleaningPaid} onChange={(e) => setExtraCleaningPaid(e.target.checked)} /> Additional cleaning paid
-            </label>
-          </div>
         </fieldset>
 
-        <label>Cleaner<input value={cleaner} onChange={(e) => setCleaner(e.target.value)} placeholder="Optional" /></label>
+        <fieldset>
+          <legend>Cleaning</legend>
+          <label>Checkout cleaner<input value={cleaner} onChange={(e) => setCleaner(e.target.value)} placeholder="Cleaner for the checkout clean" /></label>
+
+          <div className="insta-head">
+            <span>Insta cleans (mid-stay)</span>
+            <button type="button" className="mini" onClick={addClean}>+ Add insta clean</button>
+          </div>
+          {cleans.length === 0 && <p className="muted small">None. Add one or more mid-stay cleans if the guest wants them.</p>}
+          {cleans.map((c, i) => (
+            <div key={i} className="insta-row">
+              <input type="date" value={c.date} onChange={(e) => updateClean(i, 'date', e.target.value)} title="Clean date" />
+              <select value={c.paymentMethod} onChange={(e) => updateClean(i, 'paymentMethod', e.target.value)} title="Payment">
+                <option value="prepaid">Paid for</option>
+                <option value="direct">Cleaner paid directly</option>
+              </select>
+              <input value={c.cleaner} onChange={(e) => updateClean(i, 'cleaner', e.target.value)} placeholder="Cleaner" title="Cleaner" />
+              <button type="button" className="del sm" onClick={() => removeClean(i)} title="Remove">×</button>
+            </div>
+          ))}
+        </fieldset>
+
         <label>Comments<input value={comments} onChange={(e) => setComments(e.target.value)} placeholder="Anything else…" /></label>
 
         {msg && <div className={`msg ${msg.kind}`}>{msg.text}</div>}

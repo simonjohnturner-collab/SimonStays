@@ -6,7 +6,8 @@ import { range, ymd, weekday, dayMonth, isWeekend } from '../dates.js';
 // The check-out day itself is the departure morning — clean needed, and free for
 // a new check-in — so it gets a blue highlight with NO guest name.
 function coverage(bookings) {
-  const map = {}; // ymd -> { name, blue, red, floating, booking }
+  const map = {}; // ymd -> { name, blue, red, floating, booking, early, lateCheckout, cleanerCheckout, checkoutBooking, insta[] }
+  const ensure = (key) => (map[key] = map[key] || {});
   for (const b of bookings) {
     if (b.status === 'cancelled') continue;
     const start = new Date(b.checkIn);
@@ -15,21 +16,32 @@ function coverage(bookings) {
 
     // Nights actually occupied (name shown).
     for (let d = new Date(start); d.getTime() < end.getTime(); d.setUTCDate(d.getUTCDate() + 1)) {
-      const key = ymd(d);
-      map[key] = {
-        ...map[key],
-        name: b.guestName || (b.source === 'manual' ? '(guest)' : 'Booked'),
-        red: !b.paid,
-        floating,
-        booking: b,
-      };
+      const cell = ensure(ymd(d));
+      cell.name = b.guestName || (b.source === 'manual' ? '(guest)' : 'Booked');
+      cell.red = !b.paid;
+      cell.floating = floating;
+      cell.booking = b;
     }
 
-    // Check-out day: blue "clean needed / available", no name from this booking.
+    // Early check-in → flag the check-in cell.
+    if (b.earlyCheckIn) ensure(ymd(start)).early = true;
+
+    // Check-out day: blue clean cell (no name), plus the checkout cleaner + late flag.
     if (!floating) {
-      const key = ymd(end);
-      map[key] = { ...map[key], blue: true, booking: map[key]?.booking || b };
+      const cell = ensure(ymd(end));
+      cell.blue = true;
+      cell.cleanerCheckout = b.cleaner || null;
+      cell.lateCheckout = !!b.lateCheckOut;
+      cell.checkoutBooking = b;
+      if (!cell.booking) cell.booking = b;
     }
+
+    // Insta (mid-stay) cleans → marker on their date.
+    (b.cleans || []).forEach((cl) => {
+      if (!cl.date) return;
+      const cell = ensure(ymd(new Date(cl.date)));
+      (cell.insta = cell.insta || []).push({ cleaner: cl.cleaner, paymentMethod: cl.paymentMethod });
+    });
   }
   return map;
 }
@@ -86,6 +98,8 @@ export default function Board({ properties, bookingsByUnit, start, days, onNewBo
                   if (isWeekend(d)) cls.push('weekend');
                   if (c?.blue) cls.push('blue');
                   if (c?.floating) cls.push('yellow');
+                  if (c?.early) cls.push('early');
+                  if (c?.blue && c?.lateCheckout) cls.push('late');
                   return (
                     <td
                       key={key}
@@ -93,7 +107,19 @@ export default function Board({ properties, bookingsByUnit, start, days, onNewBo
                       onClick={() => (hasGuest ? onEditBooking(c.booking, u) : onNewBooking(u))}
                       title={hasGuest ? cellTitle(c) : c?.blue ? 'Checkout — clean needed · free for a new check-in' : 'Click to add a booking'}
                     >
+                      {c?.early && <span className="badge early" title="Early check-in">⏰</span>}
                       {hasGuest && <span className={c.red ? 'name red' : 'name'}>{c.name}</span>}
+                      {c?.insta?.length > 0 && (
+                        <span className="cico insta" title={instaTitle(c.insta)}>🧽</span>
+                      )}
+                      {c?.blue && (
+                        <span
+                          className={`cico clean ${c.cleanerCheckout ? '' : 'unassigned'}`}
+                          title={(c.cleanerCheckout ? `Checkout clean: ${c.cleanerCheckout}` : 'Checkout clean — click to assign a cleaner')
+                            + (c.lateCheckout ? '\n⏰ Late checkout' : '')}
+                          onClick={(e) => { e.stopPropagation(); onEditBooking(c.checkoutBooking, u); }}
+                        >🧹</span>
+                      )}
                     </td>
                   );
                 })}
@@ -104,10 +130,12 @@ export default function Board({ properties, bookingsByUnit, start, days, onNewBo
       </table>
 
       <div className="legend">
-        <span><i className="sw blue" /> Checkout day — clean needed</span>
-        <span><i className="sw yellow" /> Floating booking</span>
-        <span><i className="sw red-text">Aa</i> Payment not allocated</span>
-        <span className="muted">Click a booking to edit · an empty cell to add</span>
+        <span><i className="sw blue" /> Checkout — clean needed</span>
+        <span>🧹 checkout cleaner <span className="muted">(hover)</span></span>
+        <span>🧽 insta clean</span>
+        <span><i className="sw early-sw" /> ⏰ early check-in</span>
+        <span><i className="sw late-sw" /> late checkout</span>
+        <span><i className="sw red-text">Aa</i> unpaid</span>
       </div>
     </div>
   );
@@ -121,9 +149,15 @@ function cellTitle(c) {
   if (b.lateCheckOut) reqs.push('late check-out');
   if (b.extraMattress) reqs.push('extra mattress');
   if (b.hairDryer) reqs.push('hair dryer');
-  if (b.extraCleaning) reqs.push(`extra cleaning (${b.extraCleaningPaid ? 'paid' : 'unpaid'})`);
+  if (b.cleans?.length) reqs.push(`${b.cleans.length} insta clean${b.cleans.length > 1 ? 's' : ''}`);
   return `${c.name} · ${b.checkIn.slice(0, 10)} → ${b.checkOut.slice(0, 10)} · ${b.source} · ${paid}` +
-    (b.cleaner ? ` · cleaner: ${b.cleaner}` : '') +
+    (b.cleaner ? ` · checkout cleaner: ${b.cleaner}` : '') +
     (reqs.length ? `\nRequests: ${reqs.join(', ')}` : '') +
     (b.comments ? `\n${b.comments}` : '');
+}
+
+function instaTitle(insta) {
+  return 'Insta clean:\n' + insta.map((c) =>
+    `• ${c.cleaner || 'cleaner TBD'} — ${c.paymentMethod === 'direct' ? 'paid directly to cleaner' : 'paid for'}`
+  ).join('\n');
 }

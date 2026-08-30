@@ -93,12 +93,12 @@ model Booking {
   comments     String?
   leavingEarly Boolean       @default(false)
   // Guest requests / add-ons
-  earlyCheckIn      Boolean  @default(false)
-  lateCheckOut      Boolean  @default(false)
-  extraCleaning     Boolean  @default(false)
-  extraCleaningPaid Boolean  @default(false)
-  extraMattress     Boolean  @default(false)
-  hairDryer         Boolean  @default(false)
+  earlyCheckIn  Boolean @default(false)
+  lateCheckOut  Boolean @default(false)
+  extraMattress Boolean @default(false)
+  hairDryer     Boolean @default(false)
+  // cleaner = the CHECKOUT clean's cleaner (field above). Insta (mid-stay) cleans:
+  cleans       Clean[]
   externalUid  String? // channel event UID, for idempotent upsert
   resCode      String? // Airbnb reservation code, for guest-name lookup
   createdAt    DateTime      @default(now())
@@ -121,6 +121,19 @@ model SyncLog {
   message     String?
 
   @@index([unitId, ranAt])
+}
+
+// A mid-stay "insta" clean on a booking (the checkout clean is Booking.cleaner).
+model Clean {
+  id            String   @id @default(uuid())
+  bookingId     String
+  booking       Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  date          DateTime? // day of the clean (optional); shown on the board when set
+  paymentMethod String   @default("prepaid") // 'prepaid' (paid up front) | 'direct' (guest pays cleaner)
+  cleaner       String?
+  createdAt     DateTime @default(now())
+
+  @@index([bookingId])
 }
 
 enum ChannelType {

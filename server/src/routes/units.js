@@ -45,7 +45,7 @@ router.get('/:id/bookings', requireOwnedUnit, async (req, res) => {
   const where = { unitId: req.unit.id, status: { not: 'cancelled' } };
   if (from) where.checkOut = { gte: new Date(from) };
   if (to) where.checkIn = { lte: new Date(to) };
-  const bookings = await prisma.booking.findMany({ where, orderBy: { checkIn: 'asc' } });
+  const bookings = await prisma.booking.findMany({ where, orderBy: { checkIn: 'asc' }, include: { cleans: true } });
   res.json({ bookings });
 });
 
