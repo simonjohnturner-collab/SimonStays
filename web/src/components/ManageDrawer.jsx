@@ -5,13 +5,13 @@ import { useState } from 'react';
 export default function ManageDrawer({
   properties, bookingsByUnit, onClose,
   onAddProperty, onRenameProperty, onDeleteProperty,
-  onAddUnit, onDeleteUnit, onOpenUnit,
+  onAddUnit, onDeleteUnit, onOpenUnit, onEditPricing,
   onAddBooking, onEditBooking, onOpenInvoices,
 }) {
-  const [view, setView] = useState('main'); // 'main' | 'property' | 'booking'
+  const [view, setView] = useState('main'); // 'main' | 'property' | 'booking' | 'pricing'
   const [pickUnit, setPickUnit] = useState('');
 
-  const units = properties.flatMap((p) => p.units.map((u) => ({ ...u, label: `${p.name} · ${u.name}` })));
+  const units = properties.flatMap((p) => p.units.map((u) => ({ ...u, label: `${p.name} · ${u.name}`, propertyName: p.name })));
 
   const bookings = [];
   properties.forEach((p) => p.units.forEach((u) => {
@@ -21,7 +21,8 @@ export default function ManageDrawer({
   }));
   bookings.sort((a, b) => (a.checkIn < b.checkIn ? -1 : 1));
 
-  const title = view === 'property' ? 'Add or edit a property' : view === 'booking' ? 'Add or edit a booking' : 'Menu';
+  const title = view === 'property' ? 'Add or edit a property' : view === 'booking' ? 'Add or edit a booking'
+    : view === 'pricing' ? 'Pricing sheets' : 'Menu';
 
   return (
     <div className="overlay right" onClick={onClose}>
@@ -35,6 +36,7 @@ export default function ManageDrawer({
           <div className="menu-main">
             <button className="wide menu-item" onClick={() => setView('property')}>🏠 Add or edit a property</button>
             <button className="wide menu-item" onClick={() => setView('booking')}>📅 Add or edit a booking</button>
+            <button className="wide menu-item" onClick={() => setView('pricing')}>💲 Pricing sheets</button>
             <button className="wide menu-item" onClick={onOpenInvoices}>🧾 Invoicing</button>
           </div>
         )}
@@ -66,6 +68,21 @@ export default function ManageDrawer({
                 </div>
               ))}
             </section>
+          </div>
+        )}
+
+        {view === 'pricing' && (
+          <div>
+            <p className="muted small">Pricing is per unit. Pick a unit to edit its rate card.</p>
+            {units.length === 0 && <p className="muted small">Add a property and a unit first.</p>}
+            <div className="booking-list">
+              {units.map((u) => (
+                <button key={u.id} className="booking-row" onClick={() => onEditPricing(u)}>
+                  <span className="br-guest">{u.propertyName} · {u.name}</span>
+                  <span className="br-sub">Edit rate card</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

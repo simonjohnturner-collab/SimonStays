@@ -177,6 +177,7 @@ export default function Main() {
           onAddBooking={(unit) => { setMenuOpen(false); setBookingCtx({ unit }); }}
           onEditBooking={(booking, unit) => { setMenuOpen(false); setBookingCtx({ booking, unit }); }}
           onOpenInvoices={() => { setMenuOpen(false); setInvoices({ initialId: null }); }}
+          onEditPricing={(u) => { setMenuOpen(false); setPricingUnit(u); }}
         />
       )}
 
