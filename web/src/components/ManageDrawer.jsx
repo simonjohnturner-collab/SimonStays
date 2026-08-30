@@ -7,7 +7,12 @@ export default function ManageDrawer({
   onAddProperty, onRenameProperty, onDeleteProperty,
   onAddUnit, onDeleteUnit, onOpenUnit, onOpenPricing,
   onAddBooking, onEditBooking, onOpenInvoices,
+  groups = [], onAssignGroup, onCreateGroup,
 }) {
+  async function pickGroup(unitId, value) {
+    if (value === '__new') { const g = await onCreateGroup(); if (g) onAssignGroup(unitId, g.id); return; }
+    onAssignGroup(unitId, value || null);
+  }
   const [view, setView] = useState('main'); // 'main' | 'property' | 'booking'
   const [pickUnit, setPickUnit] = useState('');
 
@@ -55,12 +60,17 @@ export default function ManageDrawer({
                       <button className="del" title="Delete property" onClick={() => onDeleteProperty(p)}>×</button>
                     </span>
                   </div>
-                  <div className="units">
+                  <div className="unit-rows">
                     {p.units.map((u) => (
-                      <span key={u.id} className="unit-chip-wrap">
-                        <button className="unit-chip" onClick={() => onOpenUnit(u)}>{u.name}</button>
+                      <div key={u.id} className="unit-row">
+                        <button className="unit-chip" title="Channels & feed" onClick={() => onOpenUnit(u)}>{u.name}</button>
+                        <select className="group-select" value={u.pricingGroupId || ''} onChange={(e) => pickGroup(u.id, e.target.value)} title="Pricing group">
+                          <option value="">— No pricing group —</option>
+                          {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                          <option value="__new">➕ New group…</option>
+                        </select>
                         <button className="del sm" title="Delete unit" onClick={() => onDeleteUnit(u)}>×</button>
-                      </span>
+                      </div>
                     ))}
                     <button className="mini" onClick={() => onAddUnit(p.id)}>+ unit</button>
                   </div>

@@ -8,7 +8,6 @@ import UnitPanel from './UnitPanel.jsx';
 import EmailModal from './EmailModal.jsx';
 import ManageDrawer from './ManageDrawer.jsx';
 import InvoicesView from './InvoicesView.jsx';
-import RateCardModal from './RateCardModal.jsx';
 import RateCardMatrix from './RateCardMatrix.jsx';
 
 const WINDOW_DAYS = 35;
@@ -26,7 +25,7 @@ export default function Main() {
   const [emailOpen, setEmailOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [invoices, setInvoices] = useState(null); // { initialId } when open
-  const [pricingUnit, setPricingUnit] = useState(null);
+  const [groups, setGroups] = useState([]);
   const [pricingMatrix, setPricingMatrix] = useState(false);
   const [msg, setMsg] = useState('');
 
@@ -45,11 +44,24 @@ export default function Main() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api.listProperties();
+      const [r, g] = await Promise.all([api.listProperties(), api.listGroups().catch(() => ({ groups: [] }))]);
       setProperties(r.properties);
+      setGroups(g.groups || []);
       await loadBookings(r.properties);
     } finally { setLoading(false); }
   }, [loadBookings]);
+
+  async function createGroup() {
+    const name = window.prompt('New pricing group name (e.g. Firenza, or Studios)');
+    if (!name || !name.trim()) return null;
+    const { group } = await api.createGroup(name.trim());
+    await refresh();
+    return group;
+  }
+  async function assignGroup(unitId, pricingGroupId) {
+    await api.assignUnitGroup(unitId, pricingGroupId || null);
+    refresh();
+  }
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -172,6 +184,9 @@ export default function Main() {
         <ManageDrawer
           properties={properties}
           bookingsByUnit={bookingsByUnit}
+          groups={groups}
+          onAssignGroup={assignGroup}
+          onCreateGroup={createGroup}
           onClose={() => setMenuOpen(false)}
           onAddProperty={addProperty}
           onRenameProperty={renameProperty}
@@ -183,14 +198,6 @@ export default function Main() {
           onEditBooking={(booking, unit) => { setMenuOpen(false); setBookingCtx({ booking, unit }); }}
           onOpenInvoices={() => { setMenuOpen(false); setInvoices({ initialId: null }); }}
           onOpenPricing={() => { setMenuOpen(false); setPricingMatrix(true); }}
-        />
-      )}
-
-      {pricingUnit && (
-        <RateCardModal
-          unit={pricingUnit}
-          onClose={() => setPricingUnit(null)}
-          onSaved={() => setPricingUnit(null)}
         />
       )}
 
@@ -207,7 +214,6 @@ export default function Main() {
           onClose={() => setPanelUnit(null)}
           onChanged={async () => { await loadBookings(properties); }}
           onNewBooking={() => { setBookingCtx({ unit: panelUnit }); setPanelUnit(null); }}
-          onEditPricing={(u) => { setPanelUnit(null); setPricingUnit(u); }}
         />
       )}
     </div>

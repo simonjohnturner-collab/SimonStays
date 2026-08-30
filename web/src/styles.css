@@ -269,3 +269,14 @@ table.matrix { border-collapse: collapse; font-size: 12px; }
 .mh-unit { font-weight: 700; }
 .fill { background: transparent; border: 0; color: var(--green); font-weight: 700; cursor: pointer; padding: 0 4px; font-size: 14px; }
 .fill:hover { color: var(--green-d); }
+
+/* Property-page group assignment + matrix group headers */
+.unit-rows { display: flex; flex-direction: column; gap: 4px; }
+.unit-row { display: flex; align-items: center; gap: 6px; }
+.unit-row .unit-chip { min-width: 46px; }
+.group-select { flex: 1; padding: 4px 6px; font-size: 12px; }
+.matrix th.grouphead { min-width: 120px; padding: 3px 6px; }
+.matrix .gname { width: 100%; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.35); color: #fff; text-align: center; font-weight: 700; padding: 2px 4px; border-radius: 4px; }
+.matrix .gsub { font-size: 10px; opacity: .9; margin-top: 2px; }
+.matrix .gdel { color: #fff; opacity: .8; }
+.matrix .gdel:hover { color: #ffd7d7; opacity: 1; }

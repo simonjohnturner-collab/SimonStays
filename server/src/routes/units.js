@@ -7,9 +7,6 @@ const { quote } = require('../utils/pricing');
 const router = express.Router();
 router.use(authHost);
 
-const RATE_INT = ['breakageDepositCents', 'nights1Cents', 'nights2Cents', 'nights3Cents', 'nights4PlusCents', 'earlyCheckInCents', 'lateCheckOutCents', 'cleaningCents', 'mattressCents'];
-const RATE_FLOAT = ['weeklyDiscountPercent', 'monthlyDiscountPercent', 'weekendFlexPercent', 'flex1Percent', 'flex2Percent', 'flex3Percent'];
-
 // POST /units { propertyId, name, capacity }
 router.post('/', async (req, res) => {
   const { propertyId, name, capacity } = req.body || {};
@@ -27,13 +24,21 @@ router.get('/:id', requireOwnedUnit, async (req, res) => {
   res.json({ unit: withFeedUrl(req.unit) });
 });
 
-// PATCH /units/:id { name, capacity }
+// PATCH /units/:id { name, capacity, pricingGroupId }
 router.patch('/:id', requireOwnedUnit, async (req, res) => {
-  const { name, capacity } = req.body || {};
-  const unit = await prisma.unit.update({
-    where: { id: req.unit.id },
-    data: { name: name ?? req.unit.name, capacity: capacity != null ? Number(capacity) : req.unit.capacity },
-  });
+  const b = req.body || {};
+  const data = {
+    name: b.name ?? req.unit.name,
+    capacity: b.capacity != null ? Number(b.capacity) : req.unit.capacity,
+  };
+  if ('pricingGroupId' in b) {
+    if (b.pricingGroupId) {
+      const g = await prisma.pricingGroup.findUnique({ where: { id: b.pricingGroupId } });
+      if (!g || g.hostId !== req.hostId) return res.status(400).json({ error: 'invalid_group' });
+      data.pricingGroupId = b.pricingGroupId;
+    } else data.pricingGroupId = null;
+  }
+  const unit = await prisma.unit.update({ where: { id: req.unit.id }, data });
   res.json({ unit });
 });
 
@@ -63,32 +68,12 @@ router.post('/:id/sync', requireOwnedUnit, async (req, res) => {
   }
 });
 
-// ---- Rate card (pricing sheet), per unit ----
-
-// GET /units/:id/ratecard
-router.get('/:id/ratecard', requireOwnedUnit, async (req, res) => {
-  const rateCard = await prisma.rateCard.findUnique({ where: { unitId: req.unit.id } });
-  res.json({ rateCard: rateCard || { unitId: req.unit.id } });
-});
-
-// PUT /units/:id/ratecard
-router.put('/:id/ratecard', requireOwnedUnit, async (req, res) => {
-  const b = req.body || {};
-  const data = {};
-  RATE_INT.forEach((k) => { if (k in b) data[k] = b[k] === '' || b[k] == null ? null : Math.round(Number(b[k])); });
-  RATE_FLOAT.forEach((k) => { if (k in b) data[k] = Number(b[k]) || 0; });
-  if ('specialDates' in b) data.specialDates = b.specialDates;
-  const rateCard = await prisma.rateCard.upsert({
-    where: { unitId: req.unit.id }, update: data, create: { unitId: req.unit.id, ...data },
-  });
-  res.json({ rateCard });
-});
-
-// POST /units/:id/quote { checkIn, checkOut, mattress, earlyCheckIn, lateCheckOut, cleans }
+// POST /units/:id/quote — price from the unit's pricing group.
 router.post('/:id/quote', requireOwnedUnit, async (req, res) => {
-  const rc = await prisma.rateCard.findUnique({ where: { unitId: req.unit.id } });
-  if (!rc) return res.status(404).json({ error: 'no_rate_card' });
-  const q = quote(rc, req.body || {});
+  if (!req.unit.pricingGroupId) return res.status(404).json({ error: 'no_rate_card' });
+  const g = await prisma.pricingGroup.findUnique({ where: { id: req.unit.pricingGroupId } });
+  if (!g) return res.status(404).json({ error: 'no_rate_card' });
+  const q = quote(g, req.body || {});
   if (!q) return res.status(400).json({ error: 'invalid_dates' });
   res.json({ quote: q });
 });

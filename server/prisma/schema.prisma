@@ -17,10 +17,11 @@ model Host {
   passwordHash String
   name         String?
   createdAt    DateTime      @default(now())
-  properties   Property[]
-  guestLookups GuestLookup[]
-  biller       BillerProfile?
-  invoices     Invoice[]
+  properties    Property[]
+  guestLookups  GuestLookup[]
+  biller        BillerProfile?
+  invoices      Invoice[]
+  pricingGroups PricingGroup[]
 }
 
 // The host's own "invoice from" details + bank info (one per host, editable).
@@ -99,12 +100,14 @@ model Property {
   @@index([hostId])
 }
 
-// Per-UNIT pricing sheet, shared by the booking form and invoices (and later the
-// guest self-booking flow). Matches Simon's pricing template.
-model RateCard {
+// A pricing group: units assigned to the same group share one set of prices.
+// Shared by the booking form and invoices (and later guest self-booking).
+model PricingGroup {
   id                   String @id @default(uuid())
-  unitId               String @unique
-  unit                 Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  hostId               String
+  host                 Host   @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  name                 String
+  units                Unit[]
   breakageDepositCents Int    @default(0)
   // nightly rate by length of stay (cents); null tiers fall back to the nearest set one
   nights1Cents     Int?
@@ -125,7 +128,10 @@ model RateCard {
   mattressCents     Int @default(0)
   // each seasonal flex can apply to MULTIPLE periods: [{flex:'flex1'|'flex2'|'flex3', start, end}]
   specialDates Json?
+  createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([hostId])
 }
 
 model Unit {
@@ -136,10 +142,11 @@ model Unit {
   capacity     Int?
   publishToken String              @default(cuid()) // secret in the export-feed URL
   createdAt    DateTime            @default(now())
-  bookings     Booking[]
-  channels     ChannelConnection[]
-  syncLogs     SyncLog[]
-  rateCard     RateCard?
+  bookings       Booking[]
+  channels       ChannelConnection[]
+  syncLogs       SyncLog[]
+  pricingGroupId String?
+  pricingGroup   PricingGroup?       @relation(fields: [pricingGroupId], references: [id], onDelete: SetNull)
 
   @@index([propertyId])
 }

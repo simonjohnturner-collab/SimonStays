@@ -8,7 +8,7 @@ const CHANNELS = [
   { value: 'other', label: 'Other (iCal)' },
 ];
 
-export default function UnitPanel({ unit, onClose, onChanged, onNewBooking, onEditPricing }) {
+export default function UnitPanel({ unit, onClose, onChanged, onNewBooking }) {
   const [feedUrl, setFeedUrl] = useState('');
   const [channels, setChannels] = useState([]);
   const [type, setType] = useState('airbnb');
@@ -59,7 +59,6 @@ export default function UnitPanel({ unit, onClose, onChanged, onNewBooking, onEd
         </div>
 
         <button className="wide" onClick={onNewBooking}>➕ New booking for this unit</button>
-        <button className="wide secondary" onClick={() => onEditPricing(unit)} style={{ marginTop: 6 }}>💲 Pricing sheet</button>
 
         <div className="direction-note">
           <b>Two directions, both needed:</b>

@@ -114,7 +114,7 @@ async function buildFromBooking(hostId, bookingId, biller) {
 
   const iso = (d) => new Date(d).toISOString().slice(0, 10);
   const nights = Math.max(1, Math.round((new Date(booking.checkOut) - new Date(booking.checkIn)) / 86400000));
-  const rc = await prisma.rateCard.findUnique({ where: { unitId: booking.unitId } });
+  const rc = booking.unit.pricingGroupId ? await prisma.pricingGroup.findUnique({ where: { id: booking.unit.pricingGroupId } }) : null;
   const prepaidCleans = booking.cleans.filter((c) => c.paymentMethod !== 'direct').length;
   const q = rc ? quote(rc, {
     checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut),

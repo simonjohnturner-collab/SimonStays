@@ -76,7 +76,8 @@ router.patch('/bookings/:id', async (req, res) => {
 // GET /bookings/:id/quote — price this booking from its unit's rate card.
 router.get('/bookings/:id/quote', async (req, res) => {
   const booking = await loadOwnedWithCleans(req, res); if (!booking) return;
-  const rc = await prisma.rateCard.findUnique({ where: { unitId: booking.unitId } });
+  if (!booking.unit.pricingGroupId) return res.status(404).json({ error: 'no_rate_card' });
+  const rc = await prisma.pricingGroup.findUnique({ where: { id: booking.unit.pricingGroupId } });
   if (!rc) return res.status(404).json({ error: 'no_rate_card' });
   const iso = (d) => new Date(d).toISOString().slice(0, 10);
   const prepaidCleans = (booking.cleans || []).filter((c) => c.paymentMethod !== 'direct').length;

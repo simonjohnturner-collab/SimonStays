@@ -65,13 +65,14 @@ export const api = {
   duplicateInvoice: (id) => req('POST', `/invoices/${id}/duplicate`),
   deleteInvoice: (id) => req('DELETE', `/invoices/${id}`),
 
-  // rate card (pricing sheet) + quotes — per unit
-  getRateCard: (unitId) => req('GET', `/units/${unitId}/ratecard`),
-  saveRateCard: (unitId, data) => req('PUT', `/units/${unitId}/ratecard`, data),
+  // pricing groups (units in a group share one rate card) + quotes
   quoteUnit: (unitId, body) => req('POST', `/units/${unitId}/quote`, body),
   quoteBooking: (bookingId) => req('GET', `/bookings/${bookingId}/quote`),
-  getRateCards: () => req('GET', '/ratecards'),
-  saveRateCards: (cards) => req('PUT', '/ratecards', { cards }),
+  listGroups: () => req('GET', '/groups'),
+  createGroup: (name) => req('POST', '/groups', { name }),
+  updateGroup: (id, data) => req('PUT', `/groups/${id}`, data),
+  deleteGroup: (id) => req('DELETE', `/groups/${id}`),
+  assignUnitGroup: (unitId, pricingGroupId) => req('PATCH', `/units/${unitId}`, { pricingGroupId }),
 
   // bookings
   availability: (unitId, checkIn, checkOut) =>
