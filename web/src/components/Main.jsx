@@ -9,6 +9,7 @@ import EmailModal from './EmailModal.jsx';
 import ManageDrawer from './ManageDrawer.jsx';
 import InvoicesView from './InvoicesView.jsx';
 import RateCardModal from './RateCardModal.jsx';
+import RateCardMatrix from './RateCardMatrix.jsx';
 
 const WINDOW_DAYS = 35;
 
@@ -26,6 +27,7 @@ export default function Main() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [invoices, setInvoices] = useState(null); // { initialId } when open
   const [pricingUnit, setPricingUnit] = useState(null);
+  const [pricingMatrix, setPricingMatrix] = useState(false);
   const [msg, setMsg] = useState('');
 
   const from = ymd(start);
@@ -108,6 +110,9 @@ export default function Main() {
   if (invoices) {
     return <InvoicesView initialInvoiceId={invoices.initialId} onClose={() => setInvoices(null)} />;
   }
+  if (pricingMatrix) {
+    return <RateCardMatrix onClose={() => setPricingMatrix(false)} />;
+  }
 
   return (
     <div className="app">
@@ -177,7 +182,7 @@ export default function Main() {
           onAddBooking={(unit) => { setMenuOpen(false); setBookingCtx({ unit }); }}
           onEditBooking={(booking, unit) => { setMenuOpen(false); setBookingCtx({ booking, unit }); }}
           onOpenInvoices={() => { setMenuOpen(false); setInvoices({ initialId: null }); }}
-          onEditPricing={(u) => { setMenuOpen(false); setPricingUnit(u); }}
+          onOpenPricing={() => { setMenuOpen(false); setPricingMatrix(true); }}
         />
       )}
 

@@ -251,3 +251,21 @@ td.cell.blue.late { background: #cdb4f0; }        /* late checkout (purple) */
 .br-sub { display: block; font-size: 11px; color: var(--muted); }
 
 .flex-block { border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 8px; }
+
+/* Pricing matrix (all units on one sheet) */
+.matrix-wrap { flex: 1; overflow: auto; padding: 16px; }
+table.matrix { border-collapse: collapse; font-size: 12px; }
+.matrix th, .matrix td { border: 1px solid var(--line); }
+.matrix thead th { position: sticky; top: 0; background: var(--green); color: #fff; z-index: 3; padding: 4px 8px; min-width: 84px; text-align: center; }
+.matrix th.rowhead { position: sticky; left: 0; background: #fff; color: var(--ink); z-index: 2; text-align: left; padding: 4px 8px; min-width: 168px; white-space: nowrap; }
+.matrix thead th.rowhead.corner { z-index: 4; background: var(--green); color: #fff; }
+.matrix tbody th.rowhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.matrix tr.sec th { background: #eef1f4; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .3px; font-size: 11px; text-align: left; padding: 5px 8px; position: sticky; left: 0; }
+.matrix td { padding: 0; }
+.matrix td input { border: 0; width: 76px; padding: 4px; text-align: right; font-size: 12px; background: transparent; border-radius: 0; }
+.matrix td input[type=date] { width: 128px; text-align: left; }
+.matrix td input:focus { outline: 2px solid var(--green); outline-offset: -2px; }
+.mh-prop { font-size: 10px; opacity: .85; font-weight: 400; }
+.mh-unit { font-weight: 700; }
+.fill { background: transparent; border: 0; color: var(--green); font-weight: 700; cursor: pointer; padding: 0 4px; font-size: 14px; }
+.fill:hover { color: var(--green-d); }

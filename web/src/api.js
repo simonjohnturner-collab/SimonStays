@@ -70,6 +70,8 @@ export const api = {
   saveRateCard: (unitId, data) => req('PUT', `/units/${unitId}/ratecard`, data),
   quoteUnit: (unitId, body) => req('POST', `/units/${unitId}/quote`, body),
   quoteBooking: (bookingId) => req('GET', `/bookings/${bookingId}/quote`),
+  getRateCards: () => req('GET', '/ratecards'),
+  saveRateCards: (cards) => req('PUT', '/ratecards', { cards }),
 
   // bookings
   availability: (unitId, checkIn, checkOut) =>
