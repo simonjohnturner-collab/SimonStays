@@ -280,3 +280,7 @@ table.matrix { border-collapse: collapse; font-size: 12px; }
 .matrix .gsub { font-size: 10px; opacity: .9; margin-top: 2px; }
 .matrix .gdel { color: #fff; opacity: .8; }
 .matrix .gdel:hover { color: #ffd7d7; opacity: 1; }
+
+/* Simplified unit panel links */
+.lk-label { display: block; font-size: 13px; font-weight: 600; margin: 4px 0 4px; color: var(--ink); }
+.lk-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }

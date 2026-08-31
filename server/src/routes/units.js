@@ -68,6 +68,21 @@ router.post('/:id/sync', requireOwnedUnit, async (req, res) => {
   }
 });
 
+// PUT /units/:id/calendar { importUrl } — set/replace the unit's single iCal
+// import link (simplified one-channel model). Blank clears it.
+router.put('/:id/calendar', requireOwnedUnit, async (req, res) => {
+  const importUrl = (req.body?.importUrl || '').trim();
+  const existing = (req.unit.channels || [])[0];
+  if (!importUrl) {
+    if (existing) await prisma.channelConnection.delete({ where: { id: existing.id } });
+    return res.json({ channel: null });
+  }
+  const channel = existing
+    ? await prisma.channelConnection.update({ where: { id: existing.id }, data: { importUrl } })
+    : await prisma.channelConnection.create({ data: { unitId: req.unit.id, type: 'airbnb', importUrl } });
+  res.json({ channel });
+});
+
 // POST /units/:id/quote — price from the unit's pricing group.
 router.post('/:id/quote', requireOwnedUnit, async (req, res) => {
   if (!req.unit.pricingGroupId) return res.status(404).json({ error: 'no_rate_card' });

@@ -46,6 +46,7 @@ export const api = {
   deleteUnit: (id) => req('DELETE', `/units/${id}`),
   unitBookings: (id, from, to) => req('GET', `/units/${id}/bookings?from=${from}&to=${to}`),
   syncUnit: (id) => req('POST', `/units/${id}/sync`),
+  setCalendar: (id, importUrl) => req('PUT', `/units/${id}/calendar`, { importUrl }),
 
   // channels
   listChannels: (unitId) => req('GET', `/units/${unitId}/channels`),
