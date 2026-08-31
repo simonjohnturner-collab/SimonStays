@@ -59,6 +59,7 @@ router.post('/bookings/floating', async (req, res) => {
       leavingEarly: !!b.leavingEarly,
       earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut,
       extraMattress: !!b.extraMattress, hairDryer: !!b.hairDryer,
+      pricingGroupId: await validGroup(req.hostId, b.pricingGroupId),
       ...paymentFields(b),
       cleans: { create: normalizeCleans(b.cleans) },
     },
@@ -66,6 +67,13 @@ router.post('/bookings/floating', async (req, res) => {
   });
   res.status(201).json({ booking });
 });
+
+// Return groupId if it belongs to the host, else null.
+async function validGroup(hostId, groupId) {
+  if (!groupId) return null;
+  const g = await prisma.pricingGroup.findUnique({ where: { id: groupId } });
+  return g && g.hostId === hostId ? groupId : null;
+}
 
 // GET /bookings/floating?from=&to= — the host's floating (unallocated) bookings.
 router.get('/bookings/floating', async (req, res) => {
@@ -115,6 +123,7 @@ router.patch('/bookings/:id', async (req, res) => {
   if ('checkIn' in b) data.checkIn = dateOnly(b.checkIn);
   if ('checkOut' in b) data.checkOut = dateOnly(b.checkOut);
   if ('cleans' in b) data.cleans = { deleteMany: {}, create: normalizeCleans(b.cleans) };
+  if ('pricingGroupId' in b) data.pricingGroupId = await validGroup(req.hostId, b.pricingGroupId);
   // Allocate a floating booking to a unit (or unassign it back to floating).
   if ('unitId' in b) {
     if (b.unitId) {

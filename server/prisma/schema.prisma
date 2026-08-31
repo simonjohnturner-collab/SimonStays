@@ -129,6 +129,7 @@ model PricingGroup {
   mattressCents     Int @default(0)
   // each seasonal flex can apply to MULTIPLE periods: [{flex:'flex1'|'flex2'|'flex3', start, end}]
   specialDates Json?
+  bookings     Booking[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -193,6 +194,10 @@ model Booking {
   cleans       Clean[]
   externalUid  String? // channel event UID, for idempotent upsert
   resCode      String? // Airbnb reservation code, for guest-name lookup
+  // Floating bookings can be tagged with a group → shown on the first free unit
+  // in that group, WITHOUT blocking the channel (stays floating).
+  pricingGroupId String?
+  pricingGroup   PricingGroup? @relation(fields: [pricingGroupId], references: [id], onDelete: SetNull)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 

@@ -175,6 +175,7 @@ export default function Main() {
           booking={bookingCtx.booking}
           floating={bookingCtx.floating}
           units={properties.flatMap((p) => p.units.map((u) => ({ ...u, label: `${p.name} · ${u.name}` })))}
+          groups={groups}
           onClose={() => setBookingCtx(null)}
           onSaved={async () => { setBookingCtx(null); await loadBookings(properties); }}
           onInvoice={async (booking) => {

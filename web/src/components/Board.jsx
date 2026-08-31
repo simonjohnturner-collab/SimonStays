@@ -55,6 +55,27 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
       : [{ placeholder: true, id: `empty-${p.id}`, propertyId: p.id, name: '', propertyName: p.name }]
   );
 
+  // Place group-tagged floating bookings on the first free unit in their group
+  // (display only — they stay floating and never block a channel).
+  const { placedByUnit, unplaced } = useMemo(() => {
+    const overlap = (aIn, aOut, bIn, bOut) => new Date(aIn) < new Date(bOut) && new Date(bIn) < new Date(aOut);
+    const unitsByGroup = {};
+    properties.forEach((p) => p.units.forEach((u) => { if (u.pricingGroupId) (unitsByGroup[u.pricingGroupId] = unitsByGroup[u.pricingGroupId] || []).push(u); }));
+    const placed = {}; const rest = [];
+    for (const b of floatingBookings) {
+      const cands = b.pricingGroupId ? unitsByGroup[b.pricingGroupId] : null;
+      if (!cands || !cands.length) { rest.push(b); continue; }
+      let chosen = null;
+      for (const u of cands) {
+        const existing = [...(bookingsByUnit[u.id] || []), ...(placed[u.id] || [])];
+        if (!existing.some((x) => x.status !== 'cancelled' && overlap(b.checkIn, b.checkOut, x.checkIn, x.checkOut))) { chosen = u; break; }
+      }
+      if (chosen) (placed[chosen.id] = placed[chosen.id] || []).push(b);
+      else rest.push(b);
+    }
+    return { placedByUnit: placed, unplaced: rest };
+  }, [floatingBookings, properties, bookingsByUnit]);
+
   return (
     <div className="board-scroll">
       <table className="board">
@@ -83,7 +104,7 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
                 </tr>
               );
             }
-            const cov = coverage(bookingsByUnit[u.id] || []);
+            const cov = coverage([...(bookingsByUnit[u.id] || []), ...(placedByUnit[u.id] || [])]);
             return (
               <tr key={u.id}>
                 <th className={`prop-cell ${first ? 'sep' : ''}`}>{first ? u.propertyName : ''}</th>
@@ -105,8 +126,8 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
                     <td
                       key={key}
                       className={cls.join(' ')}
-                      onClick={() => (hasGuest ? onEditBooking(c.booking, u) : onNewBooking(u))}
-                      title={hasGuest ? cellTitle(c) : c?.blue ? 'Checkout — clean needed · free for a new check-in' : 'Click to add a booking'}
+                      onClick={() => (hasGuest ? onEditBooking(c.booking, c.floating ? null : u) : onNewBooking(u))}
+                      title={hasGuest ? cellTitle(c) + (c.floating ? ' · FLOATING (does not block)' : '') : c?.blue ? 'Checkout — clean needed · free for a new check-in' : 'Click to add a booking'}
                     >
                       {c?.early && <span className="badge early" title="Early check-in">⏰</span>}
                       {hasGuest && <span className={c.red ? 'name red' : 'name'}>{c.name}</span>}
@@ -128,10 +149,10 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
             );
           })}
 
-          {floatingBookings.length > 0 && (
+          {unplaced.length > 0 && (
             <tr className="float-sec"><th className="prop-cell" colSpan={2 + dates.length}>Floating / unallocated</th></tr>
           )}
-          {floatingBookings.map((b) => {
+          {unplaced.map((b) => {
             const cov = coverage([b]);
             return (
               <tr key={b.id}>

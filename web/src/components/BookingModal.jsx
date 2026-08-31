@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { prettyDate } from '../dates.js';
 import { fmtR, centsToRand, randToCents } from '../money.js';
 
-export default function BookingModal({ unit, booking, floating, units = [], onClose, onSaved, onInvoice }) {
+export default function BookingModal({ unit, booking, floating, units = [], groups = [], onClose, onSaved, onInvoice }) {
   const editing = !!booking;
   const isFloating = floating || (editing && !booking.unitId);
 
@@ -13,6 +13,7 @@ export default function BookingModal({ unit, booking, floating, units = [], onCl
   const [cleaner, setCleaner] = useState(booking?.cleaner || '');
   const [comments, setComments] = useState(booking?.comments || '');
   const [allocateUnitId, setAllocateUnitId] = useState('');
+  const [groupId, setGroupId] = useState(booking?.pricingGroupId || '');
 
   // Payment: paid / partial / unpaid
   const [paymentStatus, setPaymentStatus] = useState(booking?.paymentStatus || (booking?.paid ? 'paid' : 'unpaid'));
@@ -54,6 +55,7 @@ export default function BookingModal({ unit, booking, floating, units = [], onCl
       paymentStatus, amountOwingCents: paymentStatus === 'partial' ? randToCents(amountOwing) : null,
       earlyCheckIn, lateCheckOut, extraMattress, hairDryer,
       cleans: cleans.filter((c) => c.date || c.cleaner),
+      ...(isFloating ? { pricingGroupId: groupId || null } : {}),
       ...extra,
     };
   }
@@ -130,12 +132,20 @@ export default function BookingModal({ unit, booking, floating, units = [], onCl
         <label>Guest<input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Guest name" /></label>
 
         {isFloating && (
-          <label>Allocate to unit <span className="muted small">(optional — this ends the floating booking and blocks that unit)</span>
-            <select value={allocateUnitId} onChange={(e) => setAllocateUnitId(e.target.value)}>
-              <option value="">— Keep floating —</option>
-              {units.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
-            </select>
-          </label>
+          <>
+            <label>Property group <span className="muted small">(soft — shows on the first free unit in the group; does NOT block channels)</span>
+              <select value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+                <option value="">— None (stays in the Floating row) —</option>
+                {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            </label>
+            <label>Allocate to a unit <span className="muted small">(hard — ends floating &amp; blocks that unit)</span>
+              <select value={allocateUnitId} onChange={(e) => setAllocateUnitId(e.target.value)}>
+                <option value="">— Keep floating —</option>
+                {units.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+              </select>
+            </label>
+          </>
         )}
 
         <fieldset>
