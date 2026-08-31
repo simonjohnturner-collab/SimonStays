@@ -11,12 +11,16 @@ const app = express();
 app.set('trust proxy', 1); // behind Render's proxy (correct https in req.protocol)
 app.use(helmet());
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '12mb' })); // room for base64 photo uploads
 
 app.get('/health', (req, res) => res.json({ ok: true, service: 'staysync', time: new Date().toISOString() }));
 
 // Public feed FIRST — it must not pass through the auth'd catch-all routers below.
 app.use('/feed', require('./routes/feed'));
+// Photos: GET /photos/:id is public (image bytes); mount before the auth'd
+// catch-all routers so it isn't shadowed. Its write routes auth themselves.
+app.use('/photos', require('./routes/photos'));
+app.use('/listings', require('./routes/listings'));
 
 app.use('/auth', require('./routes/auth'));
 app.use('/email', require('./routes/email'));

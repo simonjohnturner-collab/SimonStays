@@ -31,6 +31,7 @@ router.patch('/:id', requireOwnedUnit, async (req, res) => {
     name: b.name ?? req.unit.name,
     capacity: b.capacity != null ? Number(b.capacity) : req.unit.capacity,
   };
+  if ('description' in b) data.description = b.description;
   if ('pricingGroupId' in b) {
     if (b.pricingGroupId) {
       const g = await prisma.pricingGroup.findUnique({ where: { id: b.pricingGroupId } });

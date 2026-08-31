@@ -9,6 +9,7 @@ import EmailModal from './EmailModal.jsx';
 import ManageDrawer from './ManageDrawer.jsx';
 import InvoicesView from './InvoicesView.jsx';
 import RateCardMatrix from './RateCardMatrix.jsx';
+import ListingsView from './ListingsView.jsx';
 
 const WINDOW_DAYS = 35;
 
@@ -28,6 +29,7 @@ export default function Main() {
   const [invoices, setInvoices] = useState(null); // { initialId } when open
   const [groups, setGroups] = useState([]);
   const [pricingMatrix, setPricingMatrix] = useState(false);
+  const [listings, setListings] = useState(false);
   const [msg, setMsg] = useState('');
 
   const from = ymd(start);
@@ -127,6 +129,9 @@ export default function Main() {
   if (pricingMatrix) {
     return <RateCardMatrix onClose={() => setPricingMatrix(false)} />;
   }
+  if (listings) {
+    return <ListingsView onClose={() => setListings(false)} />;
+  }
 
   return (
     <div className="app">
@@ -138,6 +143,7 @@ export default function Main() {
         <button className="ghost" onClick={() => setStart(addDays(today(), -3))}>Today</button>
         <button className="ghost" onClick={() => setStart(addDays(start, 7))}>week →</button>
         <button className="ghost" onClick={syncAll} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync channels'}</button>
+        <button className="ghost" onClick={() => setListings(true)}>🏠 Listings</button>
         <button className="ghost" onClick={() => setEmailOpen(true)}>✉ Guest name</button>
         <span className="host">{host.email}</span>
         <button className="ghost" onClick={logout}>Log out</button>
@@ -205,6 +211,7 @@ export default function Main() {
           onEditBooking={(booking, unit) => { setMenuOpen(false); setBookingCtx({ booking, unit }); }}
           onOpenInvoices={() => { setMenuOpen(false); setInvoices({ initialId: null }); }}
           onOpenPricing={() => { setMenuOpen(false); setPricingMatrix(true); }}
+          onOpenListings={() => { setMenuOpen(false); setListings(true); }}
         />
       )}
 

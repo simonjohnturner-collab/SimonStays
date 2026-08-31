@@ -90,13 +90,15 @@ model GuestLookup {
 }
 
 model Property {
-  id        String   @id @default(uuid())
-  hostId    String
-  host      Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
-  name      String
-  address   String?
-  createdAt DateTime @default(now())
-  units     Unit[]
+  id          String   @id @default(uuid())
+  hostId      String
+  host        Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  name        String
+  address     String?
+  description String? // listing description (for the public booking site)
+  createdAt   DateTime @default(now())
+  units       Unit[]
+  photos      Photo[]
 
   @@index([hostId])
 }
@@ -140,15 +142,35 @@ model Unit {
   property     Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   name         String
   capacity     Int?
+  description  String? // listing description (for the public booking site)
   publishToken String              @default(cuid()) // secret in the export-feed URL
   createdAt    DateTime            @default(now())
   bookings       Booking[]
   channels       ChannelConnection[]
   syncLogs       SyncLog[]
+  photos         Photo[]
   pricingGroupId String?
   pricingGroup   PricingGroup?       @relation(fields: [pricingGroupId], references: [id], onDelete: SetNull)
 
   @@index([propertyId])
+}
+
+// A listing photo for a Property or a Unit. Bytes are stored in Postgres so
+// images persist across Render redeploys (the free-tier filesystem is ephemeral).
+model Photo {
+  id          String    @id @default(uuid())
+  propertyId  String?
+  property    Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  unitId      String?
+  unit        Unit?     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  data        Bytes // resized JPEG/PNG bytes
+  contentType String
+  filename    String?
+  sort        Int       @default(0) // lower = earlier; the cover is the lowest
+  createdAt   DateTime  @default(now())
+
+  @@index([propertyId])
+  @@index([unitId])
 }
 
 model ChannelConnection {

@@ -10,6 +10,9 @@ export function setToken(t) {
 }
 export function getToken() { return token; }
 
+// Public URL for a stored photo's bytes (usable directly in <img src>).
+export function photoUrl(id) { return `${BASE}/photos/${id}`; }
+
 async function req(method, path, body) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -74,6 +77,15 @@ export const api = {
   updateGroup: (id, data) => req('PUT', `/groups/${id}`, data),
   deleteGroup: (id) => req('DELETE', `/groups/${id}`),
   assignUnitGroup: (unitId, pricingGroupId) => req('PATCH', `/units/${unitId}`, { pricingGroupId }),
+
+  // listings (descriptions + photos) for the property/unit content manager
+  getListings: () => req('GET', '/listings'),
+  saveProperty: (id, data) => req('PATCH', `/properties/${id}`, data), // { name, address, description }
+  saveUnit: (id, data) => req('PATCH', `/units/${id}`, data), // { name, capacity, description }
+  addPropertyPhoto: (propertyId, payload) => req('POST', `/photos/property/${propertyId}`, payload),
+  addUnitPhoto: (unitId, payload) => req('POST', `/photos/unit/${unitId}`, payload),
+  setPhotoSort: (id, sort) => req('PATCH', `/photos/${id}`, { sort }),
+  deletePhoto: (id) => req('DELETE', `/photos/${id}`),
 
   // bookings
   availability: (unitId, checkIn, checkOut) =>

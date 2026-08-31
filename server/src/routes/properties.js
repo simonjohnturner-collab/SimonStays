@@ -27,10 +27,14 @@ router.post('/', async (req, res) => {
 
 // PATCH /properties/:id { name, address }
 router.patch('/:id', requireOwnedProperty, async (req, res) => {
-  const { name, address } = req.body || {};
+  const { name, address, description } = req.body || {};
   const property = await prisma.property.update({
     where: { id: req.property.id },
-    data: { name: name ?? req.property.name, address: address ?? req.property.address },
+    data: {
+      name: name ?? req.property.name,
+      address: address ?? req.property.address,
+      description: description ?? req.property.description,
+    },
   });
   res.json({ property });
 });
