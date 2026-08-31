@@ -46,8 +46,88 @@ function coverage(bookings) {
   return map;
 }
 
+// Group the date cells into render items: a multi-night "stay" (consecutive
+// occupied nights of the same booking, merged into one block) or a single cell
+// (blue checkout day, or empty).
+function buildSegments(cov, dates) {
+  const segs = [];
+  let i = 0;
+  while (i < dates.length) {
+    const c = cov[ymd(dates[i])];
+    const isStay = !!(c && c.name && !c.blue); // occupancy night, not a checkout cell
+    if (isStay) {
+      const bid = c.booking && c.booking.id;
+      let j = i, insta = false, early = false;
+      while (j < dates.length) {
+        const cj = cov[ymd(dates[j])];
+        if (cj && cj.name && !cj.blue && cj.booking && cj.booking.id === bid) {
+          if (cj.insta && cj.insta.length) insta = true;
+          if (cj.early) early = true;
+          j++;
+        } else break;
+      }
+      segs.push({ type: 'stay', len: j - i, c, insta, early });
+      i = j;
+    } else {
+      segs.push({ type: 'cell', d: dates[i], c });
+      i++;
+    }
+  }
+  return segs;
+}
+
 export default function Board({ properties, bookingsByUnit, floatingBookings = [], start, days, onNewBooking, onEditBooking, onOpenUnit, onAddUnit }) {
   const dates = useMemo(() => range(start, days), [start, days]);
+
+  // Render a row's cells: multi-night stays become one bordered block with a
+  // sticky name; blue/empty days stay individual. u = the row's unit (null on a
+  // floating row, where empty cells aren't clickable-to-add).
+  function renderCells(cov, u) {
+    return buildSegments(cov, dates).map((s, k) => {
+      if (s.type === 'stay') {
+        const c = s.c;
+        const cls = ['cell', 'stay'];
+        if (c.floating) cls.push('yellow');
+        return (
+          <td key={k} colSpan={s.len} className={cls.join(' ')}
+            onClick={() => onEditBooking(c.booking, c.floating ? null : u)}
+            title={cellTitle(c) + (c.floating ? ' · FLOATING (does not block)' : '')}>
+            <span className={`stay-name ${c.red ? 'red' : ''}`}>
+              {s.early && <span className="badge-inline" title="Early check-in">⏰ </span>}
+              {c.name}
+              {s.insta && <span className="badge-inline" title="Insta clean during this stay"> 🧽</span>}
+            </span>
+          </td>
+        );
+      }
+      const c = s.c, d = s.d, key = ymd(d);
+      const hasGuest = !!(c && c.name);
+      const cls = ['cell'];
+      if (isWeekend(d)) cls.push('weekend');
+      if (c?.blue) cls.push('blue');
+      if (c?.floating) cls.push('yellow');
+      if (c?.early) cls.push('early');
+      if (c?.blue && c?.lateCheckout) cls.push('late');
+      if (c?.blue && !c?.cleanerCheckout) cls.push('needs-cleaner');
+      return (
+        <td key={key} className={cls.join(' ')}
+          onClick={() => (hasGuest ? onEditBooking(c.booking, c.floating ? null : u) : (u ? onNewBooking(u) : null))}
+          title={hasGuest ? cellTitle(c) : c?.blue ? 'Checkout — clean needed · free for a new check-in' : (u ? 'Click to add a booking' : '')}>
+          {c?.early && <span className="badge early" title="Early check-in">⏰</span>}
+          {hasGuest && <span className={c.red ? 'name red' : 'name'}>{c.name}</span>}
+          {c?.insta?.length > 0 && <span className="cico insta" title={instaTitle(c.insta)}>🧽</span>}
+          {c?.blue && (
+            <span
+              className={`cico clean ${c.cleanerCheckout ? '' : 'unassigned'} ${hasGuest ? '' : 'centered'}`}
+              title={(c.cleanerCheckout ? `Checkout clean: ${c.cleanerCheckout}` : 'Checkout clean — click to assign a cleaner')
+                + (c.lateCheckout ? '\n⏰ Late checkout' : '')}
+              onClick={(e) => { e.stopPropagation(); onEditBooking(c.checkoutBooking, u); }}
+            >🧹</span>
+          )}
+        </td>
+      );
+    });
+  }
   // Include properties with no units as a placeholder row, so adding one is visible.
   const rows = properties.flatMap((p) =>
     p.units.length
@@ -111,40 +191,7 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
                 <th className="unit-cell">
                   <button className="unit-link" onClick={() => onOpenUnit(u)} title="Channels & feed">{u.name}</button>
                 </th>
-                {dates.map((d) => {
-                  const key = ymd(d);
-                  const c = cov[key];
-                  const hasGuest = !!(c && c.name);
-                  const cls = ['cell'];
-                  if (isWeekend(d)) cls.push('weekend');
-                  if (c?.blue) cls.push('blue');
-                  if (c?.floating) cls.push('yellow');
-                  if (c?.early) cls.push('early');
-                  if (c?.blue && c?.lateCheckout) cls.push('late');
-                  if (c?.blue && !c?.cleanerCheckout) cls.push('needs-cleaner');
-                  return (
-                    <td
-                      key={key}
-                      className={cls.join(' ')}
-                      onClick={() => (hasGuest ? onEditBooking(c.booking, c.floating ? null : u) : onNewBooking(u))}
-                      title={hasGuest ? cellTitle(c) + (c.floating ? ' · FLOATING (does not block)' : '') : c?.blue ? 'Checkout — clean needed · free for a new check-in' : 'Click to add a booking'}
-                    >
-                      {c?.early && <span className="badge early" title="Early check-in">⏰</span>}
-                      {hasGuest && <span className={c.red ? 'name red' : 'name'}>{c.name}</span>}
-                      {c?.insta?.length > 0 && (
-                        <span className="cico insta" title={instaTitle(c.insta)}>🧽</span>
-                      )}
-                      {c?.blue && (
-                        <span
-                          className={`cico clean ${c.cleanerCheckout ? '' : 'unassigned'} ${hasGuest ? '' : 'centered'}`}
-                          title={(c.cleanerCheckout ? `Checkout clean: ${c.cleanerCheckout}` : 'Checkout clean — click to assign a cleaner')
-                            + (c.lateCheckout ? '\n⏰ Late checkout' : '')}
-                          onClick={(e) => { e.stopPropagation(); onEditBooking(c.checkoutBooking, u); }}
-                        >🧹</span>
-                      )}
-                    </td>
-                  );
-                })}
+                {renderCells(cov, u)}
               </tr>
             );
           })}
@@ -160,18 +207,7 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
                 <th className="unit-cell">
                   <button className="unit-link" onClick={() => onEditBooking(b, null)}>{b.guestName || '(guest)'}</button>
                 </th>
-                {dates.map((d) => {
-                  const key = ymd(d);
-                  const c = cov[key];
-                  const cls = ['cell'];
-                  if (isWeekend(d)) cls.push('weekend');
-                  if (c) cls.push('yellow');
-                  return (
-                    <td key={key} className={cls.join(' ')} onClick={() => onEditBooking(b, null)} title={c ? cellTitle(c) : 'Floating booking'}>
-                      {c && c.name && <span className={c.red ? 'name red' : 'name'}>{c.name}</span>}
-                    </td>
-                  );
-                })}
+                {renderCells(cov, null)}
               </tr>
             );
           })}
