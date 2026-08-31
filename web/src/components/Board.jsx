@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
-import { range, ymd, weekday, dayMonth, isWeekend } from '../dates.js';
+import { range, ymd, weekday, dayMonth, isWeekend, today } from '../dates.js';
+
+const TODAY = ymd(today());
 
 // Build a per-date cell map for one unit's bookings.
 // Occupancy (guest name) covers the nights stayed: check-in .. check-out-1.
@@ -57,16 +59,18 @@ function buildSegments(cov, dates) {
     const isStay = !!(c && c.name && !c.blue); // occupancy night, not a checkout cell
     if (isStay) {
       const bid = c.booking && c.booking.id;
-      let j = i, insta = false, early = false;
+      let j = i, insta = false, early = false, hasToday = false;
       while (j < dates.length) {
-        const cj = cov[ymd(dates[j])];
+        const kj = ymd(dates[j]);
+        const cj = cov[kj];
         if (cj && cj.name && !cj.blue && cj.booking && cj.booking.id === bid) {
           if (cj.insta && cj.insta.length) insta = true;
           if (cj.early) early = true;
+          if (kj === TODAY) hasToday = true;
           j++;
         } else break;
       }
-      segs.push({ type: 'stay', len: j - i, c, insta, early });
+      segs.push({ type: 'stay', len: j - i, c, insta, early, hasToday });
       i = j;
     } else {
       segs.push({ type: 'cell', d: dates[i], c });
@@ -88,6 +92,7 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
         const c = s.c;
         const cls = ['cell', 'stay'];
         if (c.floating) cls.push('yellow');
+        if (s.hasToday) cls.push('has-today');
         return (
           <td key={k} colSpan={s.len} className={cls.join(' ')}
             onClick={() => onEditBooking(c.booking, c.floating ? null : u)}
@@ -104,6 +109,7 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
       const hasGuest = !!(c && c.name);
       const cls = ['cell'];
       if (isWeekend(d)) cls.push('weekend');
+      if (key === TODAY) cls.push('today');
       if (c?.blue) cls.push('blue');
       if (c?.floating) cls.push('yellow');
       if (c?.early) cls.push('early');
@@ -163,7 +169,7 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
           <tr>
             <th className="corner" colSpan={2}>Unit</th>
             {dates.map((d) => (
-              <th key={ymd(d)} className={isWeekend(d) ? 'weekend' : ''}>
+              <th key={ymd(d)} className={`${isWeekend(d) ? 'weekend' : ''}${ymd(d) === TODAY ? ' today' : ''}`}>
                 <div className="wd">{weekday(d)}</div>
                 <div className="dm">{dayMonth(d)}</div>
               </th>
