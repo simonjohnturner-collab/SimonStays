@@ -3,8 +3,16 @@ const prisma = require('../lib/prisma');
 const { authHost } = require('../middleware/auth');
 const { parseAirbnbEmail } = require('../utils/guestEmail');
 const { applyGuestNames } = require('../utils/sync');
+const { pollOnce, enabled } = require('../utils/mailPoller');
 
 const router = express.Router();
+
+// POST /email/poll — pull the Zoho Airbnb folder now (manual trigger).
+router.post('/poll', authHost, async (req, res) => {
+  if (!enabled()) return res.status(400).json({ error: 'imap_not_configured' });
+  try { res.json(await pollOnce()); }
+  catch (e) { res.status(500).json({ error: 'poll_failed', message: e.message }); }
+});
 
 /**
  * POST /email/ingest  { subject, body }

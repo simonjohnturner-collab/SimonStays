@@ -50,6 +50,16 @@ if (require.main === module) {
     });
     console.log(`Channel sync scheduled: ${expr}`);
   }
+
+  const mailPoller = require('./utils/mailPoller');
+  const pollExpr = process.env.ZOHO_POLL_CRON || '*/5 * * * *';
+  if (mailPoller.enabled() && cron.validate(pollExpr)) {
+    cron.schedule(pollExpr, async () => {
+      try { const s = await mailPoller.pollOnce(); if (s.processed) console.log('[mail]', JSON.stringify(s)); }
+      catch (e) { console.error('[mail] failed', e.message); }
+    });
+    console.log(`Zoho mail poll scheduled: ${pollExpr} (${mailPoller.config().folder})`);
+  }
 }
 
 module.exports = app;

@@ -20,7 +20,9 @@
     "express": "^4.21.2",
     "helmet": "^8.0.0",
     "ical-generator": "^7.2.0",
+    "imapflow": "^1.7.6",
     "jsonwebtoken": "^9.0.2",
+    "mailparser": "^3.9.17",
     "node-cron": "^3.0.3",
     "node-ical": "^0.20.1"
   },
