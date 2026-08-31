@@ -183,8 +183,8 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
           <legend>Cleaning</legend>
           <label>Checkout cleaner<input value={cleaner} onChange={(e) => setCleaner(e.target.value)} placeholder="Cleaner for the checkout clean" /></label>
           <div className="insta-head">
-            <span>Insta cleans (mid-stay)</span>
-            <button type="button" className="mini" onClick={addClean}>+ Add insta clean</button>
+            <span>In-stay cleans</span>
+            <button type="button" className="mini" onClick={addClean}>+ Add in-stay clean</button>
           </div>
           {cleans.length === 0 && <p className="muted small">None. Add one or more mid-stay cleans if the guest wants them.</p>}
           {cleans.map((c, i) => (

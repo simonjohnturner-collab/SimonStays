@@ -100,7 +100,7 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
             <span className={`stay-name ${c.red ? 'red' : ''}`}>
               {s.early && <span className="badge-inline" title="Early check-in">⏰ </span>}
               {c.name}
-              {s.insta && <span className="badge-inline" title="Insta clean during this stay"> 🧽</span>}
+              {s.insta && <span className="badge-inline" title="In-stay clean during this stay"> 🧽</span>}
             </span>
           </td>
         );
@@ -224,7 +224,7 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
         <span><i className="sw blue" /> Checkout — clean needed</span>
         <span><i className="sw needs-cleaner-sw" /> cleaner not allocated</span>
         <span>🧹 checkout cleaner <span className="muted">(hover)</span></span>
-        <span>🧽 insta clean</span>
+        <span>🧽 in-stay clean</span>
         <span><i className="sw early-sw" /> ⏰ early check-in</span>
         <span><i className="sw late-sw" /> late checkout</span>
         <span><i className="sw red-text">Aa</i> unpaid</span>
@@ -241,7 +241,7 @@ function cellTitle(c) {
   if (b.lateCheckOut) reqs.push('late check-out');
   if (b.extraMattress) reqs.push('extra mattress');
   if (b.hairDryer) reqs.push('hair dryer');
-  if (b.cleans?.length) reqs.push(`${b.cleans.length} insta clean${b.cleans.length > 1 ? 's' : ''}`);
+  if (b.cleans?.length) reqs.push(`${b.cleans.length} in-stay clean${b.cleans.length > 1 ? 's' : ''}`);
   return `${c.name} · ${b.checkIn.slice(0, 10)} → ${b.checkOut.slice(0, 10)} · ${b.source} · ${paid}` +
     (b.cleaner ? ` · checkout cleaner: ${b.cleaner}` : '') +
     (reqs.length ? `\nRequests: ${reqs.join(', ')}` : '') +
@@ -249,7 +249,7 @@ function cellTitle(c) {
 }
 
 function instaTitle(insta) {
-  return 'Insta clean:\n' + insta.map((c) =>
+  return 'In-stay clean:\n' + insta.map((c) =>
     `• ${c.cleaner || 'cleaner TBD'} — ${c.paymentMethod === 'direct' ? 'paid directly to cleaner' : 'paid for'}`
   ).join('\n');
 }

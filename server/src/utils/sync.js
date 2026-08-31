@@ -67,6 +67,8 @@ async function syncUnit(unitId) {
             resCode: code || existing.resCode,
             comments: code ? mergeResCode(existing.comments, code) : existing.comments,
             status: 'confirmed',
+            // channel bookings (esp. Airbnb) are collected up front → always paid
+            paid: true, paymentStatus: 'paid',
           },
         });
         updated++;
@@ -74,7 +76,7 @@ async function syncUnit(unitId) {
         await prisma.booking.create({
           data: {
             unitId, source, channelType: ch.type, status: 'confirmed',
-            guestName, checkIn: ev.start, checkOut: ev.end, paid: true,
+            guestName, checkIn: ev.start, checkOut: ev.end, paid: true, paymentStatus: 'paid',
             externalUid: uid, resCode: code, comments: code ? `ResCode: ${code}` : null,
           },
         });
