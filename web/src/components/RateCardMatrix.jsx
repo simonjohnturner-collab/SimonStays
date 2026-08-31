@@ -1,18 +1,26 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
-import { centsToRand, randToCents } from '../money.js';
+import { centsToRand, randToCents, fmtR } from '../money.js';
+
+const num = (v) => (v === '' || v == null ? 0 : Number(v) || 0);
+// Computed values (cents) — first night bundles one clean; week/month per Simon's formula.
+const cFirst = (v) => randToCents(v.nAdd) + randToCents(v.cleaning);
+const cWeekly = (v) => Math.round((7 * randToCents(v.nAdd) + randToCents(v.cleaning)) * (1 - num(v.weekly) / 100));
+const cMonthly = (v) => Math.round((30.25 * randToCents(v.nAdd) + randToCents(v.cleaning)) * (1 - num(v.monthly) / 100));
 
 // One sheet: pricing categories down the left, pricing GROUPS across the top,
 // plus a unit→group assignment section. Units in a group share its prices.
 const ROWS = [
   { section: 'Nightly rate' },
-  { key: 'nFirst', label: 'First night', type: 'money' },
-  { key: 'nAdd', label: 'Every night thereafter', type: 'money' },
+  { key: 'nAdd', label: 'Nightly rate', type: 'money' },
+  { key: 'cleaning', label: 'Cleaning per clean', type: 'money' },
+  { key: 'firstNight', label: 'First night (nightly + clean)', type: 'calc', calc: cFirst },
   { section: 'Discounts, deposit & fees' },
   { key: 'weekly', label: 'Weekly discount %', type: 'pct' },
+  { key: 'weeklyPrice', label: '↳ Weekly price (7 nights)', type: 'calc', calc: cWeekly },
   { key: 'monthly', label: 'Monthly discount %', type: 'pct' },
+  { key: 'monthlyPrice', label: '↳ Monthly price (~30.25 nights)', type: 'calc', calc: cMonthly },
   { key: 'breakage', label: 'Breakage deposit', type: 'money' },
-  { key: 'cleaning', label: 'Cleaning per clean', type: 'money' },
   { key: 'early', label: 'Early check-in', type: 'money' },
   { key: 'late', label: 'Late checkout', type: 'money' },
   { key: 'mattress', label: 'Extra mattress', type: 'money' },
@@ -31,7 +39,6 @@ const ROWS = [
 ];
 
 const r = (c) => (c == null ? '' : String(centsToRand(c)));
-const num = (v) => (v === '' || v == null ? 0 : Number(v) || 0);
 
 function toValues(g) {
   const specials = Array.isArray(g.specialDates) ? g.specialDates : [];
@@ -39,7 +46,7 @@ function toValues(g) {
   specials.forEach((s) => { if (per[s.flex]) per[s.flex].push(s); });
   const p = (flex, i, k) => (per[flex][i] ? per[flex][i][k] || '' : '');
   return {
-    nFirst: r(g.firstNightCents), nAdd: r(g.additionalNightCents),
+    nAdd: r(g.additionalNightCents),
     weekly: g.weeklyDiscountPercent || '', monthly: g.monthlyDiscountPercent || '',
     breakage: r(g.breakageDepositCents), cleaning: r(g.cleaningCents), early: r(g.earlyCheckInCents), late: r(g.lateCheckOutCents), mattress: r(g.mattressCents),
     weekend: g.weekendFlexPercent || '', flex1: g.flex1Percent || '', flex2: g.flex2Percent || '', flex3: g.flex3Percent || '',
@@ -57,7 +64,8 @@ function toPayload(name, v) {
   addP('flex3', 'f3s1', 'f3e1'); addP('flex3', 'f3s2', 'f3e2');
   return {
     name,
-    firstNightCents: randToCents(v.nFirst), additionalNightCents: randToCents(v.nAdd),
+    additionalNightCents: randToCents(v.nAdd),
+    firstNightCents: cFirst(v), // computed: nightly + one clean (bundled)
     weeklyDiscountPercent: num(v.weekly), monthlyDiscountPercent: num(v.monthly),
     breakageDepositCents: randToCents(v.breakage), cleaningCents: randToCents(v.cleaning),
     earlyCheckInCents: randToCents(v.early), lateCheckOutCents: randToCents(v.late), mattressCents: randToCents(v.mattress),
@@ -136,19 +144,26 @@ export default function RateCardMatrix({ onClose }) {
               </tr>
             </thead>
             <tbody>
-              {ROWS.map((row, ri) => row.section ? (
-                <tr key={ri} className="sec"><th className="rowhead" colSpan={cols.length + 1}>{row.section}</th></tr>
-              ) : (
-                <tr key={row.key}>
-                  <th className="rowhead">
-                    <span>{row.label}</span>
-                    <button className="fill" title="Copy the first group’s value across all groups" onClick={() => fillRow(row.key)}>→</button>
-                  </th>
-                  {cols.map((c, ci) => (
-                    <td key={c.id}><input type={row.type === 'date' ? 'date' : 'text'} value={c.v[row.key]} onChange={(e) => setCell(ci, row.key, e.target.value)} /></td>
-                  ))}
-                </tr>
-              ))}
+              {ROWS.map((row, ri) => {
+                if (row.section) return <tr key={ri} className="sec"><th className="rowhead" colSpan={cols.length + 1}>{row.section}</th></tr>;
+                if (row.type === 'calc') return (
+                  <tr key={row.key} className="calc-row">
+                    <th className="rowhead"><span>{row.label}</span></th>
+                    {cols.map((c) => <td key={c.id} className="calc-cell">{fmtR(row.calc(c.v))}</td>)}
+                  </tr>
+                );
+                return (
+                  <tr key={row.key}>
+                    <th className="rowhead">
+                      <span>{row.label}</span>
+                      <button className="fill" title="Copy the first group’s value across all groups" onClick={() => fillRow(row.key)}>→</button>
+                    </th>
+                    {cols.map((c, ci) => (
+                      <td key={c.id}><input type={row.type === 'date' ? 'date' : 'text'} value={c.v[row.key]} onChange={(e) => setCell(ci, row.key, e.target.value)} /></td>
+                    ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

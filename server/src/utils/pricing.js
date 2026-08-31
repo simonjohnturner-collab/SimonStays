@@ -61,7 +61,8 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
   else if (n >= 7) discountPercent = rc.weeklyDiscountPercent || 0;
   const discountCents = Math.round(accommodation * discountPercent / 100);
 
-  const cleaningCents = (rc.cleaningCents || 0) * Math.max(0, cleans);
+  // First night already bundles one (checkout) clean, so only charge EXTRA cleans.
+  const cleaningCents = (rc.cleaningCents || 0) * Math.max(0, cleans - 1);
   const earlyCents = earlyCheckIn ? (rc.earlyCheckInCents || 0) : 0;
   const lateCents = lateCheckOut ? (rc.lateCheckOutCents || 0) : 0;
   const mattressCents = mattress ? (rc.mattressCents || 0) : 0;

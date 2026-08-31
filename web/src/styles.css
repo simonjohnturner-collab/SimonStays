@@ -300,3 +300,7 @@ tr.float-sec th.prop-cell { background: #fff7cc; color: #8a7500; font-weight: 70
 .assign-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .assign-unit { min-width: 44px; font-weight: 600; font-size: 13px; }
 .assign-row select { flex: 1; padding: 4px 6px; font-size: 12px; }
+
+/* Pricing matrix: computed (blue) rows */
+.matrix tr.calc-row th.rowhead { color: #2160c4; font-weight: 600; font-style: italic; }
+.matrix td.calc-cell { text-align: right; padding: 4px 6px; color: #2160c4; font-weight: 700; background: #f3f8ff; font-size: 12px; }
