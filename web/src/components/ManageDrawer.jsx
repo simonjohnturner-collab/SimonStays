@@ -6,7 +6,7 @@ export default function ManageDrawer({
   properties, bookingsByUnit, onClose,
   onAddProperty, onRenameProperty, onDeleteProperty,
   onAddUnit, onDeleteUnit, onOpenUnit, onOpenPricing,
-  onAddBooking, onEditBooking, onOpenInvoices,
+  onAddBooking, onAddFloating, onEditBooking, onOpenInvoices,
   groups = [], onAssignGroup, onCreateGroup,
 }) {
   async function pickGroup(unitId, value) {
@@ -95,6 +95,7 @@ export default function ManageDrawer({
                   <button disabled={!pickUnit} onClick={() => { const u = units.find((x) => x.id === pickUnit); if (u) onAddBooking(u); }}>Add</button>
                 </div>
               )}
+              <button className="wide secondary" style={{ marginTop: 8 }} onClick={onAddFloating}>➕ Floating booking (no unit)</button>
             </section>
 
             <section>

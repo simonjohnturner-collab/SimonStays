@@ -46,7 +46,7 @@ function coverage(bookings) {
   return map;
 }
 
-export default function Board({ properties, bookingsByUnit, start, days, onNewBooking, onEditBooking, onOpenUnit, onAddUnit }) {
+export default function Board({ properties, bookingsByUnit, floatingBookings = [], start, days, onNewBooking, onEditBooking, onOpenUnit, onAddUnit }) {
   const dates = useMemo(() => range(start, days), [start, days]);
   // Include properties with no units as a placeholder row, so adding one is visible.
   const rows = properties.flatMap((p) =>
@@ -121,6 +121,33 @@ export default function Board({ properties, bookingsByUnit, start, days, onNewBo
                           onClick={(e) => { e.stopPropagation(); onEditBooking(c.checkoutBooking, u); }}
                         >🧹</span>
                       )}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+
+          {floatingBookings.length > 0 && (
+            <tr className="float-sec"><th className="prop-cell" colSpan={2 + dates.length}>Floating / unallocated</th></tr>
+          )}
+          {floatingBookings.map((b) => {
+            const cov = coverage([b]);
+            return (
+              <tr key={b.id}>
+                <th className="prop-cell">Floating</th>
+                <th className="unit-cell">
+                  <button className="unit-link" onClick={() => onEditBooking(b, null)}>{b.guestName || '(guest)'}</button>
+                </th>
+                {dates.map((d) => {
+                  const key = ymd(d);
+                  const c = cov[key];
+                  const cls = ['cell'];
+                  if (isWeekend(d)) cls.push('weekend');
+                  if (c) cls.push('yellow');
+                  return (
+                    <td key={key} className={cls.join(' ')} onClick={() => onEditBooking(b, null)} title={c ? cellTitle(c) : 'Floating booking'}>
+                      {c && c.name && <span className={c.red ? 'name red' : 'name'}>{c.name}</span>}
                     </td>
                   );
                 })}

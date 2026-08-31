@@ -79,6 +79,8 @@ export const api = {
   availability: (unitId, checkIn, checkOut) =>
     req('GET', `/units/${unitId}/availability?checkIn=${checkIn}&checkOut=${checkOut}`),
   createBooking: (unitId, payload) => req('POST', `/units/${unitId}/bookings`, payload),
+  createFloating: (payload) => req('POST', '/bookings/floating', payload),
+  listFloating: (from, to) => req('GET', `/bookings/floating?from=${from}&to=${to}`),
   updateBooking: (id, payload) => req('PATCH', `/bookings/${id}`, payload),
   deleteBooking: (id) => req('DELETE', `/bookings/${id}`),
 };

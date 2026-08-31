@@ -22,6 +22,7 @@ model Host {
   biller        BillerProfile?
   invoices      Invoice[]
   pricingGroups PricingGroup[]
+  bookings      Booking[]
 }
 
 // The host's own "invoice from" details + bank info (one per host, editable).
@@ -167,15 +168,19 @@ model ChannelConnection {
 
 model Booking {
   id           String        @id @default(uuid())
-  unitId       String
-  unit         Unit          @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  unitId       String? // null = floating (unallocated) booking
+  unit         Unit?         @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  hostId       String? // set on manual/floating bookings so floating ones have an owner
+  host         Host?         @relation(fields: [hostId], references: [id], onDelete: Cascade)
   source       BookingSource @default(manual)
   channelType  ChannelType?
   status       BookingStatus @default(confirmed)
   guestName    String?
   checkIn      DateTime // date-only (stored at noon UTC)
   checkOut     DateTime // checkout day = exclusive of last night; the clean day
-  paid         Boolean       @default(false)
+  paid         Boolean       @default(false) // true only when fully paid
+  paymentStatus String       @default("unpaid") // 'paid' | 'partial' | 'unpaid'
+  amountOwingCents Int? // optional, for partial payments
   cleaner      String?
   comments     String?
   leavingEarly Boolean       @default(false)
@@ -193,6 +198,7 @@ model Booking {
 
   @@unique([unitId, externalUid])
   @@index([unitId, checkIn, checkOut])
+  @@index([hostId, status])
 }
 
 model SyncLog {

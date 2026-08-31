@@ -1,24 +1,28 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { prettyDate } from '../dates.js';
-import { fmtR } from '../money.js';
+import { fmtR, centsToRand, randToCents } from '../money.js';
 
-export default function BookingModal({ unit, booking, onClose, onSaved, onInvoice }) {
+export default function BookingModal({ unit, booking, floating, units = [], onClose, onSaved, onInvoice }) {
   const editing = !!booking;
+  const isFloating = floating || (editing && !booking.unitId);
+
   const [guestName, setGuestName] = useState(booking?.guestName || '');
   const [checkIn, setCheckIn] = useState(booking?.checkIn?.slice(0, 10) || '');
   const [checkOut, setCheckOut] = useState(booking?.checkOut?.slice(0, 10) || '');
   const [cleaner, setCleaner] = useState(booking?.cleaner || '');
   const [comments, setComments] = useState(booking?.comments || '');
+  const [allocateUnitId, setAllocateUnitId] = useState('');
 
-  // Payment + requests / add-ons
-  const [paid, setPaid] = useState(booking?.paid || false);
+  // Payment: paid / partial / unpaid
+  const [paymentStatus, setPaymentStatus] = useState(booking?.paymentStatus || (booking?.paid ? 'paid' : 'unpaid'));
+  const [amountOwing, setAmountOwing] = useState(booking?.amountOwingCents != null ? centsToRand(booking.amountOwingCents) : '');
+
   const [earlyCheckIn, setEarlyCheckIn] = useState(booking?.earlyCheckIn || false);
   const [lateCheckOut, setLateCheckOut] = useState(booking?.lateCheckOut || false);
   const [extraMattress, setExtraMattress] = useState(booking?.extraMattress || false);
   const [hairDryer, setHairDryer] = useState(booking?.hairDryer || false);
 
-  // Insta (mid-stay) cleans — the checkout clean is the "Checkout cleaner" field.
   const [cleans, setCleans] = useState(
     (booking?.cleans || []).map((c) => ({ date: c.date?.slice(0, 10) || '', paymentMethod: c.paymentMethod || 'prepaid', cleaner: c.cleaner || '' }))
   );
@@ -26,15 +30,15 @@ export default function BookingModal({ unit, booking, onClose, onSaved, onInvoic
   const updateClean = (i, field, val) => setCleans(cleans.map((c, j) => (j === i ? { ...c, [field]: val } : c)));
   const removeClean = (i) => setCleans(cleans.filter((_, j) => j !== i));
 
-  const [msg, setMsg] = useState(null); // { text, kind }
+  const [msg, setMsg] = useState(null);
   const [conflicts, setConflicts] = useState(null);
   const [busy, setBusy] = useState(false);
   const [quote, setQuote] = useState(null);
 
-  // Live rate-card price when dates are known.
+  // Live rate-card price (only for a real unit).
   useEffect(() => {
     let cancelled = false;
-    if (!checkIn || !checkOut || !unit.id) { setQuote(null); return; }
+    if (!checkIn || !checkOut || !unit?.id) { setQuote(null); return; }
     const t = setTimeout(async () => {
       try {
         const r = await api.quoteUnit(unit.id, { checkIn, checkOut, mattress: extraMattress, earlyCheckIn, lateCheckOut, cleans: 1 });
@@ -42,12 +46,13 @@ export default function BookingModal({ unit, booking, onClose, onSaved, onInvoic
       } catch { if (!cancelled) setQuote(null); }
     }, 300);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [checkIn, checkOut, extraMattress, earlyCheckIn, lateCheckOut, unit.id]);
+  }, [checkIn, checkOut, extraMattress, earlyCheckIn, lateCheckOut, unit?.id]);
 
   function payload(extra = {}) {
     return {
       guestName, checkIn, checkOut, cleaner, comments,
-      paid, earlyCheckIn, lateCheckOut, extraMattress, hairDryer,
+      paymentStatus, amountOwingCents: paymentStatus === 'partial' ? randToCents(amountOwing) : null,
+      earlyCheckIn, lateCheckOut, extraMattress, hairDryer,
       cleans: cleans.filter((c) => c.date || c.cleaner),
       ...extra,
     };
@@ -68,8 +73,14 @@ export default function BookingModal({ unit, booking, onClose, onSaved, onInvoic
     if (!checkIn || !checkOut) { setMsg({ text: 'Pick both dates.', kind: 'err' }); return; }
     setBusy(true); setMsg(null); setConflicts(null);
     try {
-      if (editing) await api.updateBooking(booking.id, payload());
-      else await api.createBooking(unit.id, payload({ override: !!override }));
+      if (editing) {
+        const extra = allocateUnitId ? { unitId: allocateUnitId } : {};
+        await api.updateBooking(booking.id, payload(extra));
+      } else if (isFloating) {
+        await api.createFloating(payload());
+      } else {
+        await api.createBooking(unit.id, payload({ override: !!override }));
+      }
       onSaved();
     } catch (e) {
       if (e.status === 409 && e.data?.conflicts) {
@@ -86,14 +97,19 @@ export default function BookingModal({ unit, booking, onClose, onSaved, onInvoic
     catch (e) { setMsg({ text: e.message, kind: 'err' }); setBusy(false); }
   }
 
+  const title = `${editing ? 'Edit' : 'New'} ${isFloating ? 'floating booking' : 'booking'}${unit ? ` · ${unit.name}` : ''}`;
+
   return (
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>{editing ? 'Edit booking' : 'New booking'} · {unit.name}</h3>
+          <h3>{title}</h3>
           <button className="x" onClick={onClose}>×</button>
         </div>
 
+        {isFloating && !allocateUnitId && (
+          <div className="chip-note">Floating booking — not tied to a unit, so it blocks nothing. Shown yellow until you allocate it.</div>
+        )}
         {editing && booking.source !== 'manual' && (
           <div className="chip-note">From {booking.source} — dates come from the channel; edits here won't push back.</div>
         )}
@@ -107,17 +123,32 @@ export default function BookingModal({ unit, booking, onClose, onSaved, onInvoic
             💲 Rate card: <b>{fmtR(quote.totalCents)}</b> · {quote.nights} night{quote.nights > 1 ? 's' : ''} @ {fmtR(quote.avgNightlyCents)}/night
             {quote.discountPercent ? ` · ${quote.discountPercent}% discount` : ''}
             {quote.cleaningCents ? ` · clean ${fmtR(quote.cleaningCents)}` : ''}
-            {quote.earlyCents ? ` · early ${fmtR(quote.earlyCents)}` : ''}
-            {quote.lateCents ? ` · late ${fmtR(quote.lateCents)}` : ''}
             {quote.breakageCents ? ` · breakage ${fmtR(quote.breakageCents)}` : ''}
           </div>
         )}
 
         <label>Guest<input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Guest name" /></label>
 
+        {isFloating && (
+          <label>Allocate to unit <span className="muted small">(optional — this ends the floating booking and blocks that unit)</span>
+            <select value={allocateUnitId} onChange={(e) => setAllocateUnitId(e.target.value)}>
+              <option value="">— Keep floating —</option>
+              {units.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+            </select>
+          </label>
+        )}
+
         <fieldset>
           <legend>Payment</legend>
-          <label className="chk"><input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} /> Booking paid for</label>
+          <div className="checks wrap">
+            <label className="chk"><input type="radio" name="pay" checked={paymentStatus === 'paid'} onChange={() => setPaymentStatus('paid')} /> Paid</label>
+            <label className="chk"><input type="radio" name="pay" checked={paymentStatus === 'partial'} onChange={() => setPaymentStatus('partial')} /> Partially paid</label>
+            <label className="chk"><input type="radio" name="pay" checked={paymentStatus === 'unpaid'} onChange={() => setPaymentStatus('unpaid')} /> Unpaid (owing)</label>
+          </div>
+          {paymentStatus === 'partial' && (
+            <label>Amount still owing (R)<input value={amountOwing} onChange={(e) => setAmountOwing(e.target.value)} placeholder="0.00" /></label>
+          )}
+          {paymentStatus !== 'paid' && <p className="muted small" style={{ color: 'var(--red)' }}>Money owing — the guest name shows red on the board.</p>}
         </fieldset>
 
         <fieldset>
@@ -133,7 +164,6 @@ export default function BookingModal({ unit, booking, onClose, onSaved, onInvoic
         <fieldset>
           <legend>Cleaning</legend>
           <label>Checkout cleaner<input value={cleaner} onChange={(e) => setCleaner(e.target.value)} placeholder="Cleaner for the checkout clean" /></label>
-
           <div className="insta-head">
             <span>Insta cleans (mid-stay)</span>
             <button type="button" className="mini" onClick={addClean}>+ Add insta clean</button>
@@ -169,7 +199,7 @@ export default function BookingModal({ unit, booking, onClose, onSaved, onInvoic
           {editing && <button className="danger ghost" disabled={busy} onClick={remove}>Delete</button>}
           {editing && onInvoice && <button className="secondary" disabled={busy} onClick={() => onInvoice(booking)}>🧾 Invoice</button>}
           <div className="spacer" />
-          <button className="secondary" disabled={busy} onClick={checkAvail}>Check availability</button>
+          {!isFloating && <button className="secondary" disabled={busy} onClick={checkAvail}>Check availability</button>}
           <button disabled={busy} onClick={() => save(false)}>{editing ? 'Save' : 'Create booking'}</button>
         </div>
       </div>

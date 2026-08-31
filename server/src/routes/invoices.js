@@ -110,11 +110,12 @@ async function buildFromBooking(hostId, bookingId, biller) {
     include: { unit: { include: { property: true } }, cleans: true },
   });
   if (!booking) return { error: 'booking_not_found', status: 404 };
-  if (booking.unit.property.hostId !== hostId) return { error: 'forbidden', status: 403 };
+  const ownerHost = booking.unit ? booking.unit.property.hostId : booking.hostId;
+  if (ownerHost !== hostId) return { error: 'forbidden', status: 403 };
 
   const iso = (d) => new Date(d).toISOString().slice(0, 10);
   const nights = Math.max(1, Math.round((new Date(booking.checkOut) - new Date(booking.checkIn)) / 86400000));
-  const rc = booking.unit.pricingGroupId ? await prisma.pricingGroup.findUnique({ where: { id: booking.unit.pricingGroupId } }) : null;
+  const rc = booking.unit?.pricingGroupId ? await prisma.pricingGroup.findUnique({ where: { id: booking.unit.pricingGroupId } }) : null;
   const prepaidCleans = booking.cleans.filter((c) => c.paymentMethod !== 'direct').length;
   const q = rc ? quote(rc, {
     checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut),
@@ -125,7 +126,7 @@ async function buildFromBooking(hostId, bookingId, biller) {
   // Accommodation line — nightly is the discount-net average so the total matches the quote.
   const nightlyCents = q ? Math.round((q.accommodationCents - q.discountCents) / q.nights) : 0;
   const lineItems = [{
-    description: `${booking.unit.property.name} · ${booking.unit.name}`,
+    description: booking.unit ? `${booking.unit.property.name} · ${booking.unit.name}` : 'Accommodation',
     dateIn: iso(booking.checkIn), dateOut: iso(booking.checkOut),
     qty: q ? q.nights : nights, nightlyCents, amountCents: 0,
   }];

@@ -16,6 +16,7 @@ export default function Main() {
   const { host, logout } = useAuth();
   const [properties, setProperties] = useState([]);
   const [bookingsByUnit, setBookingsByUnit] = useState({});
+  const [floatingBookings, setFloatingBookings] = useState([]);
   const [start, setStart] = useState(() => addDays(today(), -3));
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -39,6 +40,7 @@ export default function Main() {
       catch { return [u.id, []]; }
     }));
     setBookingsByUnit(Object.fromEntries(entries));
+    try { const f = await api.listFloating(from, to); setFloatingBookings(f.bookings); } catch { setFloatingBookings([]); }
   }, [from, to]);
 
   const refresh = useCallback(async () => {
@@ -155,6 +157,7 @@ export default function Main() {
             <Board
               properties={properties}
               bookingsByUnit={bookingsByUnit}
+              floatingBookings={floatingBookings}
               start={start}
               days={WINDOW_DAYS}
               onNewBooking={(unit) => setBookingCtx({ unit })}
@@ -168,8 +171,10 @@ export default function Main() {
 
       {bookingCtx && (
         <BookingModal
-          unit={bookingCtx.unit}
+          unit={bookingCtx.unit || null}
           booking={bookingCtx.booking}
+          floating={bookingCtx.floating}
+          units={properties.flatMap((p) => p.units.map((u) => ({ ...u, label: `${p.name} · ${u.name}` })))}
           onClose={() => setBookingCtx(null)}
           onSaved={async () => { setBookingCtx(null); await loadBookings(properties); }}
           onInvoice={async (booking) => {
@@ -195,6 +200,7 @@ export default function Main() {
           onDeleteUnit={deleteUnit}
           onOpenUnit={(unit) => { setMenuOpen(false); setPanelUnit(unit); }}
           onAddBooking={(unit) => { setMenuOpen(false); setBookingCtx({ unit }); }}
+          onAddFloating={() => { setMenuOpen(false); setBookingCtx({ floating: true }); }}
           onEditBooking={(booking, unit) => { setMenuOpen(false); setBookingCtx({ booking, unit }); }}
           onOpenInvoices={() => { setMenuOpen(false); setInvoices({ initialId: null }); }}
           onOpenPricing={() => { setMenuOpen(false); setPricingMatrix(true); }}

@@ -31,19 +31,64 @@ router.post('/units/:unitId/bookings', requireOwnedUnit, async (req, res) => {
 
   const booking = await prisma.booking.create({
     data: {
-      unitId: req.unit.id, source: 'manual', status: 'confirmed',
+      unitId: req.unit.id, hostId: req.hostId, source: 'manual', status: 'confirmed',
       guestName: b.guestName || null,
       checkIn: dateOnly(b.checkIn), checkOut: dateOnly(b.checkOut),
-      paid: !!b.paid, cleaner: b.cleaner || null, comments: b.comments || null,
+      cleaner: b.cleaner || null, comments: b.comments || null,
       leavingEarly: !!b.leavingEarly,
       earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut,
       extraMattress: !!b.extraMattress, hairDryer: !!b.hairDryer,
+      ...paymentFields(b),
       cleans: { create: normalizeCleans(b.cleans) },
     },
     include: { cleans: true },
   });
   res.status(201).json({ booking });
 });
+
+// POST /bookings/floating — a booking not tied to a unit (shows yellow; blocks nothing).
+router.post('/bookings/floating', async (req, res) => {
+  const b = req.body || {};
+  if (!b.checkIn || !b.checkOut) return res.status(400).json({ error: 'dates_required' });
+  const booking = await prisma.booking.create({
+    data: {
+      unitId: null, hostId: req.hostId, source: 'manual', status: 'floating',
+      guestName: b.guestName || null,
+      checkIn: dateOnly(b.checkIn), checkOut: dateOnly(b.checkOut),
+      cleaner: b.cleaner || null, comments: b.comments || null,
+      leavingEarly: !!b.leavingEarly,
+      earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut,
+      extraMattress: !!b.extraMattress, hairDryer: !!b.hairDryer,
+      ...paymentFields(b),
+      cleans: { create: normalizeCleans(b.cleans) },
+    },
+    include: { cleans: true },
+  });
+  res.status(201).json({ booking });
+});
+
+// GET /bookings/floating?from=&to= — the host's floating (unallocated) bookings.
+router.get('/bookings/floating', async (req, res) => {
+  const { from, to } = req.query;
+  const where = { hostId: req.hostId, status: 'floating' };
+  if (from) where.checkOut = { gte: new Date(from) };
+  if (to) where.checkIn = { lte: new Date(to) };
+  const bookings = await prisma.booking.findMany({ where, orderBy: { checkIn: 'asc' }, include: { cleans: true } });
+  res.json({ bookings });
+});
+
+// Payment fields: paymentStatus ('paid'|'partial'|'unpaid') drives paid (fully paid only).
+function paymentFields(b) {
+  const out = {};
+  if ('paymentStatus' in b) {
+    out.paymentStatus = ['paid', 'partial', 'unpaid'].includes(b.paymentStatus) ? b.paymentStatus : 'unpaid';
+    out.paid = out.paymentStatus === 'paid';
+  } else if ('paid' in b) {
+    out.paid = !!b.paid; out.paymentStatus = b.paid ? 'paid' : 'unpaid';
+  }
+  if ('amountOwingCents' in b) out.amountOwingCents = b.amountOwingCents === '' || b.amountOwingCents == null ? null : Math.round(Number(b.amountOwingCents));
+  return out;
+}
 
 // Normalize insta-clean rows from the client into Prisma create-inputs.
 function normalizeCleans(cleans) {
@@ -63,12 +108,22 @@ router.patch('/bookings/:id', async (req, res) => {
   const b = req.body || {};
   const data = {};
   ['guestName', 'cleaner', 'comments'].forEach((k) => { if (k in b) data[k] = b[k]; });
-  ['paid', 'leavingEarly', 'earlyCheckIn', 'lateCheckOut', 'extraMattress', 'hairDryer']
+  ['leavingEarly', 'earlyCheckIn', 'lateCheckOut', 'extraMattress', 'hairDryer']
     .forEach((k) => { if (k in b) data[k] = !!b[k]; });
+  Object.assign(data, paymentFields(b));
   if ('status' in b) data.status = b.status;
   if ('checkIn' in b) data.checkIn = dateOnly(b.checkIn);
   if ('checkOut' in b) data.checkOut = dateOnly(b.checkOut);
   if ('cleans' in b) data.cleans = { deleteMany: {}, create: normalizeCleans(b.cleans) };
+  // Allocate a floating booking to a unit (or unassign it back to floating).
+  if ('unitId' in b) {
+    if (b.unitId) {
+      const unit = await prisma.unit.findUnique({ where: { id: b.unitId }, include: { property: true } });
+      if (!unit || unit.property.hostId !== req.hostId) return res.status(400).json({ error: 'invalid_unit' });
+      data.unitId = b.unitId;
+      if (!('status' in b)) data.status = 'confirmed';
+    } else { data.unitId = null; data.status = 'floating'; }
+  }
   const updated = await prisma.booking.update({ where: { id: booking.id }, data, include: { cleans: true } });
   res.json({ booking: updated });
 });
@@ -76,7 +131,7 @@ router.patch('/bookings/:id', async (req, res) => {
 // GET /bookings/:id/quote — price this booking from its unit's rate card.
 router.get('/bookings/:id/quote', async (req, res) => {
   const booking = await loadOwnedWithCleans(req, res); if (!booking) return;
-  if (!booking.unit.pricingGroupId) return res.status(404).json({ error: 'no_rate_card' });
+  if (!booking.unit || !booking.unit.pricingGroupId) return res.status(404).json({ error: 'no_rate_card' });
   const rc = await prisma.pricingGroup.findUnique({ where: { id: booking.unit.pricingGroupId } });
   if (!rc) return res.status(404).json({ error: 'no_rate_card' });
   const iso = (d) => new Date(d).toISOString().slice(0, 10);
@@ -95,7 +150,8 @@ async function loadOwnedWithCleans(req, res) {
     include: { unit: { include: { property: true } }, cleans: true },
   });
   if (!booking) { res.status(404).json({ error: 'not_found' }); return null; }
-  if (booking.unit.property.hostId !== req.hostId) { res.status(403).json({ error: 'forbidden' }); return null; }
+  const owner = booking.unit ? booking.unit.property.hostId : booking.hostId;
+  if (owner !== req.hostId) { res.status(403).json({ error: 'forbidden' }); return null; }
   return booking;
 }
 
@@ -112,7 +168,8 @@ async function loadOwned(req, res) {
     include: { unit: { include: { property: true } } },
   });
   if (!booking) { res.status(404).json({ error: 'not_found' }); return null; }
-  if (booking.unit.property.hostId !== req.hostId) { res.status(403).json({ error: 'forbidden' }); return null; }
+  const owner = booking.unit ? booking.unit.property.hostId : booking.hostId;
+  if (owner !== req.hostId) { res.status(403).json({ error: 'forbidden' }); return null; }
   return booking;
 }
 
