@@ -100,6 +100,7 @@ export default function Board({ properties, bookingsByUnit, start, days, onNewBo
                   if (c?.floating) cls.push('yellow');
                   if (c?.early) cls.push('early');
                   if (c?.blue && c?.lateCheckout) cls.push('late');
+                  if (c?.blue && !c?.cleanerCheckout) cls.push('needs-cleaner');
                   return (
                     <td
                       key={key}
@@ -131,6 +132,7 @@ export default function Board({ properties, bookingsByUnit, start, days, onNewBo
 
       <div className="legend">
         <span><i className="sw blue" /> Checkout — clean needed</span>
+        <span><i className="sw needs-cleaner-sw" /> cleaner not allocated</span>
         <span>🧹 checkout cleaner <span className="muted">(hover)</span></span>
         <span>🧽 insta clean</span>
         <span><i className="sw early-sw" /> ⏰ early check-in</span>

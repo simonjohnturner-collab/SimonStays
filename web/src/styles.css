@@ -284,3 +284,7 @@ table.matrix { border-collapse: collapse; font-size: 12px; }
 /* Simplified unit panel links */
 .lk-label { display: block; font-size: 13px; font-weight: 600; margin: 4px 0 4px; color: var(--ink); }
 .lk-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+
+/* Blue checkout cell with no cleaner allocated → red border alert */
+td.cell.needs-cleaner { box-shadow: inset 0 0 0 2px var(--red); }
+.sw.needs-cleaner-sw { background: var(--blue); box-shadow: inset 0 0 0 2px var(--red); }
