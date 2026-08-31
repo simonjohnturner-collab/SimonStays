@@ -21,7 +21,7 @@ router.post('/', async (req, res) => {
 
 // GET /units/:id — one unit with channels + feed URL.
 router.get('/:id', requireOwnedUnit, async (req, res) => {
-  res.json({ unit: withFeedUrl(req.unit) });
+  res.json({ unit: withFeedUrl(req.unit, req) });
 });
 
 // PATCH /units/:id { name, capacity, pricingGroupId }
@@ -93,8 +93,10 @@ router.post('/:id/quote', requireOwnedUnit, async (req, res) => {
   res.json({ quote: q });
 });
 
-function withFeedUrl(unit) {
-  const base = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
+function withFeedUrl(unit, req) {
+  // Prefer an explicit PUBLIC_BASE_URL; otherwise derive from the request host
+  // (so the feed link is always the public https:// URL the app is served on).
+  const base = (process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
   return { ...unit, feedUrl: `${base}/feed/${unit.id}.ics?token=${unit.publishToken}` };
 }
 

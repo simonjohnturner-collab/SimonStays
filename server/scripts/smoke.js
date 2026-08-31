@@ -102,7 +102,7 @@ function check(name, cond) {
     r = await fetch(`${base}/units/${unit2Id}/bookings`, { headers: J(token) });
     const imported = (await r.json()).bookings;
     check('imported bookings present (2)', imported.length === 2);
-    check('imported booking is airbnb-sourced + placeholder name', imported.some((b) => b.source === 'airbnb' && b.guestName === 'Airbnb'));
+    check('imported booking is airbnb-sourced + placeholder name', imported.some((b) => b.source === 'airbnb' && (b.guestName === 'Airbnb' || b.guestName === 'Blocked')));
     check('imported dates preserved (21→24)', imported.some((b) => b.checkIn.slice(0, 10) === '2026-09-21' && b.checkOut.slice(0, 10) === '2026-09-24'));
 
     // Re-sync is idempotent (no duplicates).

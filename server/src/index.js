@@ -8,6 +8,7 @@ const prisma = require('./lib/prisma');
 const { syncAll } = require('./utils/sync');
 
 const app = express();
+app.set('trust proxy', 1); // behind Render's proxy (correct https in req.protocol)
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
