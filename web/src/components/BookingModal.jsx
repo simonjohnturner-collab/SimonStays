@@ -99,6 +99,14 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
     catch (e) { setMsg({ text: e.message, kind: 'err' }); setBusy(false); }
   }
 
+  // Un-allocate: send the allocated booking back to floating (frees the channel).
+  async function makeFloating() {
+    if (!window.confirm('Send this booking back to floating? It will stop blocking this unit / channel.')) return;
+    setBusy(true);
+    try { await api.updateBooking(booking.id, { unitId: null }); onSaved(); }
+    catch (e) { setMsg({ text: e.message, kind: 'err' }); setBusy(false); }
+  }
+
   const title = `${editing ? 'Edit' : 'New'} ${isFloating ? 'floating booking' : 'booking'}${unit ? ` · ${unit.name}` : ''}`;
 
   return (
@@ -207,6 +215,9 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
 
         <div className="modal-actions">
           {editing && <button className="danger ghost" disabled={busy} onClick={remove}>Delete</button>}
+          {editing && booking.unitId && booking.source === 'manual' && (
+            <button className="secondary" disabled={busy} onClick={makeFloating}>↩ Make floating</button>
+          )}
           {editing && onInvoice && <button className="secondary" disabled={busy} onClick={() => onInvoice(booking)}>🧾 Invoice</button>}
           <div className="spacer" />
           {!isFloating && <button className="secondary" disabled={busy} onClick={checkAvail}>Check availability</button>}
