@@ -110,11 +110,9 @@ model PricingGroup {
   name                 String
   units                Unit[]
   breakageDepositCents Int    @default(0)
-  // nightly rate by length of stay (cents); null tiers fall back to the nearest set one
-  nights1Cents     Int?
-  nights2Cents     Int?
-  nights3Cents     Int?
-  nights4PlusCents Int? // "4 nights and more"
+  // nightly rate: first night, then every night thereafter (cents)
+  firstNightCents      Int?
+  additionalNightCents Int?
   weeklyDiscountPercent  Float @default(0) // 7+ nights
   monthlyDiscountPercent Float @default(0) // 28+ nights
   // per-night upward flexes (%)

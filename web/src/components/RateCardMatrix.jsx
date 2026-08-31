@@ -2,15 +2,12 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { centsToRand, randToCents } from '../money.js';
 
-// One sheet: pricing categories down the left, pricing GROUPS across the top.
-// Units are assigned to groups on the property page; a group's prices apply to
-// every unit in it.
+// One sheet: pricing categories down the left, pricing GROUPS across the top,
+// plus a unit→group assignment section. Units in a group share its prices.
 const ROWS = [
   { section: 'Nightly rate' },
-  { key: 'n1', label: '1 night', type: 'money' },
-  { key: 'n2', label: '2 nights', type: 'money' },
-  { key: 'n3', label: '3 nights', type: 'money' },
-  { key: 'n4', label: '4 nights & more', type: 'money' },
+  { key: 'nFirst', label: 'First night', type: 'money' },
+  { key: 'nAdd', label: 'Every night thereafter', type: 'money' },
   { section: 'Discounts, deposit & fees' },
   { key: 'weekly', label: 'Weekly discount %', type: 'pct' },
   { key: 'monthly', label: 'Monthly discount %', type: 'pct' },
@@ -42,7 +39,7 @@ function toValues(g) {
   specials.forEach((s) => { if (per[s.flex]) per[s.flex].push(s); });
   const p = (flex, i, k) => (per[flex][i] ? per[flex][i][k] || '' : '');
   return {
-    n1: r(g.nights1Cents), n2: r(g.nights2Cents), n3: r(g.nights3Cents), n4: r(g.nights4PlusCents),
+    nFirst: r(g.firstNightCents), nAdd: r(g.additionalNightCents),
     weekly: g.weeklyDiscountPercent || '', monthly: g.monthlyDiscountPercent || '',
     breakage: r(g.breakageDepositCents), cleaning: r(g.cleaningCents), early: r(g.earlyCheckInCents), late: r(g.lateCheckOutCents), mattress: r(g.mattressCents),
     weekend: g.weekendFlexPercent || '', flex1: g.flex1Percent || '', flex2: g.flex2Percent || '', flex3: g.flex3Percent || '',
@@ -60,7 +57,7 @@ function toPayload(name, v) {
   addP('flex3', 'f3s1', 'f3e1'); addP('flex3', 'f3s2', 'f3e2');
   return {
     name,
-    nights1Cents: randToCents(v.n1), nights2Cents: randToCents(v.n2), nights3Cents: randToCents(v.n3), nights4PlusCents: randToCents(v.n4),
+    firstNightCents: randToCents(v.nFirst), additionalNightCents: randToCents(v.nAdd),
     weeklyDiscountPercent: num(v.weekly), monthlyDiscountPercent: num(v.monthly),
     breakageDepositCents: randToCents(v.breakage), cleaningCents: randToCents(v.cleaning),
     earlyCheckInCents: randToCents(v.early), lateCheckOutCents: randToCents(v.late), mattressCents: randToCents(v.mattress),
@@ -71,15 +68,18 @@ function toPayload(name, v) {
 
 export default function RateCardMatrix({ onClose }) {
   const [cols, setCols] = useState(null);
+  const [properties, setProperties] = useState([]);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const { groups } = await api.listGroups();
-    setCols(groups.map((g) => ({ id: g.id, name: g.name, units: (g.unitIds || []).length, v: toValues(g) })));
+    const [g, pr] = await Promise.all([api.listGroups(), api.listProperties()]);
+    setCols(g.groups.map((x) => ({ id: x.id, name: x.name, v: toValues(x) })));
+    setProperties(pr.properties);
   }
   useEffect(() => { load(); }, []);
 
+  const groupCount = (gid) => properties.reduce((n, p) => n + p.units.filter((u) => u.pricingGroupId === gid).length, 0);
   const setCell = (ci, key, val) => setCols((p) => p.map((c, i) => (i === ci ? { ...c, v: { ...c.v, [key]: val } } : c)));
   const setName = (ci, val) => setCols((p) => p.map((c, i) => (i === ci ? { ...c, name: val } : c)));
   const fillRow = (key) => setCols((p) => (p.length ? p.map((c) => ({ ...c, v: { ...c.v, [key]: p[0].v[key] } })) : p));
@@ -87,21 +87,24 @@ export default function RateCardMatrix({ onClose }) {
   async function newGroup() {
     const name = window.prompt('Group name (e.g. Firenza, or Studios)');
     if (!name) return;
-    await api.createGroup(name.trim());
-    await load();
+    const { group } = await api.createGroup(name.trim());
+    setCols([...cols, { id: group.id, name: group.name, v: toValues(group) }]); // append, keep edits
   }
   async function removeGroup(ci) {
     const c = cols[ci];
     if (!window.confirm(`Delete group “${c.name}”? Units in it become unassigned.`)) return;
     await api.deleteGroup(c.id);
-    await load();
+    setCols(cols.filter((_, i) => i !== ci));
+    const pr = await api.listProperties(); setProperties(pr.properties);
+  }
+  async function assign(unitId, groupId) {
+    await api.assignUnitGroup(unitId, groupId || null);
+    const pr = await api.listProperties(); setProperties(pr.properties); // refresh assignments only, keep price edits
   }
   async function saveAll() {
     setBusy(true); setMsg('');
-    try {
-      await Promise.all(cols.map((c) => api.updateGroup(c.id, toPayload(c.name, c.v))));
-      setMsg('Saved.');
-    } catch (e) { setMsg(e.message); } finally { setBusy(false); }
+    try { await Promise.all(cols.map((c) => api.updateGroup(c.id, toPayload(c.name, c.v)))); setMsg('Saved.'); }
+    catch (e) { setMsg(e.message); } finally { setBusy(false); }
   }
 
   return (
@@ -118,7 +121,7 @@ export default function RateCardMatrix({ onClose }) {
 
       <div className="matrix-wrap">
         {!cols ? <p className="muted small">Loading…</p> : cols.length === 0 ? (
-          <p className="muted small">No pricing groups yet. Create one with <b>＋ New group</b>, then assign units to it on the property page (☰ → Add or edit a property).</p>
+          <p className="muted small">No pricing groups yet. Create one with <b>＋ New group</b>, then assign units below.</p>
         ) : (
           <table className="matrix">
             <thead>
@@ -127,7 +130,7 @@ export default function RateCardMatrix({ onClose }) {
                 {cols.map((c, ci) => (
                   <th key={c.id} className="grouphead">
                     <input className="gname" value={c.name} onChange={(e) => setName(ci, e.target.value)} />
-                    <div className="gsub">{c.units} unit{c.units === 1 ? '' : 's'} <button className="del sm gdel" title="Delete group" onClick={() => removeGroup(ci)}>×</button></div>
+                    <div className="gsub">{groupCount(c.id)} unit{groupCount(c.id) === 1 ? '' : 's'} <button className="del sm gdel" title="Delete group" onClick={() => removeGroup(ci)}>×</button></div>
                   </th>
                 ))}
               </tr>
@@ -149,7 +152,30 @@ export default function RateCardMatrix({ onClose }) {
             </tbody>
           </table>
         )}
-        <p className="muted small" style={{ marginTop: 10 }}>Assign units to groups on the property page (☰ → Add or edit a property). The <b>→</b> copies the first group’s value across all groups.</p>
+
+        {cols && cols.length > 0 && (
+          <section className="assign-section">
+            <h4>Assign units to groups</h4>
+            <div className="assign-grid">
+              {properties.map((p) => p.units.length > 0 && (
+                <div key={p.id} className="assign-prop">
+                  <div className="assign-prop-name">{p.name}</div>
+                  {p.units.map((u) => (
+                    <div key={u.id} className="assign-row">
+                      <span className="assign-unit">{u.name}</span>
+                      <select value={u.pricingGroupId || ''} onChange={(e) => assign(u.id, e.target.value)}>
+                        <option value="">— No group —</option>
+                        {cols.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <p className="muted small" style={{ marginTop: 10 }}>Total for a stay = first night + (nights − 1) × every‑night rate, then weekly/monthly discount. The <b>→</b> copies the first group’s value across all groups.</p>
       </div>
     </div>
   );

@@ -13,13 +13,12 @@ function eachNight(checkIn, checkOut) {
 }
 function inRange(iso, start, end) { return start && end && iso >= start && iso <= end; }
 
-// Per-night base rate for the whole stay length: 1, 2, 3, or 4+ nights.
-function baseRateFor(rc, nights) {
-  const tiers = [rc.nights1Cents, rc.nights2Cents, rc.nights3Cents, rc.nights4PlusCents];
-  const idx = Math.min(nights, 4) - 1;
-  if (tiers[idx] != null) return tiers[idx];
-  for (let i = tiers.length - 1; i >= 0; i--) if (tiers[i] != null) return tiers[i];
-  return 0;
+// Base rate for a given night index (0 = first night, then every night thereafter).
+function baseRateFor(rc, nightIndex) {
+  const first = rc.firstNightCents;
+  const add = rc.additionalNightCents;
+  if (nightIndex === 0) return first != null ? first : (add != null ? add : 0);
+  return add != null ? add : (first != null ? first : 0);
 }
 
 // Highest applicable upward flex % for a night (weekend + any seasonal flex whose
@@ -48,9 +47,9 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
   const n = nights.length;
   if (n <= 0) return null;
 
-  const base = baseRateFor(rc, n);
   let accommodation = 0;
-  const nightLines = nights.map((d) => {
+  const nightLines = nights.map((d, i) => {
+    const base = baseRateFor(rc, i); // first night vs every night thereafter
     const flex = nightFlex(rc, d);
     const cents = Math.round(base * (1 + flex / 100));
     accommodation += cents;
@@ -72,7 +71,7 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
   const avgNightlyCents = Math.round(accommodation / n);
 
   return {
-    nights: n, baseNightlyCents: base, avgNightlyCents,
+    nights: n, avgNightlyCents,
     accommodationCents: accommodation, discountPercent, discountCents,
     cleaningCents, earlyCents, lateCents, mattressCents, breakageCents,
     totalCents, nightLines,

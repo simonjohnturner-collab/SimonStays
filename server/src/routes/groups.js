@@ -5,7 +5,7 @@ const { authHost } = require('../middleware/auth');
 const router = express.Router();
 router.use(authHost);
 
-const RATE_INT = ['breakageDepositCents', 'nights1Cents', 'nights2Cents', 'nights3Cents', 'nights4PlusCents', 'earlyCheckInCents', 'lateCheckOutCents', 'cleaningCents', 'mattressCents'];
+const RATE_INT = ['breakageDepositCents', 'firstNightCents', 'additionalNightCents', 'earlyCheckInCents', 'lateCheckOutCents', 'cleaningCents', 'mattressCents'];
 const RATE_FLOAT = ['weeklyDiscountPercent', 'monthlyDiscountPercent', 'weekendFlexPercent', 'flex1Percent', 'flex2Percent', 'flex3Percent'];
 
 // GET /groups — the host's pricing groups (with assigned unit ids).
