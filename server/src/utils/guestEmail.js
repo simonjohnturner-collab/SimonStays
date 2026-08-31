@@ -19,11 +19,11 @@ function parseAirbnbEmail({ subject = '', body = '' } = {}) {
 function extractGuestName(text) {
   const s = String(text || '').replace(/\s+/g, ' ').trim();
   const patterns = [
-    /(?:Reservation|Booking)\s+confirmed[^A-Za-z]+([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]+){0,2})\s+(?:arrives|will\s+arrive|checks?\s+in|\()/,
-    /\b([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]+){0,2})\s+arrives\b/,
-    /Instant\s+book(?:ing)?\s+confirmed[^A-Za-z]+([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]+){0,2})/,
-    /Your\s+reservation\s+with\s+([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]+){0,2})/,
-    /\bfrom\s+([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]+){0,1})\s+(?:has\s+)?(?:arriv|check)/,
+    /(?:Reservation|Booking)\s+confirmed[^A-Za-z]+([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]*){0,2})\s+(?:arrives|will\s+arrive|checks?\s+in|\()/,
+    /\b([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]*){0,2})\s+arrives\b/,
+    /Instant\s+book(?:ing)?\s+confirmed[^A-Za-z]+([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]*){0,2})/,
+    /Your\s+reservation\s+with\s+([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]*){0,2})/,
+    /\bfrom\s+([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]*){0,1})\s+(?:has\s+)?(?:arriv|check)/,
   ];
   for (const re of patterns) {
     const m = s.match(re);
