@@ -1,7 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { range, ymd, weekday, dayMonth, isWeekend, today } from '../dates.js';
-
-const TODAY = ymd(today());
 
 // Build a per-date cell map for one unit's bookings.
 // Occupancy (guest name) covers the nights stayed: check-in .. check-out-1.
@@ -51,7 +49,7 @@ function coverage(bookings) {
 // Group the date cells into render items: a multi-night "stay" (consecutive
 // occupied nights of the same booking, merged into one block) or a single cell
 // (blue checkout day, or empty).
-function buildSegments(cov, dates) {
+function buildSegments(cov, dates, TODAY) {
   const segs = [];
   let i = 0;
   while (i < dates.length) {
@@ -82,12 +80,22 @@ function buildSegments(cov, dates) {
 
 export default function Board({ properties, bookingsByUnit, floatingBookings = [], start, days, onNewBooking, onEditBooking, onOpenUnit, onAddUnit }) {
   const dates = useMemo(() => range(start, days), [start, days]);
+  const TODAY = ymd(today()); // recomputed each render, so the highlight follows the date
+  // Re-render right after the next local midnight so an open tab rolls the
+  // "today" highlight over without needing a manual refresh.
+  const [, setDayTick] = useState(0);
+  useEffect(() => {
+    const now = new Date();
+    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5);
+    const id = setTimeout(() => setDayTick((t) => t + 1), nextMidnight - now);
+    return () => clearTimeout(id);
+  });
 
   // Render a row's cells: multi-night stays become one bordered block with a
   // sticky name; blue/empty days stay individual. u = the row's unit (null on a
   // floating row, where empty cells aren't clickable-to-add).
   function renderCells(cov, u) {
-    return buildSegments(cov, dates).map((s, k) => {
+    return buildSegments(cov, dates, TODAY).map((s, k) => {
       if (s.type === 'stay') {
         const c = s.c;
         const cls = ['cell', 'stay'];
