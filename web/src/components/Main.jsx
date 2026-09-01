@@ -116,7 +116,15 @@ export default function Main() {
         if (r && r.summary) { a.added += r.summary.added; a.updated += r.summary.updated; a.removed += r.summary.removed; }
         return a;
       }, { added: 0, updated: 0, removed: 0 });
-      setMsg(`Synced: +${totals.added} new, ${totals.updated} updated, −${totals.removed} removed`);
+      // On the live site, pressing Sync also checks the Airbnb mailbox for guest
+      // names. Gated to the live build (VITE_API_BASE set) so a local dev server
+      // never consumes the shared mailbox before live sees the emails.
+      let nameMsg = '';
+      if (import.meta.env.VITE_API_BASE) {
+        try { const p = await api.pollEmail(); if (p && p.updated) nameMsg = `, +${p.updated} guest name${p.updated > 1 ? 's' : ''}`; }
+        catch { /* best-effort */ }
+      }
+      setMsg(`Synced: +${totals.added} new, ${totals.updated} updated, −${totals.removed} removed${nameMsg}`);
       await loadBookings(properties);
     } finally { setSyncing(false); }
   }

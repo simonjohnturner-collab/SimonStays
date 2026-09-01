@@ -56,9 +56,14 @@ if (require.main === module) {
     console.log(`Channel sync scheduled: ${expr}`);
   }
 
+  // Scheduled mail polling is OPT-IN (ENABLE_MAIL_CRON=true) so it never runs on
+  // local dev by default — otherwise a dev box would consume the shared Zoho
+  // mailbox before the live site sees the emails. On live, guest-name polling is
+  // driven by the Sync button instead (POST /email/poll), which is reliable on a
+  // free instance that sleeps. Set ENABLE_MAIL_CRON=true only for an always-on host.
   const mailPoller = require('./utils/mailPoller');
   const pollExpr = process.env.ZOHO_POLL_CRON || '*/5 * * * *';
-  if (mailPoller.enabled() && cron.validate(pollExpr)) {
+  if (process.env.ENABLE_MAIL_CRON === 'true' && mailPoller.enabled() && cron.validate(pollExpr)) {
     cron.schedule(pollExpr, async () => {
       try { const s = await mailPoller.pollOnce(); if (s.processed) console.log('[mail]', JSON.stringify(s)); }
       catch (e) { console.error('[mail] failed', e.message); }

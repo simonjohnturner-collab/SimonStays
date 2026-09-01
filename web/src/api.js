@@ -58,6 +58,7 @@ export const api = {
 
   // guest-name email ingest
   ingestEmail: (subject, body) => req('POST', '/email/ingest', { subject, body }),
+  pollEmail: () => req('POST', '/email/poll'), // pull the Zoho Airbnb folder now
 
   // biller profile + invoices
   getBiller: () => req('GET', '/biller'),
