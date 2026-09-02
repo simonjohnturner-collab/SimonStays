@@ -9,6 +9,7 @@ const CONTACT = {
 
 export default function App() {
   const [propertyId, setPropertyId] = useState(null);
+  const [search, setSearch] = useState({ checkIn: '', checkOut: '', guests: '' });
   return (
     <div className="ss">
       <header className="ss-header">
@@ -16,7 +17,9 @@ export default function App() {
         <div className="ss-contact-mini">Questions? <a href={`tel:${CONTACT.phone}`}>{CONTACT.phone}</a></div>
       </header>
 
-      {propertyId ? <Detail id={propertyId} onBack={() => setPropertyId(null)} /> : <Browse onOpen={setPropertyId} />}
+      {propertyId
+        ? <Detail id={propertyId} search={search} onBack={() => setPropertyId(null)} />
+        : <Browse search={search} setSearch={setSearch} onOpen={setPropertyId} />}
 
       <footer className="ss-footer">
         <div className="ss-foot-lead">Not seeing the dates or price you want? Call or email us directly — we're happy to help.</div>
@@ -26,35 +29,74 @@ export default function App() {
   );
 }
 
-function Browse({ onOpen }) {
+function Browse({ search, setSearch, onOpen }) {
+  const [draft, setDraft] = useState(search);
   const [props, setProps] = useState(null);
   const [err, setErr] = useState(null);
-  useEffect(() => { api.properties().then((r) => setProps(r.properties)).catch((e) => setErr(e.message)); }, []);
-  if (err) return <p className="ss-msg err">{err}</p>;
-  if (!props) return <p className="ss-msg">Loading places to stay…</p>;
-  if (!props.length) return <p className="ss-msg">No places listed yet — check back soon.</p>;
+  const [loading, setLoading] = useState(true);
+  const filtered = !!(search.checkIn && search.checkOut);
+
+  useEffect(() => {
+    setLoading(true); setErr(null);
+    api.properties(search)
+      .then((r) => setProps(r.properties))
+      .catch((e) => setErr(e.message))
+      .finally(() => setLoading(false));
+  }, [search]);
+
+  function submit(e) {
+    e.preventDefault();
+    if (draft.checkIn && draft.checkOut && draft.checkOut <= draft.checkIn) { setErr('Check-out must be after check-in.'); return; }
+    if ((draft.checkIn && !draft.checkOut) || (draft.checkOut && !draft.checkIn)) { setErr('Please pick both dates, or leave both empty.'); return; }
+    setSearch({ ...draft });
+  }
+  function clear() { const empty = { checkIn: '', checkOut: '', guests: '' }; setDraft(empty); setSearch(empty); }
+
   return (
-    <main className="ss-grid">
-      {props.map((p) => (
-        <button key={p.id} className="ss-card" onClick={() => onOpen(p.id)}>
-          <div className="ss-card-img">
-            {p.coverPhotoId ? <img src={photoUrl(p.coverPhotoId)} alt={p.name} loading="lazy" /> : <div className="ss-noimg">No photo yet</div>}
-          </div>
-          <div className="ss-card-body">
-            <div className="ss-card-name">{p.name}</div>
-            {p.address && <div className="ss-card-addr">{p.address}</div>}
-            <div className="ss-card-meta">
-              {p.maxCapacity ? <span>👥 up to {p.maxCapacity}</span> : null}
-              {p.fromNightlyCents != null ? <span className="ss-from">from {money(p.fromNightlyCents)}/night</span> : null}
-            </div>
-          </div>
-        </button>
-      ))}
-    </main>
+    <>
+      <form className="ss-search" onSubmit={submit}>
+        <label>Check-in<input type="date" value={draft.checkIn} onChange={(e) => setDraft((d) => ({ ...d, checkIn: e.target.value }))} /></label>
+        <label>Check-out<input type="date" value={draft.checkOut} min={draft.checkIn || undefined} onChange={(e) => setDraft((d) => ({ ...d, checkOut: e.target.value }))} /></label>
+        <label>Guests<input type="number" min="1" placeholder="Any" value={draft.guests} onChange={(e) => setDraft((d) => ({ ...d, guests: e.target.value }))} /></label>
+        <button className="ss-btn" type="submit">Search</button>
+        {filtered && <button type="button" className="ss-btn ghost" onClick={clear}>Clear</button>}
+      </form>
+
+      {filtered && (
+        <div className="ss-msg small ss-searchnote">
+          Places free for <b>{search.checkIn} → {search.checkOut}</b>{search.guests ? ` · ${search.guests}+ guests` : ''}.
+        </div>
+      )}
+
+      {err ? <p className="ss-msg err">{err}</p>
+        : loading || !props ? <p className="ss-msg">Loading places to stay…</p>
+        : !props.length ? <p className="ss-msg">{filtered ? 'No places are free for those dates — try different dates, or call us.' : 'No places listed yet — check back soon.'}</p>
+        : (
+        <main className="ss-grid">
+          {props.map((p) => (
+            <button key={p.id} className="ss-card" onClick={() => onOpen(p.id)}>
+              <div className="ss-card-img">
+                {p.coverPhotoId ? <img src={photoUrl(p.coverPhotoId)} alt={p.name} loading="lazy" /> : <div className="ss-noimg">No photo yet</div>}
+              </div>
+              <div className="ss-card-body">
+                <div className="ss-card-name">{p.name}</div>
+                {p.address && <div className="ss-card-addr">{p.address}</div>}
+                <div className="ss-card-meta">
+                  {p.maxCapacity ? <span>👥 up to {p.maxCapacity}</span> : null}
+                  {filtered && p.stayFromCents != null
+                    ? <span className="ss-from">{money(p.stayFromCents)} total</span>
+                    : p.fromNightlyCents != null ? <span className="ss-from">from {money(p.fromNightlyCents)}/night</span> : null}
+                </div>
+              </div>
+            </button>
+          ))}
+        </main>
+      )}
+    </>
   );
 }
 
-function Detail({ id, onBack }) {
+function Detail({ id, search, onBack }) {
   const [p, setP] = useState(null);
   const [err, setErr] = useState(null);
   useEffect(() => { api.property(id).then((r) => setP(r.property)).catch((e) => setErr(e.message)); }, [id]);
@@ -68,7 +110,7 @@ function Detail({ id, onBack }) {
       <Gallery photos={p.photos} />
       {p.description && <p className="ss-desc">{p.description}</p>}
       <h2>Choose your room &amp; dates</h2>
-      {p.units.map((u) => <UnitBooker key={u.id} unit={u} />)}
+      {p.units.map((u) => <UnitBooker key={u.id} unit={u} initial={search} />)}
     </main>
   );
 }
@@ -90,10 +132,10 @@ function Gallery({ photos }) {
   );
 }
 
-function UnitBooker({ unit }) {
-  const [checkIn, setCheckIn] = useState('');
-  const [checkOut, setCheckOut] = useState('');
-  const [guests, setGuests] = useState(1);
+function UnitBooker({ unit, initial }) {
+  const [checkIn, setCheckIn] = useState(initial?.checkIn || '');
+  const [checkOut, setCheckOut] = useState(initial?.checkOut || '');
+  const [guests, setGuests] = useState(initial?.guests ? Number(initial.guests) : 1);
   const [q, setQ] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');

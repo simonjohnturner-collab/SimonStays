@@ -31,31 +31,56 @@ function fromNightlyCents(rc) {
 
 const unitInclude = { pricingGroup: true, photos: { orderBy: { sort: 'asc' } } };
 
-// GET /public/properties — browse list
+// GET /public/properties?checkIn=&checkOut=&guests= — browse list.
+// With dates, only properties with a free unit for that stay are returned, and
+// stayFromCents is the cheapest available total for those dates.
 router.get('/properties', async (req, res, next) => {
   try {
     const hostId = await publicHostId();
-    if (!hostId) return res.json({ properties: [] });
+    if (!hostId) return res.json({ properties: [], filtered: false });
+    const { checkIn, checkOut, guests } = req.query;
+    const filtering = !!(checkIn && checkOut);
+    const minGuests = guests ? Number(guests) : 0;
+
     const props = await prisma.property.findMany({
       where: { hostId },
       orderBy: { sortOrder: 'asc' },
       include: { photos: { orderBy: { sort: 'asc' } }, units: { include: unitInclude } },
     });
-    res.json({
-      properties: props
-        .filter((p) => p.units.length > 0)
-        .map((p) => {
-          const cover = p.photos[0] || p.units.flatMap((u) => u.photos)[0] || null;
-          const fromCents = p.units.map((u) => fromNightlyCents(u.pricingGroup)).filter((v) => v != null);
-          return {
-            id: p.id, name: p.name, address: p.address || null, description: p.description || null,
-            coverPhotoId: cover ? cover.id : null,
-            maxCapacity: p.units.reduce((m, u) => Math.max(m, u.capacity || 0), 0),
-            fromNightlyCents: fromCents.length ? Math.min(...fromCents) : null,
-            unitCount: p.units.length,
-          };
-        }),
-    });
+
+    const out = [];
+    for (const p of props) {
+      let units = p.units;
+      if (minGuests) units = units.filter((u) => !u.capacity || u.capacity >= minGuests);
+      if (units.length === 0) continue;
+
+      let stayFromCents = null;
+      if (filtering) {
+        let anyFree = false;
+        for (const u of units) {
+          const av = await checkAvailability(u.id, iso(checkIn), iso(checkOut), null);
+          if (!av.available) continue;
+          anyFree = true;
+          if (u.pricingGroup) {
+            const q = quote(u.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1 });
+            if (q && (stayFromCents == null || q.totalCents < stayFromCents)) stayFromCents = q.totalCents;
+          }
+        }
+        if (!anyFree) continue; // no free room for these dates → hide it
+      }
+
+      const cover = p.photos[0] || p.units.flatMap((u) => u.photos)[0] || null;
+      const fromCents = units.map((u) => fromNightlyCents(u.pricingGroup)).filter((v) => v != null);
+      out.push({
+        id: p.id, name: p.name, address: p.address || null, description: p.description || null,
+        coverPhotoId: cover ? cover.id : null,
+        maxCapacity: p.units.reduce((m, u) => Math.max(m, u.capacity || 0), 0),
+        fromNightlyCents: fromCents.length ? Math.min(...fromCents) : null,
+        unitCount: units.length,
+        stayFromCents, // cheapest total for the chosen dates (only when searching)
+      });
+    }
+    res.json({ properties: out, filtered: filtering });
   } catch (e) { next(e); }
 });
 

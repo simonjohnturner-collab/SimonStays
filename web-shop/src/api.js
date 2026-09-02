@@ -13,8 +13,13 @@ async function req(method, path, body) {
   return data;
 }
 
+function qs(params) {
+  const p = Object.entries(params || {}).filter(([, v]) => v !== '' && v != null);
+  return p.length ? `?${new URLSearchParams(p).toString()}` : '';
+}
+
 export const api = {
-  properties: () => req('GET', '/public/properties'),
+  properties: (params) => req('GET', `/public/properties${qs(params)}`),
   property: (id) => req('GET', `/public/properties/${id}`),
   calendar: (unitId) => req('GET', `/public/units/${unitId}/calendar`),
   quote: (payload) => req('POST', '/public/quote', payload),
