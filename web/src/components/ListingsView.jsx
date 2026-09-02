@@ -49,12 +49,14 @@ function PhotoGrid({ photos, onAdd, onCover, onDelete, busy }) {
 
 export default function ListingsView({ onClose }) {
   const [properties, setProperties] = useState(null);
+  const [selectedId, setSelectedId] = useState(null); // property shown in the detail pane
   const [msg, setMsg] = useState('');
   const [busyPhoto, setBusyPhoto] = useState(null); // id of the property/unit currently uploading
 
   async function load() {
     const r = await api.getListings();
     setProperties(r.properties);
+    setSelectedId((cur) => (cur && r.properties.some((p) => p.id === cur) ? cur : r.properties[0]?.id || null));
   }
   useEffect(() => { load(); }, []);
 
@@ -121,47 +123,65 @@ export default function ListingsView({ onClose }) {
         <button className="ghost" onClick={onClose}>🏠 Home</button>
       </header>
 
-      <div className="listings-wrap">
-        {!properties ? <p className="muted small">Loading…</p> : properties.length === 0 ? (
-          <p className="muted small">No properties yet. Add one from ☰ Manage properties, then come back here to add descriptions and photos.</p>
-        ) : properties.map((p) => (
-          <section key={p.id} className="listing-card">
-            <div className="listing-head">
-              <input className="listing-name" value={p.name} onChange={(e) => editProp(p.id, { name: e.target.value })} />
-              <input className="listing-addr" placeholder="Address (optional)" value={p.address || ''} onChange={(e) => editProp(p.id, { address: e.target.value })} />
-              <button className="ghost save" onClick={() => saveProp(p)}>💾 Save</button>
-            </div>
-            <textarea className="listing-desc" placeholder="Property description — paste from your Airbnb listing…"
-              value={p.description || ''} onChange={(e) => editProp(p.id, { description: e.target.value })} />
-            <PhotoGrid photos={p.photos} busy={busyPhoto === p.id}
-              onAdd={(files) => addPhotos('property', p.id, null, files)}
-              onCover={(id) => coverPhoto('property', p.id, null, id)}
-              onDelete={(id) => deletePhoto('property', p.id, null, id)} />
-
-            {p.units.length > 0 && <div className="units-label">Units</div>}
-            {p.units.map((u) => (
-              <div key={u.id} className="listing-unit">
-                <div className="listing-head">
-                  <input className="listing-name sm" value={u.name} onChange={(e) => editUnit(p.id, u.id, { name: e.target.value })} />
-                  <label className="cap">Sleeps
-                    <input type="number" min="0" value={u.capacity ?? ''} onChange={(e) => editUnit(p.id, u.id, { capacity: e.target.value === '' ? null : Number(e.target.value) })} />
-                  </label>
-                  <button className="ghost save" onClick={() => saveUnit(u)}>💾 Save</button>
-                </div>
-                <textarea className="listing-desc" placeholder="Unit description (optional — overrides/adds to the property description)…"
-                  value={u.description || ''} onChange={(e) => editUnit(p.id, u.id, { description: e.target.value })} />
-                <PhotoGrid photos={u.photos} busy={busyPhoto === u.id}
-                  onAdd={(files) => addPhotos('unit', p.id, u.id, files)}
-                  onCover={(id) => coverPhoto('unit', p.id, u.id, id)}
-                  onDelete={(id) => deletePhoto('unit', p.id, u.id, id)} />
-              </div>
+      {!properties ? <p className="muted small" style={{ padding: 16 }}>Loading…</p> : properties.length === 0 ? (
+        <p className="muted small" style={{ padding: 16 }}>No properties yet. Add one from ☰ Manage properties, then come back here to add descriptions and photos.</p>
+      ) : (
+        <div className="listings-layout">
+          <aside className="listings-index">
+            <div className="listings-index-head">Properties</div>
+            {properties.map((p) => (
+              <button key={p.id} className={`listings-index-item ${p.id === selectedId ? 'active' : ''}`} onClick={() => setSelectedId(p.id)}>
+                <span className="li-name">{p.name || 'Untitled property'}</span>
+                <span className="li-sub">{p.units.length} unit{p.units.length === 1 ? '' : 's'}{p.photos.length ? ` · ${p.photos.length} photo${p.photos.length === 1 ? '' : 's'}` : ''}</span>
+              </button>
             ))}
-          </section>
-        ))}
-        <p className="muted small" style={{ marginTop: 10 }}>
-          Photos are resized in your browser before upload and stored with your data. The <b>★</b> sets the cover photo. These descriptions and photos will feed the public booking site.
-        </p>
-      </div>
+          </aside>
+
+          <div className="listings-detail">
+            {(() => {
+              const p = properties.find((x) => x.id === selectedId) || properties[0];
+              if (!p) return null;
+              return (
+                <section key={p.id} className="listing-card">
+                  <div className="listing-head">
+                    <input className="listing-name" placeholder="Property name" value={p.name} onChange={(e) => editProp(p.id, { name: e.target.value })} />
+                    <input className="listing-addr" placeholder="Property address" value={p.address || ''} onChange={(e) => editProp(p.id, { address: e.target.value })} />
+                    <button className="ghost save" onClick={() => saveProp(p)}>💾 Save</button>
+                  </div>
+                  <textarea className="listing-desc" placeholder="Property description — paste from your Airbnb listing…"
+                    value={p.description || ''} onChange={(e) => editProp(p.id, { description: e.target.value })} />
+                  <PhotoGrid photos={p.photos} busy={busyPhoto === p.id}
+                    onAdd={(files) => addPhotos('property', p.id, null, files)}
+                    onCover={(id) => coverPhoto('property', p.id, null, id)}
+                    onDelete={(id) => deletePhoto('property', p.id, null, id)} />
+
+                  {p.units.length > 0 && <div className="units-label">Units</div>}
+                  {p.units.map((u) => (
+                    <div key={u.id} className="listing-unit">
+                      <div className="listing-head">
+                        <input className="listing-name sm" value={u.name} onChange={(e) => editUnit(p.id, u.id, { name: e.target.value })} />
+                        <label className="cap">Sleeps
+                          <input type="number" min="0" value={u.capacity ?? ''} onChange={(e) => editUnit(p.id, u.id, { capacity: e.target.value === '' ? null : Number(e.target.value) })} />
+                        </label>
+                        <button className="ghost save" onClick={() => saveUnit(u)}>💾 Save</button>
+                      </div>
+                      <textarea className="listing-desc" placeholder="Unit description (optional — overrides/adds to the property description)…"
+                        value={u.description || ''} onChange={(e) => editUnit(p.id, u.id, { description: e.target.value })} />
+                      <PhotoGrid photos={u.photos} busy={busyPhoto === u.id}
+                        onAdd={(files) => addPhotos('unit', p.id, u.id, files)}
+                        onCover={(id) => coverPhoto('unit', p.id, u.id, id)}
+                        onDelete={(id) => deletePhoto('unit', p.id, u.id, id)} />
+                    </div>
+                  ))}
+                  <p className="muted small" style={{ marginTop: 10 }}>
+                    Photos are resized in your browser before upload and stored with your data. The <b>★</b> sets the cover photo. These descriptions and photos will feed the public booking site.
+                  </p>
+                </section>
+              );
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -328,6 +328,22 @@ td.cell.stay.has-today { box-shadow: inset 0 0 0 2px #9fc5e8, inset 0 4px 0 #e0a
 
 /* ---- Listings tab: descriptions & photos ---- */
 .listings-wrap { max-width: 1000px; margin: 0 auto; padding: 18px 16px 60px; }
+
+/* Master-detail: property index on the left, selected property's detail on the right. */
+.listings-layout { display: flex; gap: 18px; max-width: 1200px; margin: 0 auto; padding: 18px 16px 60px; align-items: flex-start; }
+.listings-index { flex: 0 0 240px; position: sticky; top: 12px; display: flex; flex-direction: column; gap: 4px; }
+.listings-index-head { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); font-weight: 700; padding: 4px 8px 8px; }
+.listings-index-item { text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.listings-index-item:hover { border-color: var(--brand, #1a7a3a); }
+.listings-index-item.active { border-color: var(--brand, #1a7a3a); background: #eef6f0; }
+.listings-index-item .li-name { font-weight: 600; font-size: 14px; }
+.listings-index-item .li-sub { font-size: 11.5px; color: var(--muted); }
+.listings-detail { flex: 1 1 auto; min-width: 0; }
+@media (max-width: 720px) {
+  .listings-layout { flex-direction: column; }
+  .listings-index { flex-basis: auto; position: static; flex-direction: row; flex-wrap: wrap; }
+  .listings-index-head { width: 100%; }
+}
 .listing-card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
 .listing-head { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
 .listing-name { font-size: 17px; font-weight: 700; padding: 6px 8px; border: 1px solid transparent; border-radius: 6px; flex: 0 0 auto; min-width: 160px; }
