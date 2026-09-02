@@ -7,6 +7,8 @@ const prisma = require('../lib/prisma');
 const { checkAvailability } = require('../utils/sync');
 const { dateOnly } = require('../utils/ical');
 const { quote } = require('../utils/pricing');
+const payments = require('../utils/payments');
+const locks = require('../utils/locks');
 
 const router = express.Router();
 
@@ -113,8 +115,8 @@ router.post('/quote', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /public/book — validate the calendar is free + price, then create a
-// confirmed website booking (blocks the calendar in the admin app too).
+// POST /public/book — create a PENDING hold (does NOT block the calendar). The
+// calendar is only blocked once payment succeeds (POST /public/book/:id/pay).
 router.post('/book', async (req, res, next) => {
   try {
     const hostId = await publicHostId();
@@ -127,7 +129,6 @@ router.post('/book', async (req, res, next) => {
     if (!unit) return res.status(404).json({ error: 'not_found' });
     if (!unit.pricingGroup) return res.status(400).json({ error: 'no_pricing', message: 'This unit has no online pricing — please call to book.' });
 
-    // The calendar must be free — re-checked right before we create the booking.
     const avail = await checkAvailability(unit.id, iso(b.checkIn), iso(b.checkOut), null);
     if (avail.error) return res.status(400).json({ error: avail.error });
     if (!avail.available) {
@@ -138,19 +139,66 @@ router.post('/book', async (req, res, next) => {
     if (!q) return res.status(400).json({ error: 'invalid_dates' });
 
     const contact = [b.guestEmail, b.guestPhone].filter(Boolean).join(' · ');
-    const comments = `Website booking · Contact: ${contact} · Guests: ${b.guests || '—'} · Quoted total R${(q.totalCents / 100).toFixed(2)}${b.message ? ` · Note: ${b.message}` : ''}`;
+    const comments = `Website booking (awaiting payment) · Contact: ${contact} · Guests: ${b.guests || '—'} · Total R${(q.totalCents / 100).toFixed(2)}${b.message ? ` · Note: ${b.message}` : ''}`;
 
     const booking = await prisma.booking.create({
       data: {
-        unitId: unit.id, hostId: unit.property.hostId, source: 'website', status: 'confirmed',
+        unitId: unit.id, hostId: unit.property.hostId, source: 'website', status: 'pending',
         guestName: b.guestName,
         checkIn: dateOnly(iso(b.checkIn)), checkOut: dateOnly(iso(b.checkOut)),
         comments, paymentStatus: 'unpaid',
       },
     });
+    const checkout = await payments.createCheckout(booking, q.totalCents);
     res.status(201).json({
-      booking: { id: booking.id, checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut) },
-      quote: q, property: unit.property.name, unit: unit.name,
+      bookingId: booking.id, amountCents: q.totalCents, quote: q,
+      property: unit.property.name, unit: unit.name,
+      checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut),
+      payment: checkout, // { mode:'simulate' } for now; { mode:'redirect', url } when a vendor is live
+    });
+  } catch (e) { next(e); }
+});
+
+// POST /public/book/:id/pay — confirm a pending booking once paid. In simulate
+// mode this succeeds immediately; with a live vendor a validated webhook drives it.
+router.post('/book/:id/pay', async (req, res, next) => {
+  try {
+    const hostId = await publicHostId();
+    const booking = await prisma.booking.findFirst({
+      where: { id: req.params.id, unit: { property: { hostId } } },
+      include: { unit: { include: { property: true } } },
+    });
+    if (!booking) return res.status(404).json({ error: 'not_found' });
+    if (booking.status === 'confirmed') {
+      return res.json({ confirmed: true, alreadyConfirmed: true, property: booking.unit.property.name, unit: booking.unit.name, booking: { id: booking.id, checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut) } });
+    }
+    if (booking.status !== 'pending') return res.status(400).json({ error: 'not_pending' });
+
+    const paid = await payments.verifyPayment(booking, req.body);
+    if (!paid.ok) return res.status(402).json({ error: 'payment_incomplete', message: paid.message || 'Payment not completed.' });
+
+    // Re-check the calendar right before blocking it — the hold didn't reserve it.
+    const avail = await checkAvailability(booking.unitId, iso(booking.checkIn), iso(booking.checkOut), booking.id);
+    if (avail.error) return res.status(400).json({ error: avail.error });
+    if (!avail.available) {
+      return res.status(409).json({ error: 'dates_unavailable', message: 'Those dates were taken while paying — please contact us to sort out a refund.' });
+    }
+
+    const confirmed = await prisma.booking.update({
+      where: { id: booking.id },
+      data: { status: 'confirmed', paid: true, paymentStatus: 'paid' },
+    });
+
+    // Smart-lock guest code (RemoteLock / Yale via a unified provider) — stubbed
+    // until credentials are set; returns null and never blocks confirmation.
+    let accessCode = null;
+    try { accessCode = await locks.issueGuestCode(confirmed, booking.unit); } catch (_) {}
+
+    res.json({
+      confirmed: true,
+      booking: { id: confirmed.id, checkIn: iso(confirmed.checkIn), checkOut: iso(confirmed.checkOut) },
+      property: booking.unit.property.name, unit: booking.unit.name,
+      accessCode, // null until the smart-lock integration is live
     });
   } catch (e) { next(e); }
 });

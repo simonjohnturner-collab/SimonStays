@@ -276,4 +276,5 @@ enum BookingStatus {
   confirmed
   floating
   cancelled
+  pending // website hold awaiting payment; does NOT block the calendar
 }
