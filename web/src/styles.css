@@ -175,6 +175,10 @@ td.cell.blue.late { background: #cdb4f0; }        /* late checkout (purple) */
 .inv-item.active { border-color: var(--green); background: #eafaf0; }
 .inv-item-top { display: flex; justify-content: space-between; font-size: 13px; }
 .inv-item-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Airbnb confirmation code shown read-only in the edit-booking modal */
+.reslabel { font-size: 12px; color: var(--muted); margin: 2px 0 10px; display: flex; align-items: center; gap: 4px; }
+.reslabel code { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 13px; font-weight: 600; color: var(--ink); background: #f0f3f6; border: 1px solid var(--line); padding: 2px 8px; border-radius: 6px; letter-spacing: .5px; user-select: all; cursor: text; }
 .inv-main { flex: 1; overflow: auto; padding: 18px; }
 
 .invoice-wrap { max-width: 820px; margin: 0 auto; }

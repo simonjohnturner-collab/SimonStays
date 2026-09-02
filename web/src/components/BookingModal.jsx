@@ -123,6 +123,9 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
         {editing && booking.source !== 'manual' && (
           <div className="chip-note">From {booking.source} — dates come from the channel; edits here won't push back.</div>
         )}
+        {editing && booking.resCode && (
+          <div className="reslabel">Airbnb confirmation code&nbsp;<code title="Click to select, then copy">{booking.resCode}</code></div>
+        )}
 
         <div className="row2">
           <label>Check-in<input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} /></label>
