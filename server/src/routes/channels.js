@@ -20,8 +20,21 @@ router.post('/units/:unitId/channels', requireOwnedUnit, async (req, res) => {
   const { type, importUrl, label } = req.body || {};
   if (!TYPES.includes(type)) return res.status(400).json({ error: 'invalid_type', allowed: TYPES });
   if (!importUrl) return res.status(400).json({ error: 'importUrl_required' });
-  const dup = await prisma.channelConnection.findFirst({ where: { unitId: req.unit.id, importUrl } });
-  if (dup) return res.status(409).json({ error: 'channel_already_connected' });
+  // Reject a link already used by ANY of the host's units (else one unit's
+  // calendar gets mirrored onto another — crossed wires).
+  const clash = await prisma.channelConnection.findFirst({
+    where: { importUrl, unit: { property: { hostId: req.unit.property.hostId } } },
+    include: { unit: { include: { property: true } } },
+  });
+  if (clash) {
+    const same = clash.unitId === req.unit.id;
+    return res.status(409).json({
+      error: same ? 'channel_already_connected' : 'duplicate_import_url',
+      message: same
+        ? 'This calendar link is already on this unit.'
+        : `That calendar link is already used by ${clash.unit.property.name} · ${clash.unit.name}. Each unit needs its own Airbnb calendar link.`,
+    });
+  }
   const channel = await prisma.channelConnection.create({
     data: { unitId: req.unit.id, type, importUrl, label: label || null },
   });

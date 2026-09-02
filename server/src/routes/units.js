@@ -78,6 +78,22 @@ router.put('/:id/calendar', requireOwnedUnit, async (req, res) => {
     if (existing) await prisma.channelConnection.delete({ where: { id: existing.id } });
     return res.json({ channel: null });
   }
+  // Guard: the same Airbnb calendar link must not be used by two units, or one
+  // unit's calendar gets mirrored onto another. Reject a link already in use.
+  const clash = await prisma.channelConnection.findFirst({
+    where: {
+      importUrl,
+      unitId: { not: req.unit.id },
+      unit: { property: { hostId: req.unit.property.hostId } },
+    },
+    include: { unit: { include: { property: true } } },
+  });
+  if (clash) {
+    return res.status(409).json({
+      error: 'duplicate_import_url',
+      message: `That calendar link is already used by ${clash.unit.property.name} · ${clash.unit.name}. Each unit needs its own Airbnb calendar link.`,
+    });
+  }
   const channel = existing
     ? await prisma.channelConnection.update({ where: { id: existing.id }, data: { importUrl } })
     : await prisma.channelConnection.create({ data: { unitId: req.unit.id, type: 'airbnb', importUrl } });
