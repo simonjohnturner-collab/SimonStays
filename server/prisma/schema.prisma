@@ -269,6 +269,7 @@ enum BookingSource {
   booking
   lekkeslaap
   import
+  website
 }
 
 enum BookingStatus {

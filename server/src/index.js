@@ -21,6 +21,8 @@ app.use('/feed', require('./routes/feed'));
 // catch-all routers so it isn't shadowed. Its write routes auth themselves.
 app.use('/photos', require('./routes/photos'));
 app.use('/listings', require('./routes/listings'));
+// Public shopfront API (no auth) — mount before the auth'd catch-all routers.
+app.use('/public', require('./routes/public'));
 
 app.use('/auth', require('./routes/auth'));
 app.use('/email', require('./routes/email'));
