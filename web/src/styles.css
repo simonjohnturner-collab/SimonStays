@@ -166,6 +166,10 @@ td.cell.blue.late { background: #cdb4f0; }        /* late checkout (purple) */
 .invoices-view .host { font-size: 13px; opacity: .9; margin-left: 6px; }
 .invoices-body { display: flex; flex: 1; min-height: 0; }
 .inv-list { width: 240px; border-right: 1px solid var(--line); background: #fff; padding: 10px; overflow: auto; }
+.inv-search { position: sticky; top: -10px; background: #fff; padding: 4px 0 8px; margin: -4px 0 4px; z-index: 1; }
+.inv-search input { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 13px; }
+.inv-search input:focus { outline: none; border-color: var(--green); }
+.inv-search-count { display: block; font-size: 10.5px; color: var(--muted); margin-top: 4px; padding-left: 2px; }
 .inv-item { display: block; width: 100%; text-align: left; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; }
 .inv-item:hover { background: #f3f6f9; }
 .inv-item.active { border-color: var(--green); background: #eafaf0; }

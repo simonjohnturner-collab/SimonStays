@@ -11,6 +11,7 @@ export default function InvoicesView({ onClose, initialInvoiceId }) {
   const [biller, setBiller] = useState(null);
   const [billerOpen, setBillerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -36,6 +37,14 @@ export default function InvoicesView({ onClose, initialInvoiceId }) {
   function onDeleted(id) { setInvoices(invoices.filter((x) => x.id !== id)); setSelected(null); }
   function onDuplicated(nu) { setInvoices([nu, ...invoices]); setSelected(nu); }
 
+  // Filter the list by client/company name (also invoice number, attention, email).
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? invoices.filter((inv) =>
+        [inv.billToName, inv.number, inv.billToAttention, inv.billToEmail]
+          .some((f) => (f || '').toLowerCase().includes(q)))
+    : invoices;
+
   return (
     <div className="invoices-view">
       <header className="topbar no-print">
@@ -48,9 +57,24 @@ export default function InvoicesView({ onClose, initialInvoiceId }) {
 
       <div className="invoices-body">
         <aside className="inv-list no-print">
+          {!loading && invoices.length > 0 && (
+            <div className="inv-search">
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by client, invoice #…"
+                aria-label="Search invoices"
+              />
+              {q && <span className="inv-search-count">{filtered.length} of {invoices.length}</span>}
+            </div>
+          )}
           {loading && <p className="muted small">Loading…</p>}
           {!loading && invoices.length === 0 && <p className="muted small">No invoices yet. Create one, or use “Invoice” on a booking.</p>}
-          {invoices.map((inv) => (
+          {!loading && invoices.length > 0 && filtered.length === 0 && (
+            <p className="muted small">No invoices match “{query.trim()}”.</p>
+          )}
+          {filtered.map((inv) => (
             <button key={inv.id} className={`inv-item ${selected?.id === inv.id ? 'active' : ''}`} onClick={() => select(inv)}>
               <div className="inv-item-top"><b>{inv.number}</b><span>{fmtR(inv.totalCents)}</span></div>
               <div className="inv-item-sub">{inv.billToName || '—'} · {(inv.date || '').slice(0, 10)}</div>
