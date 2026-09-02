@@ -7,8 +7,17 @@ export default function ManageDrawer({
   onAddProperty, onRenameProperty, onDeleteProperty,
   onAddUnit, onDeleteUnit, onOpenUnit, onOpenPricing,
   onAddBooking, onAddFloating, onEditBooking, onOpenInvoices, onOpenListings,
+  onReorderProperties,
   groups = [], onAssignGroup, onCreateGroup,
 }) {
+  // Move a property up/down and persist the new order of all property ids.
+  function moveProperty(i, dir) {
+    const j = i + dir;
+    if (j < 0 || j >= properties.length) return;
+    const ids = properties.map((p) => p.id);
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    onReorderProperties(ids);
+  }
   async function pickGroup(unitId, value) {
     if (value === '__new') { const g = await onCreateGroup(); if (g) onAssignGroup(unitId, g.id); return; }
     onAssignGroup(unitId, value || null);
@@ -52,11 +61,14 @@ export default function ManageDrawer({
             <section>
               <h4>Your properties</h4>
               {properties.length === 0 && <p className="muted small">No properties yet — add your first one above.</p>}
-              {properties.map((p) => (
+              {properties.length > 1 && <p className="muted small" style={{ margin: '2px 0 8px' }}>Use ▲▼ to set the order on the board.</p>}
+              {properties.map((p, i) => (
                 <div key={p.id} className="prop manage">
                   <div className="prop-name">
                     <span>{p.name}</span>
                     <span className="prop-actions">
+                      <button className="del" title="Move up" disabled={i === 0} onClick={() => moveProperty(i, -1)}>▲</button>
+                      <button className="del" title="Move down" disabled={i === properties.length - 1} onClick={() => moveProperty(i, 1)}>▼</button>
                       <button className="del" title="Rename property" onClick={() => onRenameProperty(p)}>✎</button>
                       <button className="del" title="Delete property" onClick={() => onDeleteProperty(p)}>×</button>
                     </span>

@@ -13,7 +13,7 @@ const photoOrder = [{ sort: 'asc' }, { createdAt: 'asc' }];
 router.get('/', async (req, res) => {
   const properties = await prisma.property.findMany({
     where: { hostId: req.hostId },
-    orderBy: { createdAt: 'asc' },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     include: {
       photos: { select: photoSelect, orderBy: photoOrder },
       units: {

@@ -10,9 +10,19 @@ router.get('/', async (req, res) => {
   const properties = await prisma.property.findMany({
     where: { hostId: req.hostId },
     include: { units: { orderBy: { createdAt: 'asc' } } },
-    orderBy: { createdAt: 'asc' },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
   });
   res.json({ properties });
+});
+
+// PUT /properties/reorder { ids: [...] } — set the board order (index = position).
+router.put('/reorder', async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const owned = await prisma.property.findMany({ where: { id: { in: ids }, hostId: req.hostId }, select: { id: true } });
+  const ownedSet = new Set(owned.map((o) => o.id));
+  if (!ids.length || ids.some((id) => !ownedSet.has(id))) return res.status(400).json({ error: 'invalid_ids' });
+  await prisma.$transaction(ids.map((id, i) => prisma.property.update({ where: { id }, data: { sortOrder: i } })));
+  res.json({ ok: true });
 });
 
 // POST /properties { name, address }

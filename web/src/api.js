@@ -43,6 +43,7 @@ export const api = {
   listProperties: () => req('GET', '/properties'),
   createProperty: (name, address) => req('POST', '/properties', { name, address }),
   updateProperty: (id, name) => req('PATCH', `/properties/${id}`, { name }),
+  reorderProperties: (ids) => req('PUT', '/properties/reorder', { ids }),
   deleteProperty: (id) => req('DELETE', `/properties/${id}`),
   createUnit: (propertyId, name, capacity) => req('POST', '/units', { propertyId, name, capacity }),
   getUnit: (id) => req('GET', `/units/${id}`),

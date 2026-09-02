@@ -96,6 +96,7 @@ model Property {
   name        String
   address     String?
   description String? // listing description (for the public booking site)
+  sortOrder   Int      @default(0) // manual order on the board (lower = higher up)
   createdAt   DateTime @default(now())
   units       Unit[]
   photos      Photo[]

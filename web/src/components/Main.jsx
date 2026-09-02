@@ -66,6 +66,11 @@ export default function Main() {
     await api.assignUnitGroup(unitId, pricingGroupId || null);
     refresh();
   }
+  async function reorderProperties(ids) {
+    setProperties((ps) => ids.map((id) => ps.find((p) => p.id === id)).filter(Boolean)); // optimistic
+    try { await api.reorderProperties(ids); } catch { /* keep optimistic */ }
+    refresh();
+  }
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -220,6 +225,7 @@ export default function Main() {
           onOpenInvoices={() => { setMenuOpen(false); setInvoices({ initialId: null }); }}
           onOpenPricing={() => { setMenuOpen(false); setPricingMatrix(true); }}
           onOpenListings={() => { setMenuOpen(false); setListings(true); }}
+          onReorderProperties={reorderProperties}
         />
       )}
 
