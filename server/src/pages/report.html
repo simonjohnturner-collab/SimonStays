@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Report an issue · SimonStays</title>
+<style>
+  :root { --green:#1a7a3a; --green-d:#14622f; --ink:#1f2430; --muted:#6b7280; --line:#e3e6ea; --bg:#f4f6f4; --red:#cc2b2b; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; }
+  body { font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); line-height:1.5; }
+  .top { background:var(--green); color:#fff; padding:18px 16px; }
+  .brand { font-weight:800; font-size:20px; letter-spacing:-.3px; }
+  .brand span { color:#bfe6cd; }
+  .top p { margin:4px 0 0; font-size:13px; opacity:.9; }
+  .wrap { max-width:560px; margin:0 auto; padding:16px 14px 60px; }
+  label { display:block; font-size:13px; font-weight:600; color:var(--ink); margin:14px 0 5px; }
+  .req::after { content:" *"; color:var(--red); }
+  input,select,textarea { width:100%; font:inherit; font-size:16px; padding:11px 12px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+  input:focus,select:focus,textarea:focus { outline:none; border-color:var(--green); }
+  textarea { resize:vertical; min-height:80px; }
+  .hint { font-size:12px; color:var(--muted); margin:4px 0 0; }
+  .issue { background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px; margin-top:14px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .issue-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:2px; }
+  .issue-head h3 { margin:0; font-size:15px; }
+  .rm { background:none; border:0; color:var(--muted); font-size:13px; cursor:pointer; text-decoration:underline; padding:0; }
+  .rm:hover { color:var(--red); }
+  .photos { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .thumb { position:relative; width:80px; height:80px; border-radius:9px; overflow:hidden; border:1px solid var(--line); }
+  .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .thumb button { position:absolute; top:2px; right:2px; width:20px; height:20px; border-radius:50%; border:0; background:rgba(0,0,0,.6); color:#fff; font-size:12px; line-height:1; cursor:pointer; }
+  .addphoto { width:80px; height:80px; border:2px dashed var(--line); border-radius:9px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:24px; cursor:pointer; }
+  .addphoto:hover { border-color:var(--green); color:var(--green); }
+  .addphoto input { display:none; }
+  .add-issue { width:100%; margin-top:14px; padding:12px; background:#eafaf0; color:var(--green-d); border:1px solid #cdeede; border-radius:12px; font-weight:600; font-size:15px; cursor:pointer; }
+  .add-issue:hover { background:#dff5e8; }
+  .submit { width:100%; margin-top:22px; padding:15px; background:var(--green); color:#fff; border:0; border-radius:12px; font-weight:700; font-size:16px; cursor:pointer; }
+  .submit:hover { background:var(--green-d); }
+  .submit:disabled { opacity:.6; }
+  .msg { margin-top:14px; font-size:14px; padding:10px 12px; border-radius:10px; }
+  .msg.err { background:#fdeaea; color:#a11; }
+  .done { background:#fff; border:1px solid var(--line); border-radius:14px; padding:28px 20px; text-align:center; margin-top:20px; }
+  .done .tick { font-size:46px; }
+  .done h2 { margin:8px 0 6px; }
+  .done p { color:var(--muted); margin:0 0 18px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="brand">Simon<span>Stays</span></div>
+    <p>Report a damaged or unclean item</p>
+  </div>
+
+  <div class="wrap">
+    <form id="form">
+      <label class="req" for="unit">Which unit are you staying in?</label>
+      <select id="unit" required><option value="">Loading units…</option></select>
+
+      <label class="req" for="date">Date</label>
+      <input type="date" id="date" required>
+
+      <label class="req" for="name">Your name</label>
+      <input type="text" id="name" placeholder="Full name" required>
+
+      <div id="issues"></div>
+
+      <button type="button" class="add-issue" id="addIssue">＋ Add another issue</button>
+
+      <div id="msg"></div>
+      <button type="submit" class="submit" id="submit">Submit report</button>
+    </form>
+
+    <div id="done" class="done hidden">
+      <div class="tick">✅</div>
+      <h2>Thank you</h2>
+      <p>Your report has been sent. We'll take a look right away.</p>
+      <button class="submit" onclick="location.reload()">Report another issue</button>
+    </div>
+  </div>
+
+<script>
+  var issuesEl = document.getElementById('issues');
+  var issues = []; // [{ id, files: [File] }]
+
+  function resize(file, maxDim, quality) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image(); var url = URL.createObjectURL(file);
+      img.onload = function () {
+        URL.revokeObjectURL(url);
+        var w = img.width, h = img.height;
+        if (Math.max(w, h) > maxDim) { var s = maxDim / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
+        var c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('bad image')); };
+      img.src = url;
+    });
+  }
+
+  function renderIssues() {
+    issuesEl.innerHTML = '';
+    issues.forEach(function (iss, idx) {
+      var card = document.createElement('div'); card.className = 'issue';
+      var head = document.createElement('div'); head.className = 'issue-head';
+      var h = document.createElement('h3'); h.textContent = 'Issue ' + (idx + 1);
+      head.appendChild(h);
+      if (issues.length > 1) {
+        var rm = document.createElement('button'); rm.type = 'button'; rm.className = 'rm'; rm.textContent = 'Remove';
+        rm.onclick = function () { issues.splice(idx, 1); renderIssues(); };
+        head.appendChild(rm);
+      }
+      card.appendChild(head);
+
+      var lbl = document.createElement('label'); lbl.className = 'req'; lbl.textContent = 'Describe the issue';
+      card.appendChild(lbl);
+      var ta = document.createElement('textarea'); ta.placeholder = 'e.g. Broken lamp in the main bedroom';
+      ta.value = iss.description || '';
+      ta.oninput = function () { iss.description = ta.value; };
+      card.appendChild(ta);
+
+      var plabel = document.createElement('label'); plabel.textContent = 'Photos (optional)'; card.appendChild(plabel);
+      var photos = document.createElement('div'); photos.className = 'photos';
+      iss.files.forEach(function (f, fi) {
+        var t = document.createElement('div'); t.className = 'thumb';
+        var im = document.createElement('img'); im.src = URL.createObjectURL(f); t.appendChild(im);
+        var x = document.createElement('button'); x.type = 'button'; x.textContent = '×';
+        x.onclick = function () { iss.files.splice(fi, 1); renderIssues(); };
+        t.appendChild(x); photos.appendChild(t);
+      });
+      var add = document.createElement('label'); add.className = 'addphoto'; add.textContent = '＋';
+      var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+      inp.onchange = function (e) { var fs = Array.prototype.slice.call(e.target.files); iss.files = iss.files.concat(fs); e.target.value = ''; renderIssues(); };
+      add.appendChild(inp); photos.appendChild(add);
+      card.appendChild(photos);
+
+      issuesEl.appendChild(card);
+    });
+  }
+
+  function addIssue() { issues.push({ description: '', files: [] }); renderIssues(); }
+  document.getElementById('addIssue').onclick = addIssue;
+  addIssue(); // start with one
+
+  // default date = today
+  document.getElementById('date').value = new Date().toISOString().slice(0, 10);
+
+  // load units
+  fetch('/public/forms/damage').then(function (r) { return r.json(); }).then(function (d) {
+    var sel = document.getElementById('unit');
+    sel.innerHTML = '<option value="">Select your unit…</option>';
+    (d.properties || []).forEach(function (p) {
+      (p.units || []).forEach(function (u) {
+        var o = document.createElement('option'); o.value = u.id; o.textContent = p.name + ' · ' + u.name; sel.appendChild(o);
+      });
+    });
+  }).catch(function () { document.getElementById('unit').innerHTML = '<option value="">Could not load units</option>'; });
+
+  function showErr(t) { var m = document.getElementById('msg'); m.className = 'msg err'; m.textContent = t; }
+
+  document.getElementById('form').onsubmit = function (e) {
+    e.preventDefault();
+    document.getElementById('msg').textContent = '';
+    var unitId = document.getElementById('unit').value;
+    var date = document.getElementById('date').value;
+    var name = document.getElementById('name').value.trim();
+    if (!unitId) return showErr('Please choose your unit.');
+    if (!name) return showErr('Please enter your name.');
+    var filled = issues.filter(function (i) { return (i.description || '').trim(); });
+    if (filled.length === 0) return showErr('Please describe at least one issue.');
+
+    var btn = document.getElementById('submit'); btn.disabled = true; btn.textContent = 'Sending…';
+
+    var payload = { type: 'damage', unitId: unitId, submitterName: name,
+      answers: { date: date, issues: filled.map(function (i) { return { description: i.description.trim() }; }) } };
+
+    fetch('/public/forms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res || !res.id) throw new Error('submit failed');
+        // upload photos issue by issue
+        var jobs = [];
+        filled.forEach(function (iss, idx) {
+          (iss.files || []).forEach(function (f) {
+            jobs.push(resize(f, 1600, 0.82).then(function (dataBase64) {
+              return fetch('/public/forms/' + res.id + '/photos', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fieldId: 'issue-' + idx, dataBase64: dataBase64, contentType: 'image/jpeg', filename: f.name })
+              });
+            }));
+          });
+        });
+        return Promise.all(jobs);
+      })
+      .then(function () {
+        document.getElementById('form').classList.add('hidden');
+        document.getElementById('done').classList.remove('hidden');
+        window.scrollTo(0, 0);
+      })
+      .catch(function () { showErr('Sorry, something went wrong. Please try again.'); btn.disabled = false; btn.textContent = 'Submit report'; });
+  };
+</script>
+</body>
+</html>

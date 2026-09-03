@@ -436,3 +436,6 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .req input { width: auto; }
 .bfield-move { display: flex; gap: 2px; }
 .bfield-opts { margin-top: 6px; font-size: 13px; }
+.sub-issues { margin-top:6px; }
+.issue-block { border-top:1px solid #f0f2f5; padding:10px 0; }
+.issue-block .sub-photo-grid { margin-top:6px; }

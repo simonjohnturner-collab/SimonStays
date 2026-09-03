@@ -1,4 +1,6 @@
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -23,6 +25,15 @@ app.use('/photos', require('./routes/photos'));
 app.use('/listings', require('./routes/listings'));
 // Public shopfront API (no auth) — mount before the auth'd catch-all routers.
 app.use('/public', require('./routes/public'));
+
+// Public guest "Report an issue" page — self-contained HTML served from the
+// backend so it has an instant URL and talks to /public/forms same-origin.
+const reportHtml = fs.readFileSync(path.join(__dirname, 'pages/report.html'), 'utf8');
+app.get(['/report', '/report/damage'], (req, res) => {
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'");
+  res.type('html').send(reportHtml);
+});
 
 app.use('/auth', require('./routes/auth'));
 app.use('/email', require('./routes/email'));

@@ -124,28 +124,57 @@ function Submissions({ properties, labelById }) {
               </div>
             </div>
 
-            <div className="sub-answers">
-              {Object.keys(sel.answers || {}).length === 0 && <p className="muted small">No text answers.</p>}
-              {Object.entries(sel.answers || {}).map(([fid, val]) => (
-                <div key={fid} className="ans-row">
-                  <div className="ans-label">{labelById[fid] || fid}</div>
-                  <div className="ans-val">{formatAnswer(val)}</div>
-                </div>
-              ))}
-            </div>
-
-            {sel.photos && sel.photos.length > 0 && (
-              <div className="sub-photos">
-                <div className="ans-label">Photos ({sel.photos.length})</div>
+            {(() => {
+              const answers = sel.answers || {};
+              const issues = Array.isArray(answers.issues) ? answers.issues : null;
+              const known = { date: 'Date' };
+              const other = Object.entries(answers).filter(([k]) => k !== 'issues');
+              const byField = {};
+              (sel.photos || []).forEach((ph) => { const k = ph.fieldId || ''; (byField[k] = byField[k] || []).push(ph); });
+              const usedFields = new Set(issues ? issues.map((_, i) => `issue-${i}`) : []);
+              const leftover = (sel.photos || []).filter((ph) => !usedFields.has(ph.fieldId || ''));
+              const Gallery = ({ photos }) => (
                 <div className="sub-photo-grid">
-                  {sel.photos.map((ph) => (
+                  {photos.map((ph) => (
                     <a key={ph.id} href={photoUrl(ph.id)} target="_blank" rel="noreferrer" title={ph.filename || 'photo'}>
                       <img src={photoUrl(ph.id)} alt={ph.filename || 'photo'} loading="lazy" />
                     </a>
                   ))}
                 </div>
-              </div>
-            )}
+              );
+              return (
+                <>
+                  <div className="sub-answers">
+                    {other.length === 0 && !issues && <p className="muted small">No answers.</p>}
+                    {other.map(([fid, val]) => (
+                      <div key={fid} className="ans-row">
+                        <div className="ans-label">{known[fid] || labelById[fid] || fid}</div>
+                        <div className="ans-val">{formatAnswer(val)}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {issues && (
+                    <div className="sub-issues">
+                      {issues.map((iss, i) => (
+                        <div key={i} className="issue-block">
+                          <div className="ans-label">Issue {i + 1}</div>
+                          <div className="ans-val">{iss.description || ''}</div>
+                          {byField[`issue-${i}`] && <Gallery photos={byField[`issue-${i}`]} />}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {leftover.length > 0 && (
+                    <div className="sub-photos">
+                      <div className="ans-label">Photos ({leftover.length})</div>
+                      <Gallery photos={leftover} />
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
       </main>
