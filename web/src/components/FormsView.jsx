@@ -55,6 +55,14 @@ function Submissions({ properties, labelById }) {
   const [q, setQ] = useState('');
   const [rows, setRows] = useState(null);
   const [sel, setSel] = useState(null); // full submission
+  const [zoom, setZoom] = useState(null); // photo url open in the lightbox
+
+  useEffect(() => {
+    if (!zoom) return;
+    const onKey = (e) => { if (e.key === 'Escape') setZoom(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [zoom]);
 
   async function load() {
     const params = new URLSearchParams();
@@ -73,6 +81,7 @@ function Submissions({ properties, labelById }) {
   async function del(id) { if (!window.confirm('Delete this submission?')) return; await api.deleteFormSubmission(id); setSel(null); load(); }
 
   return (
+    <>
     <div className="forms-cols">
       <aside className="forms-list">
         <div className="forms-filters">
@@ -136,9 +145,9 @@ function Submissions({ properties, labelById }) {
               const Gallery = ({ photos }) => (
                 <div className="sub-photo-grid">
                   {photos.map((ph) => (
-                    <a key={ph.id} href={photoUrl(ph.id)} target="_blank" rel="noreferrer" title={ph.filename || 'photo'}>
+                    <button key={ph.id} type="button" className="thumb-btn" title={ph.filename || 'photo'} onClick={() => setZoom(photoUrl(ph.id))}>
                       <img src={photoUrl(ph.id)} alt={ph.filename || 'photo'} loading="lazy" />
-                    </a>
+                    </button>
                   ))}
                 </div>
               );
@@ -179,6 +188,13 @@ function Submissions({ properties, labelById }) {
         )}
       </main>
     </div>
+    {zoom && (
+      <div className="img-lightbox" onClick={() => setZoom(null)}>
+        <button className="img-lightbox-close" onClick={() => setZoom(null)} aria-label="Close image">×</button>
+        <img src={zoom} alt="" onClick={(e) => e.stopPropagation()} />
+      </div>
+    )}
+    </>
   );
 }
 

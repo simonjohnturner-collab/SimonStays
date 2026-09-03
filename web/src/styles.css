@@ -439,3 +439,11 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .sub-issues { margin-top:6px; }
 .issue-block { border-top:1px solid #f0f2f5; padding:10px 0; }
 .issue-block .sub-photo-grid { margin-top:6px; }
+
+/* In-app image lightbox (submission photos) */
+.thumb-btn { padding:0; border:0; background:none; cursor:zoom-in; border-radius:8px; }
+.thumb-btn:focus-visible { outline:2px solid var(--green); outline-offset:2px; }
+.img-lightbox { position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:50; display:flex; align-items:center; justify-content:center; padding:24px; }
+.img-lightbox img { max-width:96vw; max-height:92vh; border-radius:8px; box-shadow:0 10px 40px rgba(0,0,0,.5); cursor:default; }
+.img-lightbox-close { position:fixed; top:14px; right:18px; width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,.16); color:#fff; font-size:26px; line-height:1; border:0; cursor:pointer; }
+.img-lightbox-close:hover { background:rgba(255,255,255,.32); }
