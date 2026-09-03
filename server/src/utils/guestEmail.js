@@ -18,12 +18,14 @@ function parseAirbnbEmail({ subject = '', body = '' } = {}) {
 // Best-effort name extraction from common Airbnb subject/body phrasings.
 function extractGuestName(text) {
   const s = String(text || '').replace(/\s+/g, ' ').trim();
+  // Unicode-aware: \p{Lu} = an uppercase letter, \p{L} = any letter (handles
+  // accented/international names like "Vibeke Røre", "José", "Zoë").
   const patterns = [
-    /(?:Reservation|Booking)\s+confirmed[^A-Za-z]+([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]*){0,2})\s+(?:arrives|will\s+arrive|checks?\s+in|\()/,
-    /\b([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]*){0,2})\s+arrives\b/,
-    /Instant\s+book(?:ing)?\s+confirmed[^A-Za-z]+([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]*){0,2})/,
-    /Your\s+reservation\s+with\s+([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]*){0,2})/,
-    /\bfrom\s+([A-Z][a-zA-Z'’.\-]+(?:\s+[A-Z][a-zA-Z'’.\-]*){0,1})\s+(?:has\s+)?(?:arriv|check)/,
+    /(?:Reservation|Booking)\s+confirmed[^\p{L}]+(\p{Lu}[\p{L}'’.\-]*(?:\s+\p{Lu}[\p{L}'’.\-]*){0,2})\s+(?:arrives|will\s+arrive|checks?\s+in|\()/u,
+    /\b(\p{Lu}[\p{L}'’.\-]*(?:\s+\p{Lu}[\p{L}'’.\-]*){0,2})\s+arrives\b/u,
+    /Instant\s+book(?:ing)?\s+confirmed[^\p{L}]+(\p{Lu}[\p{L}'’.\-]*(?:\s+\p{Lu}[\p{L}'’.\-]*){0,2})/u,
+    /Your\s+reservation\s+with\s+(\p{Lu}[\p{L}'’.\-]*(?:\s+\p{Lu}[\p{L}'’.\-]*){0,2})/u,
+    /\bfrom\s+(\p{Lu}[\p{L}'’.\-]*(?:\s+\p{Lu}[\p{L}'’.\-]*){0,1})\s+(?:has\s+)?(?:arriv|check)/u,
   ];
   for (const re of patterns) {
     const m = s.match(re);
