@@ -10,6 +10,7 @@ import ManageDrawer from './ManageDrawer.jsx';
 import InvoicesView from './InvoicesView.jsx';
 import RateCardMatrix from './RateCardMatrix.jsx';
 import ListingsView from './ListingsView.jsx';
+import BoardSearch from './BoardSearch.jsx';
 
 const WINDOW_DAYS = 35;
 
@@ -30,6 +31,7 @@ export default function Main() {
   const [groups, setGroups] = useState([]);
   const [pricingMatrix, setPricingMatrix] = useState(false);
   const [listings, setListings] = useState(false);
+  const [focus, setFocus] = useState(null); // { unitId, bookingId, key } — jump target
   const [msg, setMsg] = useState('');
 
   const from = ymd(start);
@@ -134,6 +136,14 @@ export default function Main() {
     } finally { setSyncing(false); }
   }
 
+  // Jump the board to a reservation: scroll its check-in into view (a few days
+  // of lead-in) and flash its row.
+  function jumpToBooking(r) {
+    if (!r?.checkIn) return;
+    setStart(addDays(new Date(r.checkIn), -3));
+    setFocus({ unitId: r.unitId, bookingId: r.id, key: Date.now() });
+  }
+
   const hasUnits = properties.some((p) => p.units.length);
 
   if (invoices) {
@@ -151,6 +161,7 @@ export default function Main() {
       <header className="topbar">
         <button className="ghost hamburger" title="Manage properties" onClick={() => setMenuOpen(true)}>☰</button>
         <div className="brand">Simon<span>Stays</span></div>
+        {hasUnits && <BoardSearch onJump={jumpToBooking} />}
         <div className="spacer" />
         <button className="ghost" onClick={() => setStart(addDays(start, -7))}>← week</button>
         <button className="ghost" onClick={() => setStart(addDays(today(), -3))}>Today</button>
@@ -179,6 +190,7 @@ export default function Main() {
               floatingBookings={floatingBookings}
               start={start}
               days={WINDOW_DAYS}
+              focus={focus}
               onNewBooking={(unit) => setBookingCtx({ unit })}
               onEditBooking={(booking, unit) => setBookingCtx({ booking, unit })}
               onOpenUnit={(unit) => setPanelUnit(unit)}

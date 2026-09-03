@@ -85,6 +85,36 @@ router.get('/bookings/floating', async (req, res) => {
   res.json({ bookings });
 });
 
+// GET /bookings/search?q= — find the host's bookings by guest name or Airbnb
+// confirmation code (also comments), so the board can jump straight to one.
+router.get('/bookings/search', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (q.length < 2) return res.json({ results: [] });
+  const bookings = await prisma.booking.findMany({
+    where: {
+      status: { not: 'cancelled' },
+      OR: [
+        { guestName: { contains: q, mode: 'insensitive' } },
+        { resCode: { contains: q, mode: 'insensitive' } },
+        { comments: { contains: q, mode: 'insensitive' } },
+      ],
+      // owned either directly (manual/floating) or via the unit's property
+      AND: [{ OR: [{ hostId: req.hostId }, { unit: { property: { hostId: req.hostId } } }] }],
+    },
+    include: { unit: { include: { property: true } } },
+    orderBy: { checkIn: 'asc' },
+    take: 25,
+  });
+  const results = bookings.map((b) => ({
+    id: b.id, unitId: b.unitId, status: b.status,
+    guestName: b.guestName, resCode: b.resCode,
+    checkIn: b.checkIn, checkOut: b.checkOut,
+    unitName: b.unit ? b.unit.name : null,
+    propertyName: b.unit ? b.unit.property.name : null,
+  }));
+  res.json({ results });
+});
+
 // Payment fields: paymentStatus ('paid'|'partial'|'unpaid') drives paid (fully paid only).
 function paymentFields(b) {
   const out = {};

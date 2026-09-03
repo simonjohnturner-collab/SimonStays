@@ -96,5 +96,6 @@ export const api = {
   createFloating: (payload) => req('POST', '/bookings/floating', payload),
   listFloating: (from, to) => req('GET', `/bookings/floating?from=${from}&to=${to}`),
   updateBooking: (id, payload) => req('PATCH', `/bookings/${id}`, payload),
+  searchBookings: (q) => req('GET', `/bookings/search?q=${encodeURIComponent(q)}`),
   deleteBooking: (id) => req('DELETE', `/bookings/${id}`),
 };

@@ -78,9 +78,26 @@ function buildSegments(cov, dates, TODAY) {
   return segs;
 }
 
-export default function Board({ properties, bookingsByUnit, floatingBookings = [], start, days, onNewBooking, onEditBooking, onOpenUnit, onAddUnit }) {
+export default function Board({ properties, bookingsByUnit, floatingBookings = [], start, days, focus, onNewBooking, onEditBooking, onOpenUnit, onAddUnit }) {
   const dates = useMemo(() => range(start, days), [start, days]);
   const TODAY = ymd(today()); // recomputed each render, so the highlight follows the date
+
+  // Jump-to-reservation: scroll the target row into view, reset to the window's
+  // left edge (so the check-in is near the start), and flash the row.
+  useEffect(() => {
+    if (!focus) return;
+    const domId = focus.unitId ? `urow-${focus.unitId}` : `frow-${focus.bookingId}`;
+    const t = setTimeout(() => {
+      const el = document.getElementById(domId);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+      const wrap = document.querySelector('.board-wrap') || document.querySelector('.board-scroll');
+      if (wrap) wrap.scrollLeft = 0;
+      el.classList.add('row-flash');
+      setTimeout(() => el.classList.remove('row-flash'), 2200);
+    }, 140);
+    return () => clearTimeout(t);
+  }, [focus?.key]);
   // Re-render right after the next local midnight so an open tab rolls the
   // "today" highlight over without needing a manual refresh.
   const [, setDayTick] = useState(0);
@@ -200,7 +217,7 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
             }
             const cov = coverage([...(bookingsByUnit[u.id] || []), ...(placedByUnit[u.id] || [])]);
             return (
-              <tr key={u.id}>
+              <tr key={u.id} id={`urow-${u.id}`}>
                 <th className={`prop-cell ${first ? 'sep' : ''}`}>{first ? u.propertyName : ''}</th>
                 <th className="unit-cell">
                   <button className="unit-link" onClick={() => onOpenUnit(u)} title="Channels & feed">{u.name}</button>
@@ -216,7 +233,7 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
           {unplaced.map((b) => {
             const cov = coverage([b]);
             return (
-              <tr key={b.id}>
+              <tr key={b.id} id={`frow-${b.id}`}>
                 <th className="prop-cell">Floating</th>
                 <th className="unit-cell">
                   <button className="unit-link" onClick={() => onEditBooking(b, null)}>{b.guestName || '(guest)'}</button>
