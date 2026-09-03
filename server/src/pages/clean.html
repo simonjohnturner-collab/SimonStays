@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Checkout clean report · SimonStays</title>
+<style>
+  :root { --green:#1a7a3a; --green-d:#14622f; --ink:#1f2430; --muted:#6b7280; --line:#e3e6ea; --bg:#f4f6f4; --red:#cc2b2b; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; }
+  body { font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); line-height:1.5; }
+  .top { background:var(--green); color:#fff; padding:18px 16px; }
+  .brand { font-weight:800; font-size:20px; letter-spacing:-.3px; }
+  .brand span { color:#bfe6cd; }
+  .top p { margin:4px 0 0; font-size:13px; opacity:.92; }
+  .wrap { max-width:600px; margin:0 auto; padding:16px 14px 70px; }
+  .q { background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-top:10px; }
+  .q > label, .field-label { display:block; font-size:14px; font-weight:600; margin-bottom:8px; }
+  .req::after { content:" *"; color:var(--red); }
+  input,select,textarea { width:100%; font:inherit; font-size:16px; padding:11px 12px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+  input:focus,select:focus,textarea:focus { outline:none; border-color:var(--green); }
+  textarea { resize:vertical; min-height:70px; }
+  .yesno { display:flex; gap:10px; }
+  .yesno button { flex:1; padding:12px; border:1.5px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font-size:15px; font-weight:600; cursor:pointer; }
+  .yesno button.yes.on { background:var(--green); border-color:var(--green); color:#fff; }
+  .yesno button.no.on { background:var(--red); border-color:var(--red); color:#fff; }
+  .photos { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+  .thumb { position:relative; width:80px; height:80px; border-radius:9px; overflow:hidden; border:1px solid var(--line); }
+  .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .thumb button { position:absolute; top:2px; right:2px; width:20px; height:20px; border-radius:50%; border:0; background:rgba(0,0,0,.6); color:#fff; font-size:12px; line-height:1; cursor:pointer; }
+  .photo-btns { display:flex; gap:8px; }
+  .pbtn { flex:1; text-align:center; padding:11px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font-size:14px; font-weight:600; cursor:pointer; }
+  .pbtn:hover { border-color:var(--green); color:var(--green); }
+  .pbtn input { display:none; }
+  .rating-row { display:flex; align-items:center; gap:10px; }
+  .rating-row input { width:90px; }
+  .section-intro { color:var(--muted); font-size:13px; margin:2px 0 8px; }
+  .submit { width:100%; margin-top:20px; padding:15px; background:var(--green); color:#fff; border:0; border-radius:12px; font-weight:700; font-size:16px; cursor:pointer; }
+  .submit:disabled { opacity:.6; }
+  .msg { margin-top:14px; font-size:14px; padding:10px 12px; border-radius:10px; }
+  .msg.err { background:#fdeaea; color:#a11; }
+  .done { background:#fff; border:1px solid var(--line); border-radius:14px; padding:28px 20px; text-align:center; margin-top:20px; }
+  .done .tick { font-size:46px; } .done h2 { margin:8px 0 6px; } .done p { color:var(--muted); margin:0 0 18px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="brand">Simon<span>Stays</span></div>
+    <p id="subtitle">Checkout clean report</p>
+  </div>
+
+  <div class="wrap">
+    <form id="form">
+      <p class="section-intro" id="intro"></p>
+
+      <div class="q"><label class="req" for="cleaner">Name of cleaner</label>
+        <input type="text" id="cleaner" placeholder="Your full name" required></div>
+
+      <div class="q"><label for="date">Date</label>
+        <input type="date" id="date"></div>
+
+      <div class="q"><label class="req" for="prop">Property</label>
+        <select id="prop" required><option value="">Loading…</option></select></div>
+
+      <div class="q"><label class="req" for="unit">Unit</label>
+        <select id="unit" required><option value="">Select a property first</option></select></div>
+
+      <div id="fields"></div>
+
+      <div id="msg"></div>
+      <button type="submit" class="submit" id="submit">Submit clean report</button>
+    </form>
+
+    <div id="done" class="done hidden">
+      <div class="tick">✅</div>
+      <h2>Thank you</h2>
+      <p>Your checkout clean report has been submitted.</p>
+      <button class="submit" onclick="location.reload()">Submit another</button>
+    </div>
+  </div>
+
+<script>
+  var TEMPLATE = null, PROPS = [];
+  var answers = {};      // fieldId -> value
+  var photoFiles = {};   // fieldId -> [File]
+
+  function resize(file, maxDim, quality) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image(); var url = URL.createObjectURL(file);
+      img.onload = function () {
+        URL.revokeObjectURL(url);
+        var w = img.width, h = img.height;
+        if (Math.max(w, h) > maxDim) { var s = maxDim / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
+        var c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('bad image')); };
+      img.src = url;
+    });
+  }
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  function renderField(f) {
+    var q = el('div', 'q');
+    var lbl = el('div', 'field-label' + (f.required ? ' req' : '')); lbl.textContent = f.label; q.appendChild(lbl);
+
+    if (f.type === 'checkbox') {
+      var yn = el('div', 'yesno');
+      var yes = el('button', 'yes', 'Yes'); yes.type = 'button';
+      var no = el('button', 'no', 'No'); no.type = 'button';
+      yes.onclick = function () { answers[f.id] = true; yes.classList.add('on'); no.classList.remove('on'); };
+      no.onclick = function () { answers[f.id] = false; no.classList.add('on'); yes.classList.remove('on'); };
+      yn.appendChild(yes); yn.appendChild(no); q.appendChild(yn);
+    } else if (f.type === 'textarea') {
+      var ta = el('textarea'); ta.placeholder = 'Type here…'; ta.oninput = function () { answers[f.id] = ta.value; }; q.appendChild(ta);
+    } else if (f.type === 'number' || f.type === 'rating') {
+      var row = el('div', 'rating-row');
+      var num = el('input'); num.type = 'number'; if (f.type === 'rating') { num.min = 1; num.max = 5; } num.oninput = function () { answers[f.id] = num.value; };
+      row.appendChild(num); q.appendChild(row);
+    } else if (f.type === 'select') {
+      var sel = el('select'); sel.appendChild(el('option', null, '')); sel.firstChild.value = '';
+      (f.options || []).forEach(function (o) { var op = el('option', null, o); op.value = o; sel.appendChild(op); });
+      sel.onchange = function () { answers[f.id] = sel.value; }; q.appendChild(sel);
+    } else if (f.type === 'date') {
+      var dt = el('input'); dt.type = 'date'; dt.oninput = function () { answers[f.id] = dt.value; }; q.appendChild(dt);
+    } else if (f.type === 'photos') {
+      photoFiles[f.id] = photoFiles[f.id] || [];
+      var photos = el('div', 'photos');
+      function drawPhotos() {
+        photos.innerHTML = '';
+        photoFiles[f.id].forEach(function (file, i) {
+          var t = el('div', 'thumb'); var im = el('img'); im.src = URL.createObjectURL(file); t.appendChild(im);
+          var x = el('button', null, '×'); x.type = 'button'; x.onclick = function () { photoFiles[f.id].splice(i, 1); drawPhotos(); };
+          t.appendChild(x); photos.appendChild(t);
+        });
+      }
+      q.appendChild(photos);
+      var btns = el('div', 'photo-btns');
+      function fileBtn(text, capture) {
+        var l = el('label', 'pbtn', text); var inp = el('input'); inp.type = 'file'; inp.accept = 'image/*';
+        if (capture) inp.setAttribute('capture', 'environment'); else inp.multiple = true;
+        inp.onchange = function (e) { photoFiles[f.id] = photoFiles[f.id].concat(Array.prototype.slice.call(e.target.files)); e.target.value = ''; drawPhotos(); };
+        l.appendChild(inp); return l;
+      }
+      btns.appendChild(fileBtn('📷 Take photo', true)); btns.appendChild(fileBtn('🖼 Choose photos', false));
+      q.appendChild(btns);
+    } else { // text
+      var inp2 = el('input'); inp2.type = 'text'; inp2.oninput = function () { answers[f.id] = inp2.value; }; q.appendChild(inp2);
+    }
+    return q;
+  }
+
+  function buildForm() {
+    if (TEMPLATE.title) document.getElementById('subtitle').textContent = TEMPLATE.title;
+    document.getElementById('intro').textContent = TEMPLATE.description || '';
+    document.getElementById('date').value = new Date().toISOString().slice(0, 10);
+
+    var propSel = document.getElementById('prop');
+    propSel.innerHTML = '<option value="">Select a property…</option>';
+    PROPS.forEach(function (p) { var o = el('option', null, p.name); o.value = p.id; propSel.appendChild(o); });
+    propSel.onchange = function () {
+      var p = PROPS.filter(function (x) { return x.id === propSel.value; })[0];
+      var unitSel = document.getElementById('unit');
+      unitSel.innerHTML = '<option value="">Select a unit…</option>';
+      (p ? p.units : []).forEach(function (u) { var o = el('option', null, u.name); o.value = u.id; unitSel.appendChild(o); });
+    };
+
+    var fieldsEl = document.getElementById('fields');
+    (TEMPLATE.fields || []).forEach(function (f) { fieldsEl.appendChild(renderField(f)); });
+  }
+
+  fetch('/public/forms/clean').then(function (r) { return r.json(); }).then(function (d) {
+    TEMPLATE = d.template || { fields: [] }; PROPS = d.properties || []; buildForm();
+  }).catch(function () { document.getElementById('intro').textContent = 'Could not load the form. Please check your connection and reload.'; });
+
+  function showErr(t) { var m = document.getElementById('msg'); m.className = 'msg err'; m.textContent = t; window.scrollTo(0, document.body.scrollHeight); }
+
+  document.getElementById('form').onsubmit = function (e) {
+    e.preventDefault();
+    document.getElementById('msg').textContent = '';
+    var cleaner = document.getElementById('cleaner').value.trim();
+    var unitId = document.getElementById('unit').value;
+    var date = document.getElementById('date').value;
+    if (!cleaner) return showErr('Please enter your name.');
+    if (!document.getElementById('prop').value) return showErr('Please choose the property.');
+    if (!unitId) return showErr('Please choose the unit.');
+    var missing = (TEMPLATE.fields || []).filter(function (f) {
+      if (!f.required) return false;
+      if (f.type === 'photos') return (photoFiles[f.id] || []).length === 0;
+      return answers[f.id] === undefined || answers[f.id] === '';
+    });
+    if (missing.length) return showErr('Please answer: "' + missing[0].label + '"');
+
+    var btn = document.getElementById('submit'); btn.disabled = true; btn.textContent = 'Sending…';
+    var body = { type: 'clean', unitId: unitId, submitterName: cleaner, answers: Object.assign({ date: date }, answers) };
+
+    fetch('/public/forms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res || !res.id) throw new Error('submit failed');
+        var jobs = [];
+        Object.keys(photoFiles).forEach(function (fid) {
+          (photoFiles[fid] || []).forEach(function (file) {
+            jobs.push(resize(file, 1600, 0.82).then(function (dataBase64) {
+              return fetch('/public/forms/' + res.id + '/photos', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fieldId: fid, dataBase64: dataBase64, contentType: 'image/jpeg', filename: file.name })
+              });
+            }));
+          });
+        });
+        return Promise.all(jobs);
+      })
+      .then(function () { document.getElementById('form').classList.add('hidden'); document.getElementById('done').classList.remove('hidden'); window.scrollTo(0, 0); })
+      .catch(function () { showErr('Sorry, something went wrong. Please try again.'); btn.disabled = false; btn.textContent = 'Submit clean report'; });
+  };
+</script>
+</body>
+</html>

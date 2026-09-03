@@ -175,12 +175,16 @@ function Submissions({ properties, labelById }) {
                     </div>
                   )}
 
-                  {leftover.length > 0 && (
-                    <div className="sub-photos">
-                      <div className="ans-label">Photos ({leftover.length})</div>
-                      <Gallery photos={leftover} />
-                    </div>
-                  )}
+                  {leftover.length > 0 && (() => {
+                    const groups = {};
+                    leftover.forEach((ph) => { const k = ph.fieldId || ''; (groups[k] = groups[k] || []).push(ph); });
+                    return Object.entries(groups).map(([fid, photos]) => (
+                      <div className="sub-photos" key={fid || 'photos'}>
+                        <div className="ans-label">{labelById[fid] || 'Photos'} ({photos.length})</div>
+                        <Gallery photos={photos} />
+                      </div>
+                    ));
+                  })()}
                 </>
               );
             })()}
