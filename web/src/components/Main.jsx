@@ -11,6 +11,7 @@ import InvoicesView from './InvoicesView.jsx';
 import RateCardMatrix from './RateCardMatrix.jsx';
 import ListingsView from './ListingsView.jsx';
 import BoardSearch from './BoardSearch.jsx';
+import FormsView from './FormsView.jsx';
 
 const WINDOW_DAYS = 35;
 
@@ -31,6 +32,7 @@ export default function Main() {
   const [groups, setGroups] = useState([]);
   const [pricingMatrix, setPricingMatrix] = useState(false);
   const [listings, setListings] = useState(false);
+  const [forms, setForms] = useState(false);
   const [focus, setFocus] = useState(null); // { unitId, bookingId, key } — jump target
   const [msg, setMsg] = useState('');
 
@@ -155,6 +157,9 @@ export default function Main() {
   if (listings) {
     return <ListingsView onClose={() => setListings(false)} />;
   }
+  if (forms) {
+    return <FormsView onClose={() => setForms(false)} properties={properties} />;
+  }
 
   return (
     <div className="app">
@@ -237,6 +242,7 @@ export default function Main() {
           onOpenInvoices={() => { setMenuOpen(false); setInvoices({ initialId: null }); }}
           onOpenPricing={() => { setMenuOpen(false); setPricingMatrix(true); }}
           onOpenListings={() => { setMenuOpen(false); setListings(true); }}
+          onOpenForms={() => { setMenuOpen(false); setForms(true); }}
           onReorderProperties={reorderProperties}
         />
       )}

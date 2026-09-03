@@ -23,6 +23,8 @@ model Host {
   invoices      Invoice[]
   pricingGroups PricingGroup[]
   bookings      Booking[]
+  formTemplates   FormTemplate[]
+  formSubmissions FormSubmission[]
 }
 
 // The host's own "invoice from" details + bank info (one per host, editable).
@@ -100,6 +102,7 @@ model Property {
   createdAt   DateTime @default(now())
   units       Unit[]
   photos      Photo[]
+  formSubmissions FormSubmission[]
 
   @@index([hostId])
 }
@@ -150,6 +153,7 @@ model Unit {
   channels       ChannelConnection[]
   syncLogs       SyncLog[]
   photos         Photo[]
+  formSubmissions FormSubmission[]
   pricingGroupId String?
   pricingGroup   PricingGroup?       @relation(fields: [pricingGroupId], references: [id], onDelete: SetNull)
 
@@ -164,6 +168,10 @@ model Photo {
   property    Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   unitId      String?
   unit        Unit?     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  // A photo can instead belong to a form submission (guest/cleaner uploads).
+  formSubmissionId String?
+  formSubmission   FormSubmission? @relation(fields: [formSubmissionId], references: [id], onDelete: Cascade)
+  fieldId     String? // which form question this photo answers
   data        Bytes // resized JPEG/PNG bytes
   contentType String
   filename    String?
@@ -172,6 +180,48 @@ model Photo {
 
   @@index([propertyId])
   @@index([unitId])
+  @@index([formSubmissionId])
+}
+
+// An editable form definition (the questions). The host designs these in the
+// admin; the public forms site renders whatever is defined here.
+model FormTemplate {
+  id          String   @id @default(uuid())
+  hostId      String
+  host        Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  type        String // 'damage' (guest issue report) | 'clean' (cleaner checkout report)
+  title       String
+  description String?
+  // ordered questions: [{ id, label, type, required, options?, help? }]
+  // type ∈ text | textarea | number | money | select | checkbox | date | rating | photos
+  fields      Json     @default("[]")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([hostId, type])
+}
+
+// A completed form (guest damage report or cleaner checkout report) + its photos.
+model FormSubmission {
+  id               String    @id @default(uuid())
+  hostId           String
+  host             Host      @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  type             String // 'damage' | 'clean'
+  templateId       String?
+  propertyId       String?
+  property         Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  unitId           String?
+  unit             Unit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  submitterName    String?
+  submitterContact String?
+  answers          Json      @default("{}") // { fieldId: value }
+  status           String    @default("new") // new | reviewed | resolved
+  photos           Photo[]
+  createdAt        DateTime  @default(now())
+
+  @@index([hostId, type, createdAt])
+  @@index([propertyId])
 }
 
 model ChannelConnection {

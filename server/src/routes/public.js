@@ -228,4 +228,86 @@ router.post('/book/:id/pay', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ---- Public forms (guest damage reports + cleaner checkout reports) ----
+
+// GET /public/forms/:type — the active form definition + properties/units picker.
+router.get('/forms/:type', async (req, res, next) => {
+  try {
+    const hostId = await publicHostId();
+    if (!hostId) return res.status(404).json({ error: 'not_available' });
+    const type = req.params.type;
+    const { defaultTemplate, TYPES } = require('../utils/formDefaults');
+    if (!TYPES.includes(type)) return res.status(404).json({ error: 'not_found' });
+    let template = await prisma.formTemplate.findFirst({ where: { hostId, type, active: true } });
+    if (!template) template = { ...defaultTemplate(type), id: null };
+    const properties = await prisma.property.findMany({
+      where: { hostId }, orderBy: { sortOrder: 'asc' },
+      select: { id: true, name: true, units: { select: { id: true, name: true }, orderBy: { createdAt: 'asc' } } },
+    });
+    res.json({
+      template: { id: template.id, type: template.type, title: template.title, description: template.description, fields: template.fields },
+      properties,
+    });
+  } catch (e) { next(e); }
+});
+
+// POST /public/forms — create a submission (answers only). Photos are uploaded
+// one at a time afterwards, so no single request is huge.
+router.post('/forms', async (req, res, next) => {
+  try {
+    const hostId = await publicHostId();
+    if (!hostId) return res.status(404).json({ error: 'not_available' });
+    const b = req.body || {};
+    const { TYPES } = require('../utils/formDefaults');
+    if (!TYPES.includes(b.type)) return res.status(400).json({ error: 'invalid_type' });
+
+    let propertyId = null, unitId = null;
+    if (b.unitId) {
+      const unit = await prisma.unit.findFirst({ where: { id: b.unitId, property: { hostId } }, select: { id: true, propertyId: true } });
+      if (unit) { unitId = unit.id; propertyId = unit.propertyId; }
+    } else if (b.propertyId) {
+      const p = await prisma.property.findFirst({ where: { id: b.propertyId, hostId }, select: { id: true } });
+      if (p) propertyId = p.id;
+    }
+
+    const submission = await prisma.formSubmission.create({
+      data: {
+        hostId, type: b.type, templateId: b.templateId || null,
+        propertyId, unitId,
+        submitterName: b.submitterName || null, submitterContact: b.submitterContact || null,
+        answers: b.answers && typeof b.answers === 'object' ? b.answers : {},
+        status: 'new',
+      },
+    });
+    res.status(201).json({ ok: true, id: submission.id });
+  } catch (e) { next(e); }
+});
+
+// POST /public/forms/:id/photos — attach one photo (base64) to a submission.
+router.post('/forms/:id/photos', async (req, res, next) => {
+  try {
+    const hostId = await publicHostId();
+    if (!hostId) return res.status(404).json({ error: 'not_available' });
+    const sub = await prisma.formSubmission.findFirst({ where: { id: req.params.id, hostId }, select: { id: true } });
+    if (!sub) return res.status(404).json({ error: 'not_found' });
+    const img = decodeFormPhoto(req.body);
+    if (!img) return res.status(400).json({ error: 'no_image' });
+    const photo = await prisma.photo.create({
+      data: { formSubmissionId: sub.id, fieldId: req.body.fieldId || null, data: img.buffer, contentType: img.contentType, filename: req.body.filename || null },
+      select: { id: true },
+    });
+    res.status(201).json({ id: photo.id });
+  } catch (e) { next(e); }
+});
+
+function decodeFormPhoto(body) {
+  let { dataBase64, contentType } = body || {};
+  if (!dataBase64) return null;
+  const m = /^data:([^;]+);base64,(.*)$/s.exec(dataBase64);
+  if (m) { contentType = contentType || m[1]; dataBase64 = m[2]; }
+  const buffer = Buffer.from(dataBase64, 'base64');
+  if (!buffer.length) return null;
+  return { buffer, contentType: contentType || 'image/jpeg' };
+}
+
 module.exports = router;

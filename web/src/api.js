@@ -89,6 +89,14 @@ export const api = {
   setPhotoSort: (id, sort) => req('PATCH', `/photos/${id}`, { sort }),
   deletePhoto: (id) => req('DELETE', `/photos/${id}`),
 
+  // forms (admin): design templates + review submissions
+  listFormTemplates: () => req('GET', '/forms/templates'),
+  saveFormTemplate: (type, data) => req('PUT', `/forms/templates/${type}`, data),
+  listFormSubmissions: (qs = '') => req('GET', `/forms/submissions${qs}`),
+  getFormSubmission: (id) => req('GET', `/forms/submissions/${id}`),
+  updateFormSubmission: (id, data) => req('PATCH', `/forms/submissions/${id}`, data),
+  deleteFormSubmission: (id) => req('DELETE', `/forms/submissions/${id}`),
+
   // bookings
   availability: (unitId, checkIn, checkOut) =>
     req('GET', `/units/${unitId}/availability?checkIn=${checkIn}&checkOut=${checkOut}`),

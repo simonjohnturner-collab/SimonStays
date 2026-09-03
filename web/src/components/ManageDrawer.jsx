@@ -6,7 +6,7 @@ export default function ManageDrawer({
   properties, bookingsByUnit, onClose,
   onAddProperty, onRenameProperty, onDeleteProperty,
   onAddUnit, onDeleteUnit, onOpenUnit, onOpenPricing,
-  onAddBooking, onAddFloating, onEditBooking, onOpenInvoices, onOpenListings,
+  onAddBooking, onAddFloating, onEditBooking, onOpenInvoices, onOpenListings, onOpenForms,
   onReorderProperties,
   groups = [], onAssignGroup, onCreateGroup,
 }) {
@@ -50,6 +50,7 @@ export default function ManageDrawer({
             <button className="wide menu-item" onClick={() => setView('property')}>🏠 Add or edit a property</button>
             <button className="wide menu-item" onClick={() => setView('booking')}>📅 Add or edit a booking</button>
             <button className="wide menu-item" onClick={onOpenListings}>🖼️ Listings (descriptions &amp; photos)</button>
+            <button className="wide menu-item" onClick={onOpenForms}>📋 Forms (issues &amp; clean reports)</button>
             <button className="wide menu-item" onClick={onOpenPricing}>💲 Pricing sheet</button>
             <button className="wide menu-item" onClick={onOpenInvoices}>🧾 Invoicing</button>
           </div>

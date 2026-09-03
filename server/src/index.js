@@ -28,6 +28,7 @@ app.use('/auth', require('./routes/auth'));
 app.use('/email', require('./routes/email'));
 app.use('/biller', require('./routes/biller'));
 app.use('/invoices', require('./routes/invoices'));
+app.use('/forms', require('./routes/forms'));
 app.use('/groups', require('./routes/groups'));
 app.use('/properties', require('./routes/properties'));
 app.use('/units', require('./routes/units'));

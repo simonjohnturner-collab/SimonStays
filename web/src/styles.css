@@ -386,3 +386,53 @@ td.cell.stay.has-today { box-shadow: inset 0 0 0 2px #9fc5e8, inset 0 4px 0 #e0a
 /* Flash the row you jumped to (inset box-shadow so cell colours stay intact) */
 @keyframes rowflash { 0%, 100% { box-shadow: inset 0 0 0 0 rgba(224,161,0,0); } 25%, 60% { box-shadow: inset 0 0 0 3px #e0a100; } }
 tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
+
+/* ---- Forms tab (issues & clean reports) ---- */
+.forms-tabs { display: flex; gap: 4px; margin-left: 14px; }
+.forms-tabs button { background: rgba(255,255,255,.14); color: #fff; padding: 6px 12px; font-size: 13px; }
+.forms-tabs button.active { background: #fff; color: var(--green-d); font-weight: 600; }
+.forms-wrap { flex: 1; min-height: 0; display: flex; }
+.forms-cols { display: flex; flex: 1; min-height: 0; width: 100%; }
+.forms-list { width: 300px; border-right: 1px solid var(--line); background: #fff; overflow: auto; padding: 10px; }
+.forms-filters { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; position: sticky; top: -10px; background: #fff; padding-top: 4px; z-index: 1; }
+.forms-filters select, .forms-filters input { font-size: 13px; padding: 6px 8px; }
+.forms-item { display: block; width: 100%; text-align: left; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; }
+.forms-item:hover { background: #f3f6f9; }
+.forms-item.active { border-color: var(--green); background: #eafaf0; }
+.fi-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+.fi-mid { font-size: 13px; font-weight: 600; }
+.fi-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.ftag { display: inline-block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; padding: 2px 7px; border-radius: 5px; }
+.ftag.damage { background: #fdeaea; color: #b02020; }
+.ftag.clean { background: #e6f2ea; color: var(--green-d); }
+.fstatus { font-size: 10.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); font-weight: 600; }
+.fstatus.new { color: #b8860b; } .fstatus.resolved { color: var(--green); }
+.forms-detail { flex: 1; min-width: 0; overflow: auto; padding: 18px; }
+.sub-card { max-width: 720px; margin: 0 auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+.sub-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 12px; }
+.sub-head h3 { margin: 6px 0 2px; font-size: 17px; }
+.sub-actions { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.chip { background: #eef1f4; color: var(--muted); padding: 4px 10px; font-size: 12px; text-transform: capitalize; }
+.chip.on { background: var(--green); color: #fff; }
+.ans-row { display: grid; grid-template-columns: 200px 1fr; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f0f2f5; }
+.ans-label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.ans-val { font-size: 14px; white-space: pre-wrap; }
+.sub-photos { margin-top: 14px; }
+.sub-photo-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.sub-photo-grid img { width: 130px; height: 98px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+
+/* Form builder */
+.design-wrap { flex: 1; overflow: auto; padding: 18px; display: flex; flex-direction: column; gap: 18px; max-width: 780px; margin: 0 auto; width: 100%; }
+.builder-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.builder-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.bl { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 2px; }
+.bl input, .bl textarea { margin-top: 3px; }
+.builder-fields { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.bfield { border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: #fafbfc; }
+.bfield-row { display: flex; gap: 8px; align-items: center; }
+.bfield-label { flex: 1; }
+.bfield-row select { width: 130px; flex: none; }
+.req { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.req input { width: auto; }
+.bfield-move { display: flex; gap: 2px; }
+.bfield-opts { margin-top: 6px; font-size: 13px; }
