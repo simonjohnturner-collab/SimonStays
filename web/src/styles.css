@@ -447,3 +447,20 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .img-lightbox img { max-width:96vw; max-height:92vh; border-radius:8px; box-shadow:0 10px 40px rgba(0,0,0,.5); cursor:default; }
 .img-lightbox-close { position:fixed; top:14px; right:18px; width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,.16); color:#fff; font-size:26px; line-height:1; border:0; cursor:pointer; }
 .img-lightbox-close:hover { background:rgba(255,255,255,.32); }
+
+/* Form-alerts bell (top bar) */
+.notif { position:relative; }
+.notif-bell { position:relative; font-size:16px; padding:6px 8px; }
+.notif-badge { position:absolute; top:-2px; right:-2px; background:var(--red); color:#fff; font-size:10px; font-weight:700; min-width:16px; height:16px; line-height:16px; text-align:center; border-radius:8px; padding:0 3px; }
+.notif-panel { position:absolute; top:calc(100% + 6px); right:0; width:330px; max-width:90vw; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 34px rgba(0,0,0,.18); z-index:40; overflow:hidden; }
+.notif-head { padding:10px 12px; font-weight:700; font-size:13px; border-bottom:1px solid var(--line); }
+.notif-empty { padding:14px 12px; font-size:13px; color:var(--muted); line-height:1.4; }
+.notif-item { display:block; width:100%; text-align:left; background:#fff; color:var(--ink); border:0; border-bottom:1px solid #f0f2f5; padding:9px 12px; cursor:pointer; }
+.notif-item:hover { background:#f3f6f9; }
+.notif-item.unseen { background:#f0f9f3; }
+.notif-item.unseen:hover { background:#e6f5ec; }
+.ni-line { display:flex; align-items:center; gap:7px; font-size:13px; font-weight:600; }
+.ni-where { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ni-sub { display:block; font-size:11px; color:var(--muted); margin-top:2px; }
+.notif-all { display:block; width:100%; text-align:center; background:#fafbfc; color:var(--green-d); border:0; padding:10px; font-size:12px; font-weight:600; cursor:pointer; }
+.notif-all:hover { background:#eef6f0; }

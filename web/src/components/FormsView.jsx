@@ -8,7 +8,7 @@ const FIELD_TYPES = [
 const genId = () => 'f_' + Math.random().toString(36).slice(2, 9);
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString() : '');
 
-export default function FormsView({ onClose, properties = [] }) {
+export default function FormsView({ onClose, properties = [], initialSubmissionId = null }) {
   const [tab, setTab] = useState('submissions'); // 'submissions' | 'design'
   const [templates, setTemplates] = useState(null);
   const [msg, setMsg] = useState('');
@@ -40,7 +40,7 @@ export default function FormsView({ onClose, properties = [] }) {
 
       <div className="forms-wrap">
         {tab === 'submissions'
-          ? <Submissions properties={properties} labelById={labelById} />
+          ? <Submissions properties={properties} labelById={labelById} initialSubmissionId={initialSubmissionId} />
           : <Design templates={templates} onReload={loadTemplates} flash={flash} />}
       </div>
     </div>
@@ -48,7 +48,7 @@ export default function FormsView({ onClose, properties = [] }) {
 }
 
 /* ---------------- Submissions: search + review ---------------- */
-function Submissions({ properties, labelById }) {
+function Submissions({ properties, labelById, initialSubmissionId }) {
   const [type, setType] = useState('');
   const [propertyId, setPropertyId] = useState('');
   const [status, setStatus] = useState('');
@@ -75,6 +75,7 @@ function Submissions({ properties, labelById }) {
     setRows(r.submissions);
   }
   useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [type, propertyId, status, q]);
+  useEffect(() => { if (initialSubmissionId) open(initialSubmissionId); /* eslint-disable-next-line */ }, [initialSubmissionId]);
 
   async function open(id) { const r = await api.getFormSubmission(id); setSel(r.submission); }
   async function setStatusOf(id, s) { await api.updateFormSubmission(id, { status: s }); setSel((x) => (x && x.id === id ? { ...x, status: s } : x)); load(); }

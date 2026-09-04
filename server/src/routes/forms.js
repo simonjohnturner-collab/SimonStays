@@ -62,7 +62,7 @@ router.get('/submissions', async (req, res) => {
       unit: { select: { name: true } },
       _count: { select: { photos: true } },
     },
-    take: 300,
+    take: Math.min(Number(req.query.limit) || 300, 300),
   });
   res.json({ submissions: subs.map(fmtSub) });
 });

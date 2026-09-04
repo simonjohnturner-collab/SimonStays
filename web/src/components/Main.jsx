@@ -12,6 +12,7 @@ import RateCardMatrix from './RateCardMatrix.jsx';
 import ListingsView from './ListingsView.jsx';
 import BoardSearch from './BoardSearch.jsx';
 import FormsView from './FormsView.jsx';
+import NotificationsBell from './NotificationsBell.jsx';
 
 const WINDOW_DAYS = 35;
 
@@ -33,7 +34,9 @@ export default function Main() {
   const [pricingMatrix, setPricingMatrix] = useState(false);
   const [listings, setListings] = useState(false);
   const [forms, setForms] = useState(false);
+  const [formsInitialId, setFormsInitialId] = useState(null); // open Forms straight to this submission
   const [focus, setFocus] = useState(null); // { unitId, bookingId, key } — jump target
+  function openFormsSubmission(id) { setFormsInitialId(id || null); setForms(true); }
   const [msg, setMsg] = useState('');
 
   const from = ymd(start);
@@ -158,7 +161,7 @@ export default function Main() {
     return <ListingsView onClose={() => setListings(false)} />;
   }
   if (forms) {
-    return <FormsView onClose={() => setForms(false)} properties={properties} />;
+    return <FormsView onClose={() => { setForms(false); setFormsInitialId(null); }} properties={properties} initialSubmissionId={formsInitialId} />;
   }
 
   return (
@@ -174,6 +177,7 @@ export default function Main() {
         <button className="ghost" onClick={syncAll} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync channels'}</button>
         <button className="ghost" onClick={() => setListings(true)}>🏠 Listings</button>
         <button className="ghost" onClick={() => setEmailOpen(true)}>✉ Guest name</button>
+        <NotificationsBell onOpen={openFormsSubmission} />
         <span className="host">{host.email}</span>
         <button className="ghost" onClick={logout}>Log out</button>
       </header>
