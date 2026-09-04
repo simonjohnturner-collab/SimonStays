@@ -13,6 +13,9 @@ export function getToken() { return token; }
 // Public URL for a stored photo's bytes (usable directly in <img src>).
 export function photoUrl(id) { return `${BASE}/photos/${id}`; }
 
+// Public, shareable URL of a form guests/cleaners fill in.
+export function formLink(type) { return `${BASE}/${type === 'clean' ? 'clean' : 'report'}`; }
+
 async function req(method, path, body) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;

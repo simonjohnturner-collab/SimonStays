@@ -1,5 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, photoUrl } from '../api.js';
+import { api, photoUrl, formLink } from '../api.js';
+
+// Bar with the public, shareable links guests/cleaners use to FILL IN a form.
+function FormLinks() {
+  const [copied, setCopied] = useState('');
+  function copy(type) {
+    const url = formLink(type);
+    (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject())
+      .catch(() => { const t = document.createElement('textarea'); t.value = url; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); });
+    setCopied(type); setTimeout(() => setCopied(''), 1500);
+  }
+  return (
+    <div className="forms-links">
+      <span className="fl-label">Send these links to fill in a form:</span>
+      <span className="fl-group">
+        <a className="fl-btn damage" href={formLink('damage')} target="_blank" rel="noreferrer">⚠️ Damage report ↗</a>
+        <button className="fl-copy" onClick={() => copy('damage')}>{copied === 'damage' ? 'Copied ✓' : 'Copy link'}</button>
+      </span>
+      <span className="fl-group">
+        <a className="fl-btn clean" href={formLink('clean')} target="_blank" rel="noreferrer">🧹 Cleaner report ↗</a>
+        <button className="fl-copy" onClick={() => copy('clean')}>{copied === 'clean' ? 'Copied ✓' : 'Copy link'}</button>
+      </span>
+    </div>
+  );
+}
 
 const FIELD_TYPES = [
   ['text', 'Short text'], ['textarea', 'Long text'], ['number', 'Number'], ['money', 'Money (R)'],
@@ -37,6 +61,8 @@ export default function FormsView({ onClose, properties = [], initialSubmissionI
         {msg && <span className="small" style={{ marginRight: 8 }}>{msg}</span>}
         <button className="ghost" onClick={onClose}>🏠 Home</button>
       </header>
+
+      <FormLinks />
 
       <div className="forms-wrap">
         {tab === 'submissions'
