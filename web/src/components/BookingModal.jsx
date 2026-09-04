@@ -13,6 +13,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   const [cleaner, setCleaner] = useState(booking?.cleaner || '');
   const [comments, setComments] = useState(booking?.comments || '');
   const [allocateUnitId, setAllocateUnitId] = useState('');
+  const [moveUnitId, setMoveUnitId] = useState(booking?.unitId || ''); // reassign an allocated booking to another unit
   const [groupId, setGroupId] = useState(booking?.pricingGroupId || '');
 
   // Payment: paid / partial / unpaid
@@ -76,7 +77,9 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
     setBusy(true); setMsg(null); setConflicts(null);
     try {
       if (editing) {
-        const extra = allocateUnitId ? { unitId: allocateUnitId } : {};
+        const extra = {};
+        if (isFloating) { if (allocateUnitId) extra.unitId = allocateUnitId; }
+        else if (moveUnitId && moveUnitId !== booking.unitId) extra.unitId = moveUnitId; // moved to another unit
         await api.updateBooking(booking.id, payload(extra));
       } else if (isFloating) {
         await api.createFloating(payload());
@@ -141,6 +144,14 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
         )}
 
         <label>Guest<input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Guest name" /></label>
+
+        {editing && !isFloating && booking.source === 'manual' && units.length > 0 && (
+          <label>Move to a different unit <span className="muted small">(reassigns this booking &amp; blocks the new unit)</span>
+            <select value={moveUnitId} onChange={(e) => setMoveUnitId(e.target.value)}>
+              {units.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+            </select>
+          </label>
+        )}
 
         {isFloating && (
           <>
