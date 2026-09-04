@@ -93,8 +93,11 @@ export const api = {
   deletePhoto: (id) => req('DELETE', `/photos/${id}`),
 
   // forms (admin): design templates + review submissions
-  listFormTemplates: () => req('GET', '/forms/templates'),
-  saveFormTemplate: (type, data) => req('PUT', `/forms/templates/${type}`, data),
+  listFormTemplates: () => req('GET', '/forms/templates'), // { damage, cleanForms }
+  saveDamageForm: (data) => req('PUT', '/forms/templates/damage', data),
+  createCleanForm: (data) => req('POST', '/forms/clean-forms', data),
+  updateCleanForm: (id, data) => req('PUT', `/forms/clean-forms/${id}`, data),
+  deleteCleanForm: (id) => req('DELETE', `/forms/clean-forms/${id}`),
   listFormSubmissions: (qs = '') => req('GET', `/forms/submissions${qs}`),
   getFormSubmission: (id) => req('GET', `/forms/submissions/${id}`),
   updateFormSubmission: (id, data) => req('PATCH', `/forms/submissions/${id}`, data),

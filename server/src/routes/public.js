@@ -230,6 +230,41 @@ router.post('/book/:id/pay', async (req, res, next) => {
 
 // ---- Public forms (guest damage reports + cleaner checkout reports) ----
 
+// GET /public/forms/units — properties + units (with bed/bath) for the cleaner picker.
+router.get('/forms/units', async (req, res, next) => {
+  try {
+    const hostId = await publicHostId();
+    if (!hostId) return res.json({ properties: [] });
+    const properties = await prisma.property.findMany({
+      where: { hostId }, orderBy: { sortOrder: 'asc' },
+      select: { id: true, name: true, units: { select: { id: true, name: true, bedrooms: true, bathrooms: true }, orderBy: { createdAt: 'asc' } } },
+    });
+    res.json({ properties });
+  } catch (e) { next(e); }
+});
+
+// GET /public/forms/clean-for-unit/:unitId — the clean form that applies to this
+// unit (by the form's unitIds), plus the unit's bedroom/bathroom counts so the
+// page can repeat per-room questions.
+router.get('/forms/clean-for-unit/:unitId', async (req, res, next) => {
+  try {
+    const hostId = await publicHostId();
+    if (!hostId) return res.status(404).json({ error: 'not_available' });
+    const unit = await prisma.unit.findFirst({
+      where: { id: req.params.unitId, property: { hostId } },
+      select: { id: true, name: true, bedrooms: true, bathrooms: true },
+    });
+    if (!unit) return res.status(404).json({ error: 'not_found' });
+    const cleans = await prisma.formTemplate.findMany({ where: { hostId, type: 'clean', active: true } });
+    let tpl = cleans.find((t) => Array.isArray(t.unitIds) && t.unitIds.includes(unit.id)) || cleans[0];
+    if (!tpl) { const { defaultTemplate } = require('../utils/formDefaults'); tpl = { ...defaultTemplate('clean'), id: null, name: 'Checkout clean' }; }
+    res.json({
+      template: { id: tpl.id, name: tpl.name, title: tpl.title, description: tpl.description, fields: tpl.fields },
+      unit,
+    });
+  } catch (e) { next(e); }
+});
+
 // GET /public/forms/:type — the active form definition + properties/units picker.
 router.get('/forms/:type', async (req, res, next) => {
   try {

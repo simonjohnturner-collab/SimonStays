@@ -146,6 +146,8 @@ model Unit {
   property     Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   name         String
   capacity     Int?
+  bedrooms     Int? // for form logic: repeat per-bedroom questions
+  bathrooms    Int? // for form logic: repeat per-bathroom questions
   description  String? // listing description (for the public booking site)
   publishToken String              @default(cuid()) // secret in the export-feed URL
   createdAt    DateTime            @default(now())
@@ -190,6 +192,8 @@ model FormTemplate {
   hostId      String
   host        Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
   type        String // 'damage' (guest issue report) | 'clean' (cleaner checkout report)
+  name        String   @default("Checkout clean") // label for clean forms (e.g. "Firenza", "Rosebank")
+  unitIds     Json     @default("[]") // clean forms: which unit ids this form applies to
   title       String
   description String?
   // ordered questions: [{ id, label, type, required, options?, help? }]

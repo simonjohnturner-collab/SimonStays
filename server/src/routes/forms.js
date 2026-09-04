@@ -1,46 +1,83 @@
-// Admin (auth) API for the Forms feature: design the form questions
-// (FormTemplate) and review/search the completed submissions.
+// Admin (auth) API for Forms: design the questions (one Damage form + any
+// number of Checkout-clean forms, each scoped to a set of units) and
+// review/search the completed submissions.
 const express = require('express');
 const prisma = require('../lib/prisma');
 const { authHost } = require('../middleware/auth');
-const { TYPES, defaultTemplate } = require('../utils/formDefaults');
+const { defaultTemplate } = require('../utils/formDefaults');
 
 const router = express.Router();
 router.use(authHost);
 
-// ---- Form design (templates) ----
+// ---- Form design ----
 
-// GET /forms/templates — the host's form definitions; a type with none yet comes
-// back as an (unsaved) default so the builder always has something to edit.
+// GET /forms/templates → the single Damage form + all Clean forms.
 router.get('/templates', async (req, res) => {
-  const existing = await prisma.formTemplate.findMany({ where: { hostId: req.hostId } });
-  const byType = Object.fromEntries(existing.map((t) => [t.type, t]));
-  const templates = TYPES.map((type) =>
-    byType[type] || { ...defaultTemplate(type), id: null, hostId: req.hostId, unsaved: true });
-  res.json({ templates });
+  const all = await prisma.formTemplate.findMany({ where: { hostId: req.hostId }, orderBy: { createdAt: 'asc' } });
+  const damage = all.find((t) => t.type === 'damage') || { ...defaultTemplate('damage'), id: null, name: 'Damage report', unitIds: [], hostId: req.hostId, unsaved: true };
+  const cleanForms = all.filter((t) => t.type === 'clean');
+  res.json({ damage, cleanForms });
 });
 
-// PUT /forms/templates/:type — create/replace the (host, type) definition.
-router.put('/templates/:type', async (req, res) => {
-  const type = req.params.type;
-  if (!TYPES.includes(type)) return res.status(400).json({ error: 'invalid_type' });
+// PUT /forms/templates/damage — upsert the single damage form.
+router.put('/templates/damage', async (req, res) => {
   const b = req.body || {};
   const data = {
-    title: b.title || defaultTemplate(type).title,
+    title: b.title || defaultTemplate('damage').title,
     description: b.description || null,
     fields: Array.isArray(b.fields) ? b.fields : [],
     active: b.active !== false,
   };
-  const existing = await prisma.formTemplate.findFirst({ where: { hostId: req.hostId, type } });
+  const existing = await prisma.formTemplate.findFirst({ where: { hostId: req.hostId, type: 'damage' } });
   const template = existing
     ? await prisma.formTemplate.update({ where: { id: existing.id }, data })
-    : await prisma.formTemplate.create({ data: { hostId: req.hostId, type, ...data } });
+    : await prisma.formTemplate.create({ data: { hostId: req.hostId, type: 'damage', name: 'Damage report', unitIds: [], ...data } });
   res.json({ template });
+});
+
+// POST /forms/clean-forms — create a checkout-clean form.
+router.post('/clean-forms', async (req, res) => {
+  const b = req.body || {};
+  const template = await prisma.formTemplate.create({
+    data: {
+      hostId: req.hostId, type: 'clean',
+      name: b.name || 'Checkout clean',
+      unitIds: Array.isArray(b.unitIds) ? b.unitIds : [],
+      title: b.title || 'Checkout clean report',
+      description: b.description || null,
+      fields: Array.isArray(b.fields) ? b.fields : [],
+      active: b.active !== false,
+    },
+  });
+  res.status(201).json({ template });
+});
+
+// PUT /forms/clean-forms/:id — update a checkout-clean form.
+router.put('/clean-forms/:id', async (req, res) => {
+  const existing = await prisma.formTemplate.findFirst({ where: { id: req.params.id, hostId: req.hostId, type: 'clean' } });
+  if (!existing) return res.status(404).json({ error: 'not_found' });
+  const b = req.body || {};
+  const data = {};
+  if ('name' in b) data.name = b.name || 'Checkout clean';
+  if ('unitIds' in b) data.unitIds = Array.isArray(b.unitIds) ? b.unitIds : [];
+  if ('title' in b) data.title = b.title || 'Checkout clean report';
+  if ('description' in b) data.description = b.description || null;
+  if ('fields' in b) data.fields = Array.isArray(b.fields) ? b.fields : [];
+  if ('active' in b) data.active = b.active !== false;
+  const template = await prisma.formTemplate.update({ where: { id: existing.id }, data });
+  res.json({ template });
+});
+
+// DELETE /forms/clean-forms/:id
+router.delete('/clean-forms/:id', async (req, res) => {
+  const existing = await prisma.formTemplate.findFirst({ where: { id: req.params.id, hostId: req.hostId, type: 'clean' }, select: { id: true } });
+  if (!existing) return res.status(404).json({ error: 'not_found' });
+  await prisma.formTemplate.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
 });
 
 // ---- Submissions (search + review) ----
 
-// GET /forms/submissions?type=&propertyId=&status=&q=
 router.get('/submissions', async (req, res) => {
   const { type, propertyId, status, q } = req.query;
   const where = { hostId: req.hostId };
@@ -57,17 +94,12 @@ router.get('/submissions', async (req, res) => {
   const subs = await prisma.formSubmission.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    include: {
-      property: { select: { name: true } },
-      unit: { select: { name: true } },
-      _count: { select: { photos: true } },
-    },
+    include: { property: { select: { name: true } }, unit: { select: { name: true } }, _count: { select: { photos: true } } },
     take: Math.min(Number(req.query.limit) || 300, 300),
   });
   res.json({ submissions: subs.map(fmtSub) });
 });
 
-// GET /forms/submissions/:id — full answers + photo ids
 router.get('/submissions/:id', async (req, res) => {
   const sub = await prisma.formSubmission.findFirst({
     where: { id: req.params.id, hostId: req.hostId },
@@ -81,7 +113,6 @@ router.get('/submissions/:id', async (req, res) => {
   res.json({ submission: { ...fmtSub(sub), answers: sub.answers, photos: sub.photos } });
 });
 
-// PATCH /forms/submissions/:id { status }  (new | reviewed | resolved)
 router.patch('/submissions/:id', async (req, res) => {
   const sub = await prisma.formSubmission.findFirst({ where: { id: req.params.id, hostId: req.hostId }, select: { id: true } });
   if (!sub) return res.status(404).json({ error: 'not_found' });
@@ -91,7 +122,6 @@ router.patch('/submissions/:id', async (req, res) => {
   res.json({ submission: { id: updated.id, status: updated.status } });
 });
 
-// DELETE /forms/submissions/:id
 router.delete('/submissions/:id', async (req, res) => {
   const sub = await prisma.formSubmission.findFirst({ where: { id: req.params.id, hostId: req.hostId }, select: { id: true } });
   if (!sub) return res.status(404).json({ error: 'not_found' });

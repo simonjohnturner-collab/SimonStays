@@ -34,19 +34,22 @@ const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString() : '');
 
 export default function FormsView({ onClose, properties = [], initialSubmissionId = null }) {
   const [tab, setTab] = useState('submissions'); // 'submissions' | 'design'
-  const [templates, setTemplates] = useState(null);
+  const [forms, setForms] = useState(null); // { damage, cleanForms:[...] }
   const [msg, setMsg] = useState('');
   const flash = (t) => { setMsg(t); setTimeout(() => setMsg(''), 1600); };
 
-  async function loadTemplates() { const r = await api.listFormTemplates(); setTemplates(r.templates); }
-  useEffect(() => { loadTemplates(); }, []);
+  async function loadForms() { const r = await api.listFormTemplates(); setForms(r); }
+  useEffect(() => { loadForms(); }, []);
 
-  // fieldId → label, across both templates, for rendering answers
+  // fieldId → label, across every form, for rendering answers
   const labelById = useMemo(() => {
     const m = {};
-    (templates || []).forEach((t) => (t.fields || []).forEach((f) => { m[f.id] = f.label; }));
+    if (forms) {
+      (forms.damage?.fields || []).forEach((f) => { m[f.id] = f.label; });
+      (forms.cleanForms || []).forEach((t) => (t.fields || []).forEach((f) => { m[f.id] = f.label; }));
+    }
     return m;
-  }, [templates]);
+  }, [forms]);
 
   return (
     <div className="invoices-view">
@@ -67,7 +70,7 @@ export default function FormsView({ onClose, properties = [], initialSubmissionI
       <div className="forms-wrap">
         {tab === 'submissions'
           ? <Submissions properties={properties} labelById={labelById} initialSubmissionId={initialSubmissionId} />
-          : <Design templates={templates} onReload={loadTemplates} flash={flash} />}
+          : <Design forms={forms} properties={properties} onReload={loadForms} flash={flash} />}
       </div>
     </div>
   );
@@ -184,7 +187,7 @@ function Submissions({ properties, labelById, initialSubmissionId }) {
                     {other.length === 0 && !issues && <p className="muted small">No answers.</p>}
                     {other.map(([fid, val]) => (
                       <div key={fid} className="ans-row">
-                        <div className="ans-label">{known[fid] || labelById[fid] || fid}</div>
+                        <div className="ans-label">{known[fid] || labelFor(fid, labelById)}</div>
                         <div className="ans-val">{formatAnswer(val)}</div>
                       </div>
                     ))}
@@ -207,7 +210,7 @@ function Submissions({ properties, labelById, initialSubmissionId }) {
                     leftover.forEach((ph) => { const k = ph.fieldId || ''; (groups[k] = groups[k] || []).push(ph); });
                     return Object.entries(groups).map(([fid, photos]) => (
                       <div className="sub-photos" key={fid || 'photos'}>
-                        <div className="ans-label">{labelById[fid] || 'Photos'} ({photos.length})</div>
+                        <div className="ans-label">{fid ? labelFor(fid, labelById) : 'Photos'} ({photos.length})</div>
                         <Gallery photos={photos} />
                       </div>
                     ));
@@ -236,43 +239,93 @@ function formatAnswer(v) {
   return String(v ?? '');
 }
 
+// Field labels for answers/photos, resolving repeated per-room ids ("id__2").
+function labelFor(fid, labelById = {}) {
+  const parts = String(fid).split('__');
+  const base = parts[0], idx = parts[1];
+  const lbl = labelById[fid] || labelById[base] || base;
+  return idx ? `${lbl} · #${idx}` : lbl;
+}
+
 /* ---------------- Design: the form builder ---------------- */
-function Design({ templates, onReload, flash }) {
-  if (!templates) return <p className="muted small">Loading…</p>;
+function Design({ forms, properties, onReload, flash }) {
+  const [creating, setCreating] = useState(false);
+  if (!forms) return <p className="muted small">Loading…</p>;
+  async function addClean() {
+    setCreating(true);
+    try { await api.createCleanForm({ name: 'New clean form', unitIds: [], title: 'Checkout clean report', fields: [] }); onReload(); }
+    finally { setCreating(false); }
+  }
   return (
     <div className="design-wrap">
-      {templates.map((t) => <FormBuilder key={t.type} initial={t} onReload={onReload} flash={flash} />)}
+      <FormBuilder kind="damage" initial={forms.damage} properties={properties} onReload={onReload} flash={flash} />
+      <div className="clean-forms-head">Checkout clean forms <span className="muted small">— the cleaner gets the one matching the unit they pick</span></div>
+      {(forms.cleanForms || []).map((t) => (
+        <FormBuilder key={t.id} kind="clean" initial={t} properties={properties} onReload={onReload} flash={flash} />
+      ))}
+      <button className="wide secondary" disabled={creating} onClick={addClean}>＋ Add another clean form</button>
     </div>
   );
 }
 
-function FormBuilder({ initial, onReload, flash }) {
+function FormBuilder({ kind, initial, properties, onReload, flash }) {
+  const [name, setName] = useState(initial.name || '');
   const [title, setTitle] = useState(initial.title || '');
   const [description, setDescription] = useState(initial.description || '');
   const [fields, setFields] = useState(initial.fields || []);
+  const [unitIds, setUnitIds] = useState(Array.isArray(initial.unitIds) ? initial.unitIds : []);
   const [busy, setBusy] = useState(false);
+  const isClean = kind === 'clean';
 
   const setField = (i, patch) => setFields((fs) => fs.map((f, j) => (j === i ? { ...f, ...patch } : f)));
   const move = (i, d) => setFields((fs) => { const j = i + d; if (j < 0 || j >= fs.length) return fs; const c = [...fs]; [c[i], c[j]] = [c[j], c[i]]; return c; });
   const remove = (i) => setFields((fs) => fs.filter((_, j) => j !== i));
   const add = () => setFields((fs) => [...fs, { id: genId(), label: '', type: 'text', required: false }]);
+  const toggleUnit = (id) => setUnitIds((u) => (u.includes(id) ? u.filter((x) => x !== id) : [...u, id]));
 
   async function save() {
     setBusy(true);
     try {
-      await api.saveFormTemplate(initial.type, { title, description, fields, active: true });
+      if (!isClean) await api.saveDamageForm({ title, description, fields });
+      else if (initial.id) await api.updateCleanForm(initial.id, { name, unitIds, title, description, fields });
+      else await api.createCleanForm({ name, unitIds, title, description, fields });
       flash('Saved.'); onReload();
     } catch (e) { flash(e.message); } finally { setBusy(false); }
+  }
+  async function del() {
+    if (!window.confirm(`Delete the "${name}" clean form?`)) return;
+    try { await api.deleteCleanForm(initial.id); onReload(); } catch (e) { flash(e.message); }
   }
 
   return (
     <section className="builder-card">
       <div className="builder-head">
-        <span className={`ftag ${initial.type}`}>{initial.type === 'damage' ? 'Damage / issue (guests)' : 'Checkout clean (cleaners)'}</span>
-        <button className="ghost save" disabled={busy} onClick={save}>{busy ? 'Saving…' : '💾 Save form'}</button>
+        <span className={`ftag ${kind}`}>{isClean ? '🧹 Checkout clean' : '⚠️ Damage / issue (guests)'}</span>
+        <span className="bh-actions">
+          {isClean && initial.id && <button className="del" title="Delete this form" onClick={del}>🗑</button>}
+          <button className="ghost save" disabled={busy} onClick={save}>{busy ? 'Saving…' : '💾 Save'}</button>
+        </span>
       </div>
-      <label className="bl">Form title<input value={title} onChange={(e) => setTitle(e.target.value)} /></label>
+
+      {isClean && <label className="bl">Form name <span className="muted small">(for you)</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Rosebank" /></label>}
+      <label className="bl">Title shown to the person<input value={title} onChange={(e) => setTitle(e.target.value)} /></label>
       <label className="bl">Intro text<textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+
+      {isClean && (
+        <div className="assign-units">
+          <div className="bl" style={{ margin: '8px 0 4px' }}>Applies to these units</div>
+          <div className="unit-checks">
+            {properties.map((p) => p.units.length > 0 && (
+              <div key={p.id} className="uc-prop">
+                <div className="uc-prop-name">{p.name}</div>
+                {p.units.map((u) => (
+                  <label key={u.id} className="uc"><input type="checkbox" checked={unitIds.includes(u.id)} onChange={() => toggleUnit(u.id)} /> {u.name}</label>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="builder-fields">
         {fields.length === 0 && <p className="muted small">No questions yet — add one below.</p>}
@@ -283,7 +336,7 @@ function FormBuilder({ initial, onReload, flash }) {
               <select value={f.type} onChange={(e) => setField(i, { type: e.target.value })}>
                 {FIELD_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
-              <label className="req"><input type="checkbox" checked={!!f.required} onChange={(e) => setField(i, { required: e.target.checked })} /> Required</label>
+              <label className="req"><input type="checkbox" checked={!!f.required} onChange={(e) => setField(i, { required: e.target.checked })} /> Req</label>
               <span className="bfield-move">
                 <button className="del" title="Up" disabled={i === 0} onClick={() => move(i, -1)}>▲</button>
                 <button className="del" title="Down" disabled={i === fields.length - 1} onClick={() => move(i, 1)}>▼</button>
@@ -291,9 +344,18 @@ function FormBuilder({ initial, onReload, flash }) {
               </span>
             </div>
             {f.type === 'select' && (
-              <input className="bfield-opts" placeholder="Choices, comma-separated (e.g. Minor, Moderate, Urgent)"
+              <input className="bfield-opts" placeholder="Choices, comma-separated (e.g. EFT, eWallet)"
                 value={(f.options || []).join(', ')}
                 onChange={(e) => setField(i, { options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} />
+            )}
+            {isClean && (
+              <label className="bfield-repeat">Ask
+                <select value={f.repeat || ''} onChange={(e) => setField(i, { repeat: e.target.value || undefined })}>
+                  <option value="">once</option>
+                  <option value="bedroom">per bedroom</option>
+                  <option value="bathroom">per bathroom</option>
+                </select>
+              </label>
             )}
           </div>
         ))}
