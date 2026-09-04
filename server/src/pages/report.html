@@ -142,8 +142,7 @@
         inp.onchange = function (e) { iss.files = iss.files.concat(Array.prototype.slice.call(e.target.files)); e.target.value = ''; renderIssues(); };
         lbl.appendChild(inp); return lbl;
       }
-      btns.appendChild(fileBtn('📷 Take photo', true));
-      btns.appendChild(fileBtn('🖼 Choose photos', false));
+      btns.appendChild(fileBtn('📷 Add photos', false)); // picker also offers "Take Photo"
       card.appendChild(btns);
 
       issuesEl.appendChild(card);

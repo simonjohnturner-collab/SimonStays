@@ -145,7 +145,7 @@
         inp.onchange = function (e) { photoFiles[f.id] = photoFiles[f.id].concat(Array.prototype.slice.call(e.target.files)); e.target.value = ''; drawPhotos(); };
         l.appendChild(inp); return l;
       }
-      btns.appendChild(fileBtn('📷 Take photo', true)); btns.appendChild(fileBtn('🖼 Choose photos', false));
+      btns.appendChild(fileBtn('📷 Add photos', false)); // picker also offers "Take Photo"
       q.appendChild(btns);
     } else { // text
       var inp2 = el('input'); inp2.type = 'text'; inp2.oninput = function () { answers[f.id] = inp2.value; }; q.appendChild(inp2);
