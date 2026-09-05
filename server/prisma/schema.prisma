@@ -98,6 +98,16 @@ model Property {
   name        String
   address     String?
   description String? // listing description (for the public booking site)
+  // ---- listing attributes (populated on the Listings page) ----
+  latitude     Float?  // map pin
+  longitude    Float?
+  security     String? // what security is available
+  checkInTime  String? // e.g. "14:00"
+  checkOutTime String? // e.g. "10:00"
+  backupPower  String? // e.g. "Yes — inverter runs lights & wifi"
+  backupWater  String? // e.g. "Yes — 2500L tank"
+  parkingBays  Int?    // number of bays
+  parkingNotes String? // where they are
   sortOrder   Int      @default(0) // manual order on the board (lower = higher up)
   createdAt   DateTime @default(now())
   units       Unit[]
@@ -148,6 +158,8 @@ model Unit {
   capacity     Int?
   bedrooms     Int? // for form logic: repeat per-bedroom questions
   bathrooms    Int? // for form logic: repeat per-bathroom questions
+  wifiName     String? // per-unit Wi-Fi network name
+  wifiPassword String? // per-unit Wi-Fi password
   description  String? // listing description (for the public booking site)
   publishToken String              @default(cuid()) // secret in the export-feed URL
   createdAt    DateTime            @default(now())
