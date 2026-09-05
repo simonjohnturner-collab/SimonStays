@@ -95,9 +95,6 @@ export default function ListingsView({ onClose }) {
       await api.saveProperty(p.id, {
         name: p.name, address: p.address || '', description: p.description || '',
         latitude: p.latitude ?? null, longitude: p.longitude ?? null,
-        security: p.security || '', access: p.access || '', checkInTime: p.checkInTime || '', checkOutTime: p.checkOutTime || '',
-        backupPower: p.backupPower || '', backupWater: p.backupWater || '',
-        parkingBays: p.parkingBays ?? null, parkingNotes: p.parkingNotes || '',
       });
       flash('Saved.');
     } catch (e) { setMsg(e.message); }
@@ -109,6 +106,10 @@ export default function ListingsView({ onClose }) {
         name: u.name, capacity: u.capacity, description: u.description || '',
         bedrooms: u.bedrooms ?? null, bathrooms: u.bathrooms ?? null,
         wifiName: u.wifiName || '', wifiPassword: u.wifiPassword || '',
+        checkInTime: u.checkInTime || '', checkOutTime: u.checkOutTime || '',
+        security: u.security || '', access: u.access || '',
+        backupPower: u.backupPower || '', backupWater: u.backupWater || '',
+        parkingBays: u.parkingBays ?? null, parkingNotes: u.parkingNotes || '',
       });
       flash('Saved.');
     } catch (e) { setMsg(e.message); }
@@ -194,24 +195,6 @@ export default function ListingsView({ onClose }) {
                     onDelete={(id) => deletePhoto('property', p.id, null, id)} />
 
                   <div className="attr-section">
-                    <div className="attr-head">Property details</div>
-                    <div className="attr-grid">
-                      <label className="attr">Check‑in time<input type="time" value={p.checkInTime || ''} onChange={(e) => editProp(p.id, { checkInTime: e.target.value })} /></label>
-                      <label className="attr">Check‑out time<input type="time" value={p.checkOutTime || ''} onChange={(e) => editProp(p.id, { checkOutTime: e.target.value })} /></label>
-                      <label className="attr wide">Security<input value={p.security || ''} placeholder="e.g. 24h guard, biometric access, CCTV" onChange={(e) => editProp(p.id, { security: e.target.value })} /></label>
-                      <label className="attr">Access to units
-                        <select value={p.access || ''} onChange={(e) => editProp(p.id, { access: e.target.value })}>
-                          <option value="">—</option>
-                          <option value="Stairs">Stairs</option>
-                          <option value="Lift">Lift</option>
-                          <option value="Stairs & lift">Stairs &amp; lift</option>
-                        </select>
-                      </label>
-                      <label className="attr">Backup power<input value={p.backupPower || ''} placeholder="e.g. Inverter runs lights & wifi" onChange={(e) => editProp(p.id, { backupPower: e.target.value })} /></label>
-                      <label className="attr">Backup water<input value={p.backupWater || ''} placeholder="e.g. 2500L tank" onChange={(e) => editProp(p.id, { backupWater: e.target.value })} /></label>
-                      <label className="attr">Parking bays<input type="number" min="0" value={p.parkingBays ?? ''} onChange={(e) => editProp(p.id, { parkingBays: e.target.value === '' ? null : Number(e.target.value) })} /></label>
-                      <label className="attr wide">Where is the parking?<input value={p.parkingNotes || ''} placeholder="e.g. Basement bays 12 & 13, gate code 4455" onChange={(e) => editProp(p.id, { parkingNotes: e.target.value })} /></label>
-                    </div>
                     <div className="attr-head">Location <span className="muted small">— click the map to drop a pin</span></div>
                     <MapPicker lat={p.latitude} lng={p.longitude} onPick={(la, ln) => editProp(p.id, { latitude: la, longitude: ln })} />
                     <div className="map-coords">
@@ -219,7 +202,7 @@ export default function ListingsView({ onClose }) {
                         ? <>📍 {p.latitude}, {p.longitude} <button className="mini" onClick={() => editProp(p.id, { latitude: null, longitude: null })}>Clear pin</button></>
                         : <span className="muted small">No pin dropped yet — click the map above.</span>}
                     </div>
-                    <button className="ghost save" style={{ marginTop: 10 }} onClick={() => saveProp(p)}>💾 Save property details</button>
+                    <button className="ghost save" style={{ marginTop: 10 }} onClick={() => saveProp(p)}>💾 Save location</button>
                   </div>
 
                   {p.units.length > 0 && <div className="units-label">Units</div>}
@@ -241,6 +224,22 @@ export default function ListingsView({ onClose }) {
                       <textarea className="listing-desc" placeholder="Unit description (optional — overrides/adds to the property description)…"
                         value={u.description || ''} onChange={(e) => editUnit(p.id, u.id, { description: e.target.value })} />
                       <div className="attr-grid">
+                        <label className="attr">Check‑in time<input type="time" value={u.checkInTime || ''} onChange={(e) => editUnit(p.id, u.id, { checkInTime: e.target.value })} /></label>
+                        <label className="attr">Check‑out time<input type="time" value={u.checkOutTime || ''} onChange={(e) => editUnit(p.id, u.id, { checkOutTime: e.target.value })} /></label>
+                        <label className="attr">Access
+                          <select value={u.access || ''} onChange={(e) => editUnit(p.id, u.id, { access: e.target.value })}>
+                            <option value="">—</option>
+                            <option value="Ground floor">Ground floor</option>
+                            <option value="Stairs">Stairs</option>
+                            <option value="Lift">Lift</option>
+                            <option value="Stairs & lift">Stairs &amp; lift</option>
+                          </select>
+                        </label>
+                        <label className="attr">Parking bays<input type="number" min="0" value={u.parkingBays ?? ''} onChange={(e) => editUnit(p.id, u.id, { parkingBays: e.target.value === '' ? null : Number(e.target.value) })} /></label>
+                        <label className="attr wide">Security<input value={u.security || ''} placeholder="e.g. 24h guard, biometric access, CCTV" onChange={(e) => editUnit(p.id, u.id, { security: e.target.value })} /></label>
+                        <label className="attr">Backup power<input value={u.backupPower || ''} placeholder="e.g. Inverter runs lights & wifi" onChange={(e) => editUnit(p.id, u.id, { backupPower: e.target.value })} /></label>
+                        <label className="attr">Backup water<input value={u.backupWater || ''} placeholder="e.g. 2500L tank" onChange={(e) => editUnit(p.id, u.id, { backupWater: e.target.value })} /></label>
+                        <label className="attr wide">Where is the parking?<input value={u.parkingNotes || ''} placeholder="e.g. Basement bays 12 & 13, gate code 4455" onChange={(e) => editUnit(p.id, u.id, { parkingNotes: e.target.value })} /></label>
                         <label className="attr">Wi‑Fi network<input value={u.wifiName || ''} placeholder="Network name" onChange={(e) => editUnit(p.id, u.id, { wifiName: e.target.value })} /></label>
                         <label className="attr">Wi‑Fi password<input value={u.wifiPassword || ''} placeholder="Password" onChange={(e) => editUnit(p.id, u.id, { wifiPassword: e.target.value })} /></label>
                       </div>

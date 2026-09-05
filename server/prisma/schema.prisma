@@ -162,6 +162,15 @@ model Unit {
   bathrooms    Int? // for form logic: repeat per-bathroom questions
   wifiName     String? // per-unit Wi-Fi network name
   wifiPassword String? // per-unit Wi-Fi password
+  // ---- per-unit listing attributes ----
+  checkInTime  String? @default("15:00")
+  checkOutTime String? @default("10:00")
+  security     String?
+  access       String? // Ground floor | Stairs | Lift | Stairs & lift
+  backupPower  String?
+  backupWater  String?
+  parkingBays  Int?
+  parkingNotes String?
   description  String? // listing description (for the public booking site)
   publishToken String              @default(cuid()) // secret in the export-feed URL
   createdAt    DateTime            @default(now())

@@ -36,6 +36,9 @@ router.patch('/:id', requireOwnedUnit, async (req, res) => {
   if ('bathrooms' in b) data.bathrooms = b.bathrooms === '' || b.bathrooms == null ? null : Number(b.bathrooms);
   if ('wifiName' in b) data.wifiName = b.wifiName === '' ? null : b.wifiName;
   if ('wifiPassword' in b) data.wifiPassword = b.wifiPassword === '' ? null : b.wifiPassword;
+  ['checkInTime', 'checkOutTime', 'security', 'access', 'backupPower', 'backupWater', 'parkingNotes']
+    .forEach((k) => { if (k in b) data[k] = b[k] === '' ? null : b[k]; });
+  if ('parkingBays' in b) data.parkingBays = (b.parkingBays === '' || b.parkingBays == null) ? null : Number(b.parkingBays);
   if ('pricingGroupId' in b) {
     if (b.pricingGroupId) {
       const g = await prisma.pricingGroup.findUnique({ where: { id: b.pricingGroupId } });
