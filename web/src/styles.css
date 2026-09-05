@@ -455,10 +455,13 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .notif-panel { position:absolute; top:calc(100% + 6px); right:0; width:330px; max-width:90vw; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 34px rgba(0,0,0,.18); z-index:40; overflow:hidden; }
 .notif-head { padding:10px 12px; font-weight:700; font-size:13px; border-bottom:1px solid var(--line); }
 .notif-empty { padding:14px 12px; font-size:13px; color:var(--muted); line-height:1.4; }
-.notif-item { display:block; width:100%; text-align:left; background:#fff; color:var(--ink); border:0; border-bottom:1px solid #f0f2f5; padding:9px 12px; cursor:pointer; }
-.notif-item:hover { background:#f3f6f9; }
+.notif-item { display:flex; align-items:stretch; background:#fff; border-bottom:1px solid #f0f2f5; }
 .notif-item.unseen { background:#f0f9f3; }
-.notif-item.unseen:hover { background:#e6f5ec; }
+.ni-main { flex:1; min-width:0; text-align:left; background:transparent; color:var(--ink); border:0; padding:9px 12px; cursor:pointer; }
+.ni-main:hover { background:#f3f6f9; }
+.notif-item.unseen .ni-main:hover { background:#e6f5ec; }
+.ni-dismiss { flex:none; width:38px; border:0; background:transparent; color:var(--muted); font-size:20px; line-height:1; cursor:pointer; }
+.ni-dismiss:hover { color:var(--red); background:#fdeaea; }
 .ni-line { display:flex; align-items:center; gap:7px; font-size:13px; font-weight:600; }
 .ni-where { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ni-sub { display:block; font-size:11px; color:var(--muted); margin-top:2px; }

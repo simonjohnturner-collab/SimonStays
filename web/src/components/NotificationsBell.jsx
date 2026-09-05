@@ -26,6 +26,11 @@ export default function NotificationsBell({ onOpen }) {
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
+  async function dismiss(id) {
+    setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: 'reviewed' } : x))); // optimistic
+    try { await api.updateFormSubmission(id, { status: 'reviewed' }); } catch { load(); }
+  }
+
   const newCount = items.filter((s) => s.status === 'new').length;
 
   return (
@@ -38,13 +43,16 @@ export default function NotificationsBell({ onOpen }) {
           <div className="notif-head">Form alerts{newCount > 0 ? <span className="muted small"> · {newCount} new</span> : ''}</div>
           {items.length === 0 && <div className="notif-empty">No submissions yet. Guests and cleaners can send them from the forms links.</div>}
           {items.map((s) => (
-            <button key={s.id} className={`notif-item ${s.status === 'new' ? 'unseen' : ''}`} onClick={() => { setOpen(false); onOpen(s.id); }}>
-              <span className="ni-line">
-                <span className={`ftag ${s.type}`}>{s.type === 'damage' ? 'Issue' : 'Clean'}</span>
-                <span className="ni-where">{s.propertyName ? `${s.propertyName}${s.unitName ? ' · ' + s.unitName : ''}` : 'No property'}</span>
-              </span>
-              <span className="ni-sub">{s.submitterName || '—'}{s.photoCount ? ` · 📷 ${s.photoCount}` : ''} · {rel(s.createdAt)}{s.status !== 'new' ? ` · ${s.status}` : ''}</span>
-            </button>
+            <div key={s.id} className={`notif-item ${s.status === 'new' ? 'unseen' : ''}`}>
+              <button className="ni-main" onClick={() => { setOpen(false); onOpen(s.id); }}>
+                <span className="ni-line">
+                  <span className={`ftag ${s.type}`}>{s.type === 'damage' ? 'Issue' : 'Clean'}</span>
+                  <span className="ni-where">{s.propertyName ? `${s.propertyName}${s.unitName ? ' · ' + s.unitName : ''}` : 'No property'}</span>
+                </span>
+                <span className="ni-sub">{s.submitterName || '—'}{s.photoCount ? ` · 📷 ${s.photoCount}` : ''} · {rel(s.createdAt)}{s.status !== 'new' ? ` · ${s.status}` : ''}</span>
+              </button>
+              {s.status === 'new' && <button className="ni-dismiss" title="Reviewed — clear this alert" onClick={() => dismiss(s.id)}>×</button>}
+            </div>
           ))}
           {items.length > 0 && <button className="notif-all" onClick={() => { setOpen(false); onOpen(null); }}>View all in Forms →</button>}
         </div>
