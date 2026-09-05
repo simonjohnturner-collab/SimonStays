@@ -92,6 +92,10 @@ export const api = {
   setPhotoSort: (id, sort) => req('PATCH', `/photos/${id}`, { sort }),
   deletePhoto: (id) => req('DELETE', `/photos/${id}`),
 
+  // cleaner names (for dropdowns)
+  listCleaners: () => req('GET', '/cleaners'),
+  saveCleaners: (cleaners) => req('PUT', '/cleaners', { cleaners }),
+
   // forms (admin): design templates + review submissions
   listFormTemplates: () => req('GET', '/forms/templates'), // { damage, cleanForms }
   saveDamageForm: (data) => req('PUT', '/forms/templates/damage', data),

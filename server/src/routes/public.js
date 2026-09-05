@@ -234,12 +234,15 @@ router.post('/book/:id/pay', async (req, res, next) => {
 router.get('/forms/units', async (req, res, next) => {
   try {
     const hostId = await publicHostId();
-    if (!hostId) return res.json({ properties: [] });
-    const properties = await prisma.property.findMany({
-      where: { hostId }, orderBy: { sortOrder: 'asc' },
-      select: { id: true, name: true, units: { select: { id: true, name: true, bedrooms: true, bathrooms: true }, orderBy: { createdAt: 'asc' } } },
-    });
-    res.json({ properties });
+    if (!hostId) return res.json({ properties: [], cleaners: [] });
+    const [properties, host] = await Promise.all([
+      prisma.property.findMany({
+        where: { hostId }, orderBy: { sortOrder: 'asc' },
+        select: { id: true, name: true, units: { select: { id: true, name: true, bedrooms: true, bathrooms: true }, orderBy: { createdAt: 'asc' } } },
+      }),
+      prisma.host.findUnique({ where: { id: hostId }, select: { cleaners: true } }),
+    ]);
+    res.json({ properties, cleaners: Array.isArray(host?.cleaners) ? host.cleaners : [] });
   } catch (e) { next(e); }
 });
 

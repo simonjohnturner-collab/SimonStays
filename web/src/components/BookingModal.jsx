@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { prettyDate } from '../dates.js';
 import { fmtR, centsToRand, randToCents } from '../money.js';
 
-export default function BookingModal({ unit, booking, floating, units = [], groups = [], onClose, onSaved, onInvoice }) {
+export default function BookingModal({ unit, booking, floating, units = [], groups = [], cleaners = [], onClose, onSaved, onInvoice }) {
   const editing = !!booking;
   const isFloating = floating || (editing && !booking.unitId);
 
@@ -195,7 +195,8 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
 
         <fieldset>
           <legend>Cleaning</legend>
-          <label>Checkout cleaner<input value={cleaner} onChange={(e) => setCleaner(e.target.value)} placeholder="Cleaner for the checkout clean" /></label>
+          <label>Checkout cleaner<input list="cleaner-names" value={cleaner} onChange={(e) => setCleaner(e.target.value)} placeholder="Choose or type a cleaner" /></label>
+          <datalist id="cleaner-names">{cleaners.map((c) => <option key={c} value={c} />)}</datalist>
           <div className="insta-head">
             <span>In-stay cleans</span>
             <button type="button" className="mini" onClick={addClean}>+ Add in-stay clean</button>
@@ -208,7 +209,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
                 <option value="prepaid">Paid for</option>
                 <option value="direct">Cleaner paid directly</option>
               </select>
-              <input value={c.cleaner} onChange={(e) => updateClean(i, 'cleaner', e.target.value)} placeholder="Cleaner" title="Cleaner" />
+              <input list="cleaner-names" value={c.cleaner} onChange={(e) => updateClean(i, 'cleaner', e.target.value)} placeholder="Cleaner" title="Cleaner" />
               <button type="button" className="del sm" onClick={() => removeClean(i)} title="Remove">×</button>
             </div>
           ))}

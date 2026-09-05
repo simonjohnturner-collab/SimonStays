@@ -13,6 +13,7 @@ import ListingsView from './ListingsView.jsx';
 import BoardSearch from './BoardSearch.jsx';
 import FormsView from './FormsView.jsx';
 import NotificationsBell from './NotificationsBell.jsx';
+import CleanersModal from './CleanersModal.jsx';
 
 const WINDOW_DAYS = 35;
 
@@ -31,6 +32,8 @@ export default function Main() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [invoices, setInvoices] = useState(null); // { initialId } when open
   const [groups, setGroups] = useState([]);
+  const [cleaners, setCleaners] = useState([]);
+  const [cleanersOpen, setCleanersOpen] = useState(false);
   const [pricingMatrix, setPricingMatrix] = useState(false);
   const [listings, setListings] = useState(false);
   const [forms, setForms] = useState(false);
@@ -55,9 +58,14 @@ export default function Main() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [r, g] = await Promise.all([api.listProperties(), api.listGroups().catch(() => ({ groups: [] }))]);
+      const [r, g, c] = await Promise.all([
+        api.listProperties(),
+        api.listGroups().catch(() => ({ groups: [] })),
+        api.listCleaners().catch(() => ({ cleaners: [] })),
+      ]);
       setProperties(r.properties);
       setGroups(g.groups || []);
+      setCleaners(c.cleaners || []);
       await loadBookings(r.properties);
     } finally { setLoading(false); }
   }, [loadBookings]);
@@ -216,6 +224,7 @@ export default function Main() {
           floating={bookingCtx.floating}
           units={properties.flatMap((p) => p.units.map((u) => ({ ...u, label: `${p.name} · ${u.name}` })))}
           groups={groups}
+          cleaners={cleaners}
           onClose={() => setBookingCtx(null)}
           onSaved={async () => { setBookingCtx(null); await loadBookings(properties); }}
           onInvoice={async (booking) => {
@@ -247,8 +256,13 @@ export default function Main() {
           onOpenPricing={() => { setMenuOpen(false); setPricingMatrix(true); }}
           onOpenListings={() => { setMenuOpen(false); setListings(true); }}
           onOpenForms={() => { setMenuOpen(false); setForms(true); }}
+          onOpenCleaners={() => { setMenuOpen(false); setCleanersOpen(true); }}
           onReorderProperties={reorderProperties}
         />
+      )}
+
+      {cleanersOpen && (
+        <CleanersModal cleaners={cleaners} onClose={() => setCleanersOpen(false)} onSaved={(list) => setCleaners(list)} />
       )}
 
       {emailOpen && (

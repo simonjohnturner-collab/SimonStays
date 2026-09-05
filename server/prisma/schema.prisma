@@ -16,6 +16,7 @@ model Host {
   email        String        @unique
   passwordHash String
   name         String?
+  cleaners     Json          @default("[]") // list of cleaner names for dropdowns
   createdAt    DateTime      @default(now())
   properties    Property[]
   guestLookups  GuestLookup[]

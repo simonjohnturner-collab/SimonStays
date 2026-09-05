@@ -54,7 +54,8 @@
   <div class="wrap">
     <form id="form">
       <div class="q"><label class="req" for="cleaner">Name of cleaner</label>
-        <input type="text" id="cleaner" placeholder="Your full name" required></div>
+        <select id="cleaner" required><option value="">Select your name…</option></select>
+        <input type="text" id="cleaner-other" placeholder="Type your name" style="display:none;margin-top:8px"></div>
 
       <div class="q"><label for="date">Date</label>
         <input type="date" id="date"></div>
@@ -160,6 +161,10 @@
 
   fetch('/public/forms/units').then(function (r) { return r.json(); }).then(function (d) {
     PROPS = d.properties || [];
+    var cSel = document.getElementById('cleaner');
+    (d.cleaners || []).forEach(function (n) { var o = el('option', null, n); o.value = n; cSel.appendChild(o); });
+    var other = el('option', null, 'Other (type name)'); other.value = '__other'; cSel.appendChild(other);
+    cSel.onchange = function () { document.getElementById('cleaner-other').style.display = this.value === '__other' ? 'block' : 'none'; };
     var propSel = document.getElementById('prop'); propSel.innerHTML = '<option value="">Select a property…</option>';
     PROPS.forEach(function (p) { var o = el('option', null, p.name); o.value = p.id; propSel.appendChild(o); });
     propSel.onchange = function () {
@@ -177,7 +182,8 @@
   document.getElementById('form').onsubmit = function (e) {
     e.preventDefault();
     document.getElementById('msg').textContent = '';
-    var cleaner = document.getElementById('cleaner').value.trim();
+    var cSel = document.getElementById('cleaner');
+    var cleaner = (cSel.value === '__other' ? document.getElementById('cleaner-other').value : cSel.value).trim();
     var unitId = document.getElementById('unit').value;
     if (!cleaner) return showErr('Please enter your name.');
     if (!document.getElementById('prop').value) return showErr('Please choose the property.');
