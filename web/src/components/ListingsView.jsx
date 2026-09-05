@@ -95,7 +95,7 @@ export default function ListingsView({ onClose }) {
       await api.saveProperty(p.id, {
         name: p.name, address: p.address || '', description: p.description || '',
         latitude: p.latitude ?? null, longitude: p.longitude ?? null,
-        security: p.security || '', checkInTime: p.checkInTime || '', checkOutTime: p.checkOutTime || '',
+        security: p.security || '', access: p.access || '', checkInTime: p.checkInTime || '', checkOutTime: p.checkOutTime || '',
         backupPower: p.backupPower || '', backupWater: p.backupWater || '',
         parkingBays: p.parkingBays ?? null, parkingNotes: p.parkingNotes || '',
       });
@@ -199,6 +199,14 @@ export default function ListingsView({ onClose }) {
                       <label className="attr">Check‑in time<input type="time" value={p.checkInTime || ''} onChange={(e) => editProp(p.id, { checkInTime: e.target.value })} /></label>
                       <label className="attr">Check‑out time<input type="time" value={p.checkOutTime || ''} onChange={(e) => editProp(p.id, { checkOutTime: e.target.value })} /></label>
                       <label className="attr wide">Security<input value={p.security || ''} placeholder="e.g. 24h guard, biometric access, CCTV" onChange={(e) => editProp(p.id, { security: e.target.value })} /></label>
+                      <label className="attr">Access to units
+                        <select value={p.access || ''} onChange={(e) => editProp(p.id, { access: e.target.value })}>
+                          <option value="">—</option>
+                          <option value="Stairs">Stairs</option>
+                          <option value="Lift">Lift</option>
+                          <option value="Stairs & lift">Stairs &amp; lift</option>
+                        </select>
+                      </label>
                       <label className="attr">Backup power<input value={p.backupPower || ''} placeholder="e.g. Inverter runs lights & wifi" onChange={(e) => editProp(p.id, { backupPower: e.target.value })} /></label>
                       <label className="attr">Backup water<input value={p.backupWater || ''} placeholder="e.g. 2500L tank" onChange={(e) => editProp(p.id, { backupWater: e.target.value })} /></label>
                       <label className="attr">Parking bays<input type="number" min="0" value={p.parkingBays ?? ''} onChange={(e) => editProp(p.id, { parkingBays: e.target.value === '' ? null : Number(e.target.value) })} /></label>

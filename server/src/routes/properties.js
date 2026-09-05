@@ -43,7 +43,7 @@ router.patch('/:id', requireOwnedProperty, async (req, res) => {
     address: b.address ?? req.property.address,
     description: b.description ?? req.property.description,
   };
-  ['security', 'checkInTime', 'checkOutTime', 'backupPower', 'backupWater', 'parkingNotes']
+  ['security', 'access', 'checkInTime', 'checkOutTime', 'backupPower', 'backupWater', 'parkingNotes']
     .forEach((k) => { if (k in b) data[k] = b[k] === '' ? null : b[k]; });
   ['latitude', 'longitude'].forEach((k) => { if (k in b) data[k] = (b[k] === '' || b[k] == null) ? null : Number(b[k]); });
   if ('parkingBays' in b) data.parkingBays = (b.parkingBays === '' || b.parkingBays == null) ? null : Number(b.parkingBays);

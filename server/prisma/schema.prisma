@@ -102,6 +102,7 @@ model Property {
   latitude     Float?  // map pin
   longitude    Float?
   security     String? // what security is available
+  access       String? // how you reach the units: Stairs | Lift | Stairs & lift
   checkInTime  String? // e.g. "14:00"
   checkOutTime String? // e.g. "10:00"
   backupPower  String? // e.g. "Yes — inverter runs lights & wifi"

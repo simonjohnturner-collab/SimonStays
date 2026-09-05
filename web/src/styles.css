@@ -499,3 +499,5 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .map-pick.map-off { display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:13px; background:#f4f6f4; }
 .map-coords { font-size:12px; color:var(--ink); margin-top:6px; display:flex; align-items:center; gap:8px; }
 .leaflet-container { font: inherit; }
+
+.attr select { margin-top:3px; font-size:13px; }
