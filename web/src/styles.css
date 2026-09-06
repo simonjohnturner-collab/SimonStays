@@ -508,3 +508,8 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 /* Cleaners list modal */
 .cleaner-list { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
 .cleaner-row { display:flex; justify-content:space-between; align-items:center; padding:6px 10px; border:1px solid var(--line); border-radius:8px; font-size:14px; }
+
+/* Home-screen banner when a form submission is awaiting review */
+.form-alert-banner { background:#fff7e6; color:#8a5a00; border-bottom:1px solid #f0d9a8; cursor:pointer; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.form-alert-banner:hover { background:#fdefd0; }
+.form-alert-banner .fab-cta { margin-left:auto; font-weight:700; color:var(--green-d); }

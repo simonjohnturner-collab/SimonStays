@@ -11,7 +11,7 @@ function rel(iso) {
 
 // A small "form alerts" bell: polls for recent damage/clean submissions and
 // shows a count of unhandled ("new") ones so the host can act quickly.
-export default function NotificationsBell({ onOpen }) {
+export default function NotificationsBell({ onOpen, onCount }) {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -20,6 +20,14 @@ export default function NotificationsBell({ onOpen }) {
     try { const r = await api.listFormSubmissions('?limit=20'); setItems(r.submissions || []); } catch { /* offline */ }
   }
   useEffect(() => { load(); const id = setInterval(load, 60000); return () => clearInterval(id); }, []);
+
+  // Report the unreviewed count + latest to the parent (for the board banner).
+  useEffect(() => {
+    if (!onCount) return;
+    const news = items.filter((s) => s.status === 'new');
+    onCount(news.length, news[0] || null);
+    // eslint-disable-next-line
+  }, [items]);
   useEffect(() => {
     const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', onDoc);
