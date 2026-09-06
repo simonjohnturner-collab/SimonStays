@@ -26,6 +26,7 @@ function FormLinks() {
 }
 
 const FIELD_TYPES = [
+  ['section', '— Section heading —'],
   ['text', 'Short text'], ['textarea', 'Long text'], ['number', 'Number'], ['money', 'Money (R)'],
   ['select', 'Choice list'], ['checkbox', 'Yes / no'], ['date', 'Date'], ['rating', 'Rating (1–5)'], ['photos', 'Photo upload'],
 ];

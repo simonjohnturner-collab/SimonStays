@@ -34,6 +34,14 @@
   .pbtn:hover { border-color:var(--green); color:var(--green); }
   .pbtn input { display:none; }
   .room-tag { display:inline-block; font-size:11px; font-weight:700; color:var(--green-d); background:#e6f2ea; padding:1px 7px; border-radius:5px; margin-right:6px; text-transform:uppercase; letter-spacing:.3px; }
+  .form-section { background:#fff; border:1px solid var(--line); border-radius:12px; margin-top:12px; overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .form-section > summary { list-style:none; cursor:pointer; padding:13px 16px; font-weight:700; font-size:15px; color:var(--green-d); background:#eef6f0; }
+  .form-section > summary::-webkit-details-marker { display:none; }
+  .form-section > summary::after { content:'\25be'; float:right; color:var(--muted); }
+  .form-section[open] > summary::after { content:'\25b4'; }
+  .section-body { padding:2px 14px 12px; }
+  .section-body .q { border:0; background:transparent; padding:12px 0; margin:0; border-bottom:1px solid #eef0ee; border-radius:0; }
+  .section-body .q:last-child { border-bottom:0; }
   .section-intro { color:var(--muted); font-size:13px; margin:2px 0 8px; }
   .submit { width:100%; margin-top:20px; padding:15px; background:var(--green); color:#fff; border:0; border-radius:12px; font-weight:700; font-size:16px; cursor:pointer; }
   .submit:disabled { opacity:.6; }
@@ -137,14 +145,21 @@
 
   function renderFields() {
     var host = document.getElementById('fields'); host.innerHTML = ''; answers = {}; photoFiles = {}; rendered = [];
+    var body = host; // fields go here until a 'section' starts a new expandable group
     (TEMPLATE.fields || []).forEach(function (f) {
+      if (f.type === 'section') {
+        var det = document.createElement('details'); det.className = 'form-section'; det.open = true;
+        var sum = document.createElement('summary'); sum.textContent = f.label || 'Section'; det.appendChild(sum);
+        var b = document.createElement('div'); b.className = 'section-body'; det.appendChild(b);
+        host.appendChild(det); body = b; return;
+      }
       var rep = f.repeat === 'bedroom' || f.repeat === 'bathroom' ? f.repeat : null;
-      if (!rep) { rendered.push(f); host.appendChild(renderField(f)); return; }
+      if (!rep) { rendered.push(f); body.appendChild(renderField(f)); return; }
       var count = Math.max(1, Number(rep === 'bedroom' ? UNIT.bedrooms : UNIT.bathrooms) || 1);
       for (var i = 1; i <= count; i++) {
         var inst = { id: f.id + '__' + i, label: f.label, type: f.type, required: f.required, options: f.options };
         if (count > 1) inst.roomTag = (rep === 'bedroom' ? 'Bedroom ' : 'Bathroom ') + i;
-        rendered.push(inst); host.appendChild(renderField(inst));
+        rendered.push(inst); body.appendChild(renderField(inst));
       }
     });
   }
