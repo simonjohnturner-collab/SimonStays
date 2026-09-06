@@ -39,7 +39,6 @@ export default function Main() {
   const [forms, setForms] = useState(false);
   const [formsInitialId, setFormsInitialId] = useState(null); // open Forms straight to this submission
   const [focus, setFocus] = useState(null); // { unitId, bookingId, key } — jump target
-  const [alertInfo, setAlertInfo] = useState({ count: 0, latest: null }); // form-submission banner
   function openFormsSubmission(id) { setFormsInitialId(id || null); setForms(true); }
   const [msg, setMsg] = useState('');
 
@@ -186,24 +185,12 @@ export default function Main() {
         <button className="ghost" onClick={syncAll} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync channels'}</button>
         <button className="ghost" onClick={() => setListings(true)}>🏠 Listings</button>
         <button className="ghost" onClick={() => setEmailOpen(true)}>✉ Guest name</button>
-        <NotificationsBell onOpen={openFormsSubmission} onCount={(count, latest) => setAlertInfo({ count, latest })} />
+        <NotificationsBell onOpen={openFormsSubmission} />
         <span className="host">{host.email}</span>
         <button className="ghost" onClick={logout}>Log out</button>
       </header>
 
       {msg && <div className="banner">{msg}</div>}
-
-      {alertInfo.count > 0 && (
-        <div className="banner form-alert-banner" onClick={() => openFormsSubmission(alertInfo.latest?.id || null)} title="Open in Forms">
-          🔔 <b>{alertInfo.count} form{alertInfo.count > 1 ? 's' : ''} awaiting review</b>
-          {alertInfo.latest && (
-            <> — latest: {alertInfo.latest.type === 'damage' ? 'guest issue' : 'clean report'}
-              {alertInfo.latest.propertyName ? ` at ${alertInfo.latest.propertyName}${alertInfo.latest.unitName ? ' · ' + alertInfo.latest.unitName : ''}` : ''}
-              {alertInfo.latest.submitterName ? ` by ${alertInfo.latest.submitterName}` : ''}</>
-          )}
-          <span className="fab-cta">Review →</span>
-        </div>
-      )}
 
       <div className="body">
         <main className="board-wrap">

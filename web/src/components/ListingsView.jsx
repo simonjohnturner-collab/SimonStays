@@ -108,6 +108,7 @@ export default function ListingsView({ onClose }) {
         wifiName: u.wifiName || '', wifiPassword: u.wifiPassword || '',
         checkInTime: u.checkInTime || '', checkOutTime: u.checkOutTime || '',
         security: u.security || '', access: u.access || '',
+        accessMethod: u.accessMethod || '', smartLockUrl: u.smartLockUrl || '',
         backupPower: u.backupPower || '', backupWater: u.backupWater || '',
         parkingBays: u.parkingBays ?? null, parkingNotes: u.parkingNotes || '',
       });
@@ -226,7 +227,7 @@ export default function ListingsView({ onClose }) {
                       <div className="attr-grid">
                         <label className="attr">Check‑in time<input type="time" value={u.checkInTime || ''} onChange={(e) => editUnit(p.id, u.id, { checkInTime: e.target.value })} /></label>
                         <label className="attr">Check‑out time<input type="time" value={u.checkOutTime || ''} onChange={(e) => editUnit(p.id, u.id, { checkOutTime: e.target.value })} /></label>
-                        <label className="attr">Access
+                        <label className="attr">Access (stairs/lift)
                           <select value={u.access || ''} onChange={(e) => editUnit(p.id, u.id, { access: e.target.value })}>
                             <option value="">—</option>
                             <option value="Ground floor">Ground floor</option>
@@ -235,6 +236,18 @@ export default function ListingsView({ onClose }) {
                             <option value="Stairs & lift">Stairs &amp; lift</option>
                           </select>
                         </label>
+                        <label className="attr">Access method (entry)
+                          <select value={u.accessMethod || ''} onChange={(e) => editUnit(p.id, u.id, { accessMethod: e.target.value })}>
+                            <option value="">—</option>
+                            <option value="Lockbox">Lockbox</option>
+                            <option value="Smart lock">Smart lock</option>
+                            <option value="Remote garage door control">Remote garage door control</option>
+                          </select>
+                        </label>
+                        {u.accessMethod === 'Smart lock' && (
+                          <label className="attr wide">Smart lock link <span className="muted small">(for check‑in/out config)</span>
+                            <input value={u.smartLockUrl || ''} placeholder="https://…" onChange={(e) => editUnit(p.id, u.id, { smartLockUrl: e.target.value })} /></label>
+                        )}
                         <label className="attr">Parking bays<input type="number" min="0" value={u.parkingBays ?? ''} onChange={(e) => editUnit(p.id, u.id, { parkingBays: e.target.value === '' ? null : Number(e.target.value) })} /></label>
                         <label className="attr wide">Security<input value={u.security || ''} placeholder="e.g. 24h guard, biometric access, CCTV" onChange={(e) => editUnit(p.id, u.id, { security: e.target.value })} /></label>
                         <label className="attr">Backup power<input value={u.backupPower || ''} placeholder="e.g. Inverter runs lights & wifi" onChange={(e) => editUnit(p.id, u.id, { backupPower: e.target.value })} /></label>

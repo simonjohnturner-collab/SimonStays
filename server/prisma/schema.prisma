@@ -167,6 +167,8 @@ model Unit {
   checkOutTime String? @default("10:00")
   security     String?
   access       String? // Ground floor | Stairs | Lift | Stairs & lift
+  accessMethod String? // how guests get in: Lockbox | Smart lock | Remote garage door control
+  smartLockUrl String? // link to the smart lock (to configure check-in/out later)
   backupPower  String?
   backupWater  String?
   parkingBays  Int?
