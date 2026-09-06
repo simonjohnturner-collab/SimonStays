@@ -85,18 +85,37 @@
   var issuesEl = document.getElementById('issues');
   var issues = []; // [{ id, files: [File] }]
 
-  function resize(file, maxDim, quality) {
-    return new Promise(function (resolve, reject) {
-      var img = new Image(); var url = URL.createObjectURL(file);
+  // Read the original file bytes as a data URL — the reliable fallback that
+  // works even in webviews (WhatsApp/Gmail in‑app browsers) where canvas is blocked.
+  function readRaw(file) {
+    return new Promise(function (resolve) {
+      var r = new FileReader();
+      r.onload = function () { resolve({ dataBase64: r.result, contentType: file.type || 'image/jpeg' }); };
+      r.onerror = function () { resolve(null); };
+      r.readAsDataURL(file);
+    });
+  }
+  // Try to shrink + re-encode to JPEG via canvas; fall back to the original bytes
+  // if the browser can't decode it (e.g. HEIC) or the canvas comes back empty
+  // (mobile memory limits / in‑app browsers). Never rejects — returns null only
+  // if even the raw read fails, so a photo is never silently dropped.
+  function prep(file, maxDim, quality) {
+    return new Promise(function (resolve) {
+      var done = false, img = new Image(), url = URL.createObjectURL(file);
+      var fallback = function () { if (done) return; done = true; try { URL.revokeObjectURL(url); } catch (e) {} readRaw(file).then(resolve); };
       img.onload = function () {
-        URL.revokeObjectURL(url);
-        var w = img.width, h = img.height;
-        if (Math.max(w, h) > maxDim) { var s = maxDim / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
-        var c = document.createElement('canvas'); c.width = w; c.height = h;
-        c.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(c.toDataURL('image/jpeg', quality));
+        try {
+          URL.revokeObjectURL(url);
+          var w = img.width, h = img.height; if (!w || !h) return fallback();
+          if (Math.max(w, h) > maxDim) { var s = maxDim / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
+          var c = document.createElement('canvas'); c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          var out = c.toDataURL('image/jpeg', quality);
+          if (!out || out.length < 100) return fallback();
+          done = true; resolve({ dataBase64: out, contentType: 'image/jpeg' });
+        } catch (e) { fallback(); }
       };
-      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('bad image')); };
+      img.onerror = fallback;
       img.src = url;
     });
   }
@@ -191,20 +210,22 @@
       .then(function (res) {
         if (!res || !res.id) throw new Error('submit failed');
         // upload photos issue by issue
-        var jobs = [];
+        var failed = 0, jobs = [];
         filled.forEach(function (iss, idx) {
           (iss.files || []).forEach(function (f) {
-            jobs.push(resize(f, 1600, 0.82).then(function (dataBase64) {
+            jobs.push(prep(f, 1600, 0.82).then(function (p) {
+              if (!p || !p.dataBase64) { failed++; return; }
               return fetch('/public/forms/' + res.id + '/photos', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fieldId: 'issue-' + idx, dataBase64: dataBase64, contentType: 'image/jpeg', filename: f.name })
-              });
+                body: JSON.stringify({ fieldId: 'issue-' + idx, dataBase64: p.dataBase64, contentType: p.contentType, filename: f.name })
+              }).then(function (r) { if (!r.ok) failed++; }, function () { failed++; });
             }));
           });
         });
-        return Promise.all(jobs);
+        return Promise.all(jobs).then(function () { return failed; });
       })
-      .then(function () {
+      .then(function (failed) {
+        if (failed) alert(failed + ' photo(s) could not be uploaded, but your report was saved. Please try again from Safari or Chrome (not an in‑app browser).');
         document.getElementById('form').classList.add('hidden');
         document.getElementById('done').classList.remove('hidden');
         window.scrollTo(0, 0);
