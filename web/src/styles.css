@@ -513,3 +513,5 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .form-alert-banner { background:#fff7e6; color:#8a5a00; border-bottom:1px solid #f0d9a8; cursor:pointer; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
 .form-alert-banner:hover { background:#fdefd0; }
 .form-alert-banner .fab-cta { margin-left:auto; font-weight:700; color:var(--green-d); }
+
+.ans-section-head { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.3px; color:var(--green-d); background:#eef6f0; padding:6px 10px; border-radius:6px; margin:14px 0 2px; }

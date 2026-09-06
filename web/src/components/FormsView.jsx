@@ -70,7 +70,7 @@ export default function FormsView({ onClose, properties = [], initialSubmissionI
 
       <div className="forms-wrap">
         {tab === 'submissions'
-          ? <Submissions properties={properties} labelById={labelById} initialSubmissionId={initialSubmissionId} />
+          ? <Submissions properties={properties} labelById={labelById} forms={forms} initialSubmissionId={initialSubmissionId} />
           : <Design forms={forms} properties={properties} onReload={loadForms} flash={flash} />}
       </div>
     </div>
@@ -78,7 +78,7 @@ export default function FormsView({ onClose, properties = [], initialSubmissionI
 }
 
 /* ---------------- Submissions: search + review ---------------- */
-function Submissions({ properties, labelById, initialSubmissionId }) {
+function Submissions({ properties, labelById, forms, initialSubmissionId }) {
   const [type, setType] = useState('');
   const [propertyId, setPropertyId] = useState('');
   const [status, setStatus] = useState('');
@@ -168,11 +168,8 @@ function Submissions({ properties, labelById, initialSubmissionId }) {
               const answers = sel.answers || {};
               const issues = Array.isArray(answers.issues) ? answers.issues : null;
               const known = { date: 'Date' };
-              const other = Object.entries(answers).filter(([k]) => k !== 'issues');
               const byField = {};
               (sel.photos || []).forEach((ph) => { const k = ph.fieldId || ''; (byField[k] = byField[k] || []).push(ph); });
-              const usedFields = new Set(issues ? issues.map((_, i) => `issue-${i}`) : []);
-              const leftover = (sel.photos || []).filter((ph) => !usedFields.has(ph.fieldId || ''));
               const Gallery = ({ photos }) => (
                 <div className="sub-photo-grid">
                   {photos.map((ph) => (
@@ -182,19 +179,28 @@ function Submissions({ properties, labelById, initialSubmissionId }) {
                   ))}
                 </div>
               );
-              return (
-                <>
-                  <div className="sub-answers">
-                    {other.length === 0 && !issues && <p className="muted small">No answers.</p>}
-                    {other.map(([fid, val]) => (
-                      <div key={fid} className="ans-row">
-                        <div className="ans-label">{known[fid] || labelFor(fid, labelById)}</div>
-                        <div className="ans-val">{formatAnswer(val)}</div>
-                      </div>
-                    ))}
+              const groupPhotos = (list) => {
+                const g = {};
+                list.forEach((ph) => { const k = ph.fieldId || ''; (g[k] = g[k] || []).push(ph); });
+                return Object.entries(g).map(([fid, photos]) => (
+                  <div className="sub-photos" key={fid || 'photos'}>
+                    <div className="ans-label">{fid ? labelFor(fid, labelById) : 'Photos'} ({photos.length})</div>
+                    <Gallery photos={photos} />
                   </div>
+                ));
+              };
 
-                  {issues && (
+              // Damage reports render as issue blocks (each with its own photos).
+              if (issues) {
+                const used = new Set(issues.map((_, i) => `issue-${i}`));
+                const leftover = (sel.photos || []).filter((ph) => !used.has(ph.fieldId || ''));
+                return (
+                  <>
+                    <div className="sub-answers">
+                      {Object.entries(answers).filter(([k]) => k !== 'issues').map(([fid, val]) => (
+                        <div key={fid} className="ans-row"><div className="ans-label">{known[fid] || labelFor(fid, labelById)}</div><div className="ans-val">{formatAnswer(val)}</div></div>
+                      ))}
+                    </div>
                     <div className="sub-issues">
                       {issues.map((iss, i) => (
                         <div key={i} className="issue-block">
@@ -204,18 +210,49 @@ function Submissions({ properties, labelById, initialSubmissionId }) {
                         </div>
                       ))}
                     </div>
-                  )}
+                    {leftover.length > 0 && groupPhotos(leftover)}
+                  </>
+                );
+              }
 
-                  {leftover.length > 0 && (() => {
-                    const groups = {};
-                    leftover.forEach((ph) => { const k = ph.fieldId || ''; (groups[k] = groups[k] || []).push(ph); });
-                    return Object.entries(groups).map(([fid, photos]) => (
-                      <div className="sub-photos" key={fid || 'photos'}>
-                        <div className="ans-label">{fid ? labelFor(fid, labelById) : 'Photos'} ({photos.length})</div>
-                        <Gallery photos={photos} />
+              // Clean reports: render in the form's own order (sections + inline photos),
+              // so each room's photos sit with that room's questions.
+              const template = (forms && forms.cleanForms || []).find((t) => t.id === sel.templateId);
+              const ordered = template && Array.isArray(template.fields) ? template.fields : null;
+              if (ordered) {
+                const doneAns = new Set(), donePh = new Set();
+                const rows = [];
+                ordered.forEach((f) => {
+                  if (f.type === 'section') { rows.push(<div key={'sec-' + f.id} className="ans-section-head">{f.label}</div>); return; }
+                  if (f.type === 'photos') {
+                    donePh.add(f.id);
+                    const ph = byField[f.id] || [];
+                    rows.push(
+                      <div key={f.id} className="sub-photos">
+                        <div className="ans-label">{f.label}{ph.length ? ` (${ph.length})` : ''}</div>
+                        {ph.length ? <Gallery photos={ph} /> : <span className="muted small">No photos uploaded.</span>}
                       </div>
-                    ));
-                  })()}
+                    );
+                    return;
+                  }
+                  const keys = Object.keys(answers).filter((k) => k === f.id || k.startsWith(f.id + '__'));
+                  keys.forEach((k) => { doneAns.add(k); rows.push(<div key={k} className="ans-row"><div className="ans-label">{labelFor(k, labelById)}</div><div className="ans-val">{formatAnswer(answers[k])}</div></div>); });
+                });
+                // any answers not in the template (e.g. the date)
+                Object.entries(answers).forEach(([k, v]) => { if (!doneAns.has(k)) rows.unshift(<div key={'x-' + k} className="ans-row"><div className="ans-label">{known[k] || labelFor(k, labelById)}</div><div className="ans-val">{formatAnswer(v)}</div></div>); });
+                const orphan = (sel.photos || []).filter((ph) => !donePh.has(ph.fieldId || ''));
+                return (<><div className="sub-answers">{rows}</div>{orphan.length > 0 && groupPhotos(orphan)}</>);
+              }
+
+              // Fallback (template unknown): answers, then all photos grouped.
+              return (
+                <>
+                  <div className="sub-answers">
+                    {Object.entries(answers).map(([fid, val]) => (
+                      <div key={fid} className="ans-row"><div className="ans-label">{known[fid] || labelFor(fid, labelById)}</div><div className="ans-val">{formatAnswer(val)}</div></div>
+                    ))}
+                  </div>
+                  {(sel.photos || []).length > 0 && groupPhotos(sel.photos)}
                 </>
               );
             })()}
