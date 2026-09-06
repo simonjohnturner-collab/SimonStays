@@ -220,27 +220,26 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
               const template = (forms && forms.cleanForms || []).find((t) => t.id === sel.templateId);
               const ordered = template && Array.isArray(template.fields) ? template.fields : null;
               if (ordered) {
-                const doneAns = new Set(), donePh = new Set();
+                const doneAns = new Set(), usedPh = new Set();
+                const match = (id) => (sel.photos || []).filter((p) => p.fieldId === id || (p.fieldId || '').startsWith(id + '__'));
                 const rows = [];
                 ordered.forEach((f) => {
                   if (f.type === 'section') { rows.push(<div key={'sec-' + f.id} className="ans-section-head">{f.label}</div>); return; }
                   if (f.type === 'photos') {
-                    donePh.add(f.id);
-                    const ph = byField[f.id] || [];
-                    rows.push(
-                      <div key={f.id} className="sub-photos">
-                        <div className="ans-label">{f.label}{ph.length ? ` (${ph.length})` : ''}</div>
-                        {ph.length ? <Gallery photos={ph} /> : <span className="muted small">No photos uploaded.</span>}
-                      </div>
-                    );
+                    const ph = match(f.id);
+                    ph.forEach((p) => usedPh.add(p.id));
+                    if (ph.length === 0) { rows.push(<div key={f.id} className="sub-photos"><div className="ans-label">{f.label}</div><span className="muted small">No photos uploaded.</span></div>); return; }
+                    const g = {}; ph.forEach((p) => { const k = p.fieldId || ''; (g[k] = g[k] || []).push(p); });
+                    Object.entries(g).forEach(([fid, photos]) => rows.push(
+                      <div key={fid} className="sub-photos"><div className="ans-label">{labelFor(fid, labelById)} ({photos.length})</div><Gallery photos={photos} /></div>
+                    ));
                     return;
                   }
                   const keys = Object.keys(answers).filter((k) => k === f.id || k.startsWith(f.id + '__'));
                   keys.forEach((k) => { doneAns.add(k); rows.push(<div key={k} className="ans-row"><div className="ans-label">{labelFor(k, labelById)}</div><div className="ans-val">{formatAnswer(answers[k])}</div></div>); });
                 });
-                // any answers not in the template (e.g. the date)
                 Object.entries(answers).forEach(([k, v]) => { if (!doneAns.has(k)) rows.unshift(<div key={'x-' + k} className="ans-row"><div className="ans-label">{known[k] || labelFor(k, labelById)}</div><div className="ans-val">{formatAnswer(v)}</div></div>); });
-                const orphan = (sel.photos || []).filter((ph) => !donePh.has(ph.fieldId || ''));
+                const orphan = (sel.photos || []).filter((ph) => !usedPh.has(ph.id));
                 return (<><div className="sub-answers">{rows}</div>{orphan.length > 0 && groupPhotos(orphan)}</>);
               }
 

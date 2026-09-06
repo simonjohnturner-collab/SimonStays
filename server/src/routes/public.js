@@ -255,7 +255,7 @@ router.get('/forms/clean-for-unit/:unitId', async (req, res, next) => {
     if (!hostId) return res.status(404).json({ error: 'not_available' });
     const unit = await prisma.unit.findFirst({
       where: { id: req.params.unitId, property: { hostId } },
-      select: { id: true, name: true, bedrooms: true, bathrooms: true },
+      select: { id: true, name: true, bedrooms: true, bathrooms: true, capacity: true },
     });
     if (!unit) return res.status(404).json({ error: 'not_found' });
     const cleans = await prisma.formTemplate.findMany({ where: { hostId, type: 'clean', active: true } });

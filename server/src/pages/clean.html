@@ -143,23 +143,36 @@
     return q;
   }
 
+  // Replace {sleeps} in a label with the unit's capacity (e.g. "at least {sleeps} of each").
+  function subst(s) { return String(s == null ? '' : s).replace(/\{sleeps\}/g, UNIT && UNIT.capacity != null ? UNIT.capacity : ''); }
+
   function renderFields() {
     var host = document.getElementById('fields'); host.innerHTML = ''; answers = {}; photoFiles = {}; rendered = [];
-    var body = host; // fields go here until a 'section' starts a new expandable group
+    // Group fields into sections (a 'section' field starts a new group).
+    var groups = [], cur = { section: null, fields: [] };
     (TEMPLATE.fields || []).forEach(function (f) {
-      if (f.type === 'section') {
-        var det = document.createElement('details'); det.className = 'form-section'; det.open = true;
-        var sum = document.createElement('summary'); sum.textContent = f.label || 'Section'; det.appendChild(sum);
-        var b = document.createElement('div'); b.className = 'section-body'; det.appendChild(b);
-        host.appendChild(det); body = b; return;
-      }
-      var rep = f.repeat === 'bedroom' || f.repeat === 'bathroom' ? f.repeat : null;
-      if (!rep) { rendered.push(f); body.appendChild(renderField(f)); return; }
-      var count = Math.max(1, Number(rep === 'bedroom' ? UNIT.bedrooms : UNIT.bathrooms) || 1);
-      for (var i = 1; i <= count; i++) {
-        var inst = { id: f.id + '__' + i, label: f.label, type: f.type, required: f.required, options: f.options };
-        if (count > 1) inst.roomTag = (rep === 'bedroom' ? 'Bedroom ' : 'Bathroom ') + i;
-        rendered.push(inst); body.appendChild(renderField(inst));
+      if (f.type === 'section') { if (cur.section || cur.fields.length) groups.push(cur); cur = { section: f, fields: [] }; }
+      else cur.fields.push(f);
+    });
+    if (cur.section || cur.fields.length) groups.push(cur);
+
+    groups.forEach(function (g) {
+      var rep = g.section && (g.section.repeat === 'bedroom' || g.section.repeat === 'bathroom') ? g.section.repeat : null;
+      var count = rep ? Math.max(1, Number(rep === 'bedroom' ? UNIT.bedrooms : UNIT.bathrooms) || 1) : 1;
+      for (var inst = 1; inst <= count; inst++) {
+        var suffix = (rep && count > 1) ? ('__' + inst) : '';
+        var container = host;
+        if (g.section) {
+          var det = document.createElement('details'); det.className = 'form-section'; det.open = true;
+          var sum = document.createElement('summary'); sum.textContent = (rep && count > 1) ? (g.section.label + ' ' + inst) : g.section.label;
+          det.appendChild(sum);
+          var b = document.createElement('div'); b.className = 'section-body'; det.appendChild(b);
+          host.appendChild(det); container = b;
+        }
+        g.fields.forEach(function (f) {
+          var field = { id: f.id + suffix, label: subst(f.label), type: f.type, required: f.required, options: f.options };
+          rendered.push(field); container.appendChild(renderField(field));
+        });
       }
     });
   }
