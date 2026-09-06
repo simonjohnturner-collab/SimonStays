@@ -169,6 +169,7 @@ model Unit {
   access       String? // Ground floor | Stairs | Lift | Stairs & lift
   accessMethod String? // how guests get in: Lockbox | Smart lock | Remote garage door control
   smartLockUrl String? // link to the smart lock (to configure check-in/out later)
+  lockBattery  Int?    // smart-lock battery % (from provider, or set manually)
   backupPower  String?
   backupWater  String?
   parkingBays  Int?
@@ -284,6 +285,7 @@ model Booking {
   amountOwingCents Int? // optional, for partial payments
   cleaner      String?
   comments     String?
+  accessCode   String? // smart-lock code for this stay
   leavingEarly Boolean       @default(false)
   // Guest requests / add-ons
   earlyCheckIn  Boolean @default(false)

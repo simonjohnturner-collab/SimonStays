@@ -92,6 +92,11 @@ export const api = {
   setPhotoSort: (id, sort) => req('PATCH', `/photos/${id}`, { sort }),
   deletePhoto: (id) => req('DELETE', `/photos/${id}`),
 
+  // smart locks
+  getSmartLocks: () => req('GET', '/smartlocks'),
+  setLockBattery: (unitId, lockBattery) => req('PATCH', `/units/${unitId}`, { lockBattery }),
+  setBookingCode: (bookingId, accessCode) => req('PATCH', `/bookings/${bookingId}`, { accessCode }),
+
   // cleaner names (for dropdowns)
   listCleaners: () => req('GET', '/cleaners'),
   saveCleaners: (cleaners) => req('PUT', '/cleaners', { cleaners }),

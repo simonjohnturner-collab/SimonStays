@@ -14,6 +14,7 @@ import BoardSearch from './BoardSearch.jsx';
 import FormsView from './FormsView.jsx';
 import NotificationsBell from './NotificationsBell.jsx';
 import CleanersModal from './CleanersModal.jsx';
+import SmartLockView from './SmartLockView.jsx';
 
 const WINDOW_DAYS = 35;
 
@@ -37,6 +38,7 @@ export default function Main() {
   const [pricingMatrix, setPricingMatrix] = useState(false);
   const [listings, setListings] = useState(false);
   const [forms, setForms] = useState(false);
+  const [smartLocks, setSmartLocks] = useState(false);
   const [formsInitialId, setFormsInitialId] = useState(null); // open Forms straight to this submission
   const [focus, setFocus] = useState(null); // { unitId, bookingId, key } — jump target
   function openFormsSubmission(id) { setFormsInitialId(id || null); setForms(true); }
@@ -171,6 +173,9 @@ export default function Main() {
   if (forms) {
     return <FormsView onClose={() => { setForms(false); setFormsInitialId(null); }} properties={properties} initialSubmissionId={formsInitialId} />;
   }
+  if (smartLocks) {
+    return <SmartLockView onClose={() => setSmartLocks(false)} />;
+  }
 
   return (
     <div className="app">
@@ -257,6 +262,7 @@ export default function Main() {
           onOpenListings={() => { setMenuOpen(false); setListings(true); }}
           onOpenForms={() => { setMenuOpen(false); setForms(true); }}
           onOpenCleaners={() => { setMenuOpen(false); setCleanersOpen(true); }}
+          onOpenSmartLocks={() => { setMenuOpen(false); setSmartLocks(true); }}
           onReorderProperties={reorderProperties}
         />
       )}

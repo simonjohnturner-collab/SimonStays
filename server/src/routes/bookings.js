@@ -145,7 +145,7 @@ router.patch('/bookings/:id', async (req, res) => {
   const booking = await loadOwned(req, res); if (!booking) return;
   const b = req.body || {};
   const data = {};
-  ['guestName', 'cleaner', 'comments'].forEach((k) => { if (k in b) data[k] = b[k]; });
+  ['guestName', 'cleaner', 'comments', 'accessCode'].forEach((k) => { if (k in b) data[k] = b[k]; });
   ['leavingEarly', 'earlyCheckIn', 'lateCheckOut', 'extraMattress', 'hairDryer']
     .forEach((k) => { if (k in b) data[k] = !!b[k]; });
   Object.assign(data, paymentFields(b));
