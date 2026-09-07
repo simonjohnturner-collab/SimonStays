@@ -116,6 +116,9 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
   const [rows, setRows] = useState(null);
   const [sel, setSel] = useState(null); // full submission
   const [zoom, setZoom] = useState(null); // photo url open in the lightbox
+  const [selMode, setSelMode] = useState(false); // bulk-select on/off
+  const [picked, setPicked] = useState(() => new Set()); // ids ticked for deletion
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!zoom) return;
@@ -141,6 +144,22 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
   async function setStatusOf(id, s) { await api.updateFormSubmission(id, { status: s }); setSel((x) => (x && x.id === id ? { ...x, status: s } : x)); load(); }
   async function del(id) { if (!window.confirm('Delete this submission?')) return; await api.deleteFormSubmission(id); setSel(null); load(); }
 
+  function togglePick(id) { setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }); }
+  function pickAll() { setPicked(new Set((rows || []).map((r) => r.id))); }
+  function clearPicks() { setPicked(new Set()); }
+  function exitSelMode() { setSelMode(false); clearPicks(); }
+  async function deletePicked() {
+    if (picked.size === 0) return;
+    if (!window.confirm(`Delete ${picked.size} submission${picked.size > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      for (const id of picked) { await api.deleteFormSubmission(id); }
+      if (sel && picked.has(sel.id)) setSel(null);
+      exitSelMode();
+      await load();
+    } finally { setBusy(false); }
+  }
+
   return (
     <>
     <div className="forms-cols">
@@ -163,10 +182,24 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
           </select>
           <input type="search" placeholder="Search name / contact…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
+        <div className="forms-bulk">
+          {!selMode ? (
+            <button className="mini secondary" onClick={() => setSelMode(true)}>☑ Select…</button>
+          ) : (
+            <>
+              <button className="mini secondary" onClick={pickAll}>Select all</button>
+              <button className="mini secondary" onClick={clearPicks}>None</button>
+              <button className="mini danger" disabled={busy || picked.size === 0} onClick={deletePicked}>{busy ? 'Deleting…' : `🗑 Delete ${picked.size}`}</button>
+              <button className="mini" onClick={exitSelMode}>Cancel</button>
+            </>
+          )}
+        </div>
         {!rows ? <p className="muted small">Loading…</p> : rows.length === 0 ? (
           <p className="muted small">No submissions yet{type || propertyId || status || q ? ' match this filter' : ''}.</p>
         ) : rows.map((r) => (
-          <button key={r.id} className={`forms-item ${sel?.id === r.id ? 'active' : ''}`} onClick={() => open(r.id)}>
+          <div key={r.id} className={`forms-item-row ${selMode ? 'selecting' : ''}`}>
+            {selMode && <input type="checkbox" className="fi-check" checked={picked.has(r.id)} onChange={() => togglePick(r.id)} />}
+          <button className={`forms-item ${sel?.id === r.id ? 'active' : ''}`} onClick={() => (selMode ? togglePick(r.id) : open(r.id))}>
             <div className="fi-top">
               <span className={`ftag ${r.type}`}>{r.type === 'damage' ? 'Issue' : 'Clean'}</span>
               <span className={`fstatus ${r.status}`}>{r.status}</span>
@@ -174,6 +207,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
             <div className="fi-mid">{r.propertyName ? `${r.propertyName}${r.unitName ? ' · ' + r.unitName : ''}` : 'No property'}</div>
             <div className="fi-sub">{r.submitterName || '—'} · {fmtDate(r.createdAt)}{r.photoCount ? ` · 📷 ${r.photoCount}` : ''}</div>
           </button>
+          </div>
         ))}
       </aside>
 

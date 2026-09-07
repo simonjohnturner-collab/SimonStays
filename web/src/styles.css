@@ -567,3 +567,10 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .dmg-noissue { margin:2px 0 0; }
 .dmg-report-actions { display:flex; flex-direction:column; gap:6px; flex-shrink:0; }
 .dmg-report-actions .sm { padding:4px 10px; font-size:12px; }
+
+/* --- Submissions bulk select/delete --- */
+.forms-bulk { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+.forms-item-row { display:flex; align-items:stretch; gap:6px; }
+.forms-item-row .forms-item { flex:1; }
+.forms-item-row .fi-check { width:18px; height:18px; align-self:center; flex-shrink:0; }
+.forms-item-row.selecting .forms-item { cursor:pointer; }
