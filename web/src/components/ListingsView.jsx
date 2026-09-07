@@ -1,28 +1,65 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, photoUrl } from '../api.js';
 
-// A click-to-drop-a-pin map (Leaflet, loaded from CDN in index.html). Reports
-// the picked lat/lng back to the parent.
+// A click-to-drop-a-pin map (Leaflet, loaded from CDN in index.html). You can
+// type an address to zoom the map there first, then click to drop the pin.
+// Reports the picked lat/lng back to the parent.
 function MapPicker({ lat, lng, onPick }) {
   const ref = useRef(null);
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+  const [addr, setAddr] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [note, setNote] = useState('');
+
   useEffect(() => {
     const L = window.L;
     if (!L || !ref.current) return;
+    const dot = (la, ln) => L.circleMarker([la, ln], { radius: 9, color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.9, weight: 2 });
     const has = lat != null && lng != null;
     const map = L.map(ref.current).setView(has ? [lat, lng] : [-26.2041, 28.0473], has ? 15 : 10);
+    mapRef.current = map;
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
-    let marker = has ? L.circleMarker([lat, lng], { radius: 9, color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.9, weight: 2 }).addTo(map) : null;
+    if (has) markerRef.current = dot(lat, lng).addTo(map);
     map.on('click', (e) => {
       const la = Number(e.latlng.lat.toFixed(6)), ln = Number(e.latlng.lng.toFixed(6));
-      if (marker) marker.setLatLng([la, ln]); else marker = L.circleMarker([la, ln], { radius: 9, color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.9, weight: 2 }).addTo(map);
+      if (markerRef.current) markerRef.current.setLatLng([la, ln]); else markerRef.current = dot(la, ln).addTo(map);
       onPick(la, ln);
     });
     setTimeout(() => map.invalidateSize(), 120);
-    return () => map.remove();
+    return () => { map.remove(); mapRef.current = null; markerRef.current = null; };
     // eslint-disable-next-line
   }, []);
+
+  // Geocode the typed address (free OpenStreetMap Nominatim) and zoom there.
+  // Does not drop the pin — the user still clicks the exact spot.
+  async function search(e) {
+    e.preventDefault();
+    const q = addr.trim();
+    if (!q || !mapRef.current) return;
+    setSearching(true); setNote('');
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
+      const r = await fetch(url, { headers: { Accept: 'application/json' } });
+      const data = await r.json();
+      if (!data || !data.length) { setNote('Address not found — try adding the suburb or city.'); return; }
+      mapRef.current.setView([Number(data[0].lat), Number(data[0].lon)], 17);
+      setNote('Zoomed in — now click the map to drop the pin.');
+    } catch (err) { setNote('Search failed — check your connection and try again.'); }
+    finally { setSearching(false); }
+  }
+
   if (!window.L) return <div className="map-pick map-off">Map unavailable — enter coordinates below.</div>;
-  return <div className="map-pick" ref={ref} />;
+  return (
+    <div className="map-wrap">
+      <form className="map-search" onSubmit={search}>
+        <input value={addr} onChange={(e) => setAddr(e.target.value)} placeholder="Type an address or place to zoom the map…" />
+        <button type="submit" className="secondary" disabled={searching}>{searching ? 'Searching…' : '🔍 Find'}</button>
+      </form>
+      {note && <div className="muted small map-search-note">{note}</div>}
+      <div className="map-pick" ref={ref} />
+    </div>
+  );
 }
 
 // Downscale a picked image in the browser to a sensible max dimension and
