@@ -86,12 +86,32 @@ function fileToResizedDataUrl(file, maxDim = 1600, quality = 0.82) {
   });
 }
 
-function PhotoGrid({ photos, onAdd, onCover, onDelete, busy }) {
+function PhotoGrid({ photos, onAdd, onCover, onDelete, onReorder, busy }) {
+  const [drag, setDrag] = useState(null); // index being dragged
+  const [over, setOver] = useState(null); // index currently dragged over
+  function drop(to) {
+    const from = drag;
+    setDrag(null); setOver(null);
+    if (from == null || from === to) return;
+    const ids = photos.map((p) => p.id);
+    const [moved] = ids.splice(from, 1);
+    ids.splice(to, 0, moved);
+    onReorder && onReorder(ids);
+  }
   return (
+    <>
+    {photos.length > 1 && <p className="muted small photo-hint">Drag photos to reorder — the first one is the cover.</p>}
     <div className="photo-grid">
       {photos.map((p, i) => (
-        <div key={p.id} className="photo-tile">
-          <img src={photoUrl(p.id)} alt={p.filename || 'photo'} loading="lazy" />
+        <div key={p.id}
+          className={`photo-tile ${drag === i ? 'dragging' : ''} ${over === i && drag !== i ? 'drag-over' : ''}`}
+          draggable
+          onDragStart={() => setDrag(i)}
+          onDragEnter={() => setOver(i)}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={() => drop(i)}
+          onDragEnd={() => { setDrag(null); setOver(null); }}>
+          <img src={photoUrl(p.id)} alt={p.filename || 'photo'} loading="lazy" draggable={false} />
           {i === 0 && <span className="cover-badge">Cover</span>}
           <div className="photo-actions">
             {i !== 0 && <button title="Make cover photo" onClick={() => onCover(p.id)}>★</button>}
@@ -105,6 +125,7 @@ function PhotoGrid({ photos, onAdd, onCover, onDelete, busy }) {
           onChange={(e) => { const f = [...e.target.files]; e.target.value = ''; if (f.length) onAdd(f); }} />
       </label>
     </div>
+    </>
   );
 }
 
@@ -195,6 +216,15 @@ export default function ListingsView({ onClose }) {
     setPhotos(kind, pid, uid, (a) => a.map((x) => (x.id === id ? { ...x, sort: target } : x)).sort((x, y) => x.sort - y.sort));
     try { await api.setPhotoSort(id, target); } catch (e) { setMsg(e.message); }
   }
+  // Persist a new drag-and-drop order: sort = position in the list (0 = cover).
+  async function reorderPhotos(kind, pid, uid, orderedIds) {
+    setPhotos(kind, pid, uid, (arr) => {
+      const byId = new Map(arr.map((x) => [x.id, x]));
+      return orderedIds.map((id, i) => ({ ...byId.get(id), sort: i })).filter((x) => x && x.id);
+    });
+    try { await Promise.all(orderedIds.map((id, i) => api.setPhotoSort(id, i))); flash('Photo order saved.'); }
+    catch (e) { setMsg(e.message); }
+  }
   async function deletePhoto(kind, pid, uid, id) {
     if (!window.confirm('Delete this photo?')) return;
     setPhotos(kind, pid, uid, (arr) => arr.filter((x) => x.id !== id));
@@ -246,6 +276,7 @@ export default function ListingsView({ onClose }) {
                   <PhotoGrid photos={p.photos} busy={busyPhoto === p.id}
                     onAdd={(files) => addPhotos('property', p.id, null, files)}
                     onCover={(id) => coverPhoto('property', p.id, null, id)}
+                    onReorder={(ids) => reorderPhotos('property', p.id, null, ids)}
                     onDelete={(id) => deletePhoto('property', p.id, null, id)} />
 
                   <div className="attr-section">
@@ -314,6 +345,7 @@ export default function ListingsView({ onClose }) {
                       <PhotoGrid photos={u.photos} busy={busyPhoto === u.id}
                         onAdd={(files) => addPhotos('unit', p.id, u.id, files)}
                         onCover={(id) => coverPhoto('unit', p.id, u.id, id)}
+                        onReorder={(ids) => reorderPhotos('unit', p.id, u.id, ids)}
                         onDelete={(id) => deletePhoto('unit', p.id, u.id, id)} />
                     </div>
                   ))}

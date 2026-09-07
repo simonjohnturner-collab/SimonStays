@@ -587,3 +587,10 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 
 /* --- Listings sub-section heading --- */
 .attr-subhead { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.3px; color:var(--muted); margin:12px 0 4px; }
+
+/* --- Listings photo drag-to-reorder --- */
+.photo-hint { margin:6px 0 4px; }
+.photo-tile { cursor:grab; }
+.photo-tile:active { cursor:grabbing; }
+.photo-tile.dragging { opacity:.4; }
+.photo-tile.drag-over { outline:2px dashed var(--green); outline-offset:2px; border-radius:8px; }
