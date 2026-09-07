@@ -230,6 +230,28 @@ router.post('/book/:id/pay', async (req, res, next) => {
 
 // ---- Public forms (guest damage reports + cleaner checkout reports) ----
 
+// TEMP diagnostic (key-gated, read-only, no image bytes): what's actually
+// stored for recent form photos, so we can see why they won't render. Defined
+// BEFORE /forms/:type so it isn't shadowed. Remove after debugging.
+router.get('/forms/_diag', async (req, res, next) => {
+  try {
+    if (req.query.k !== 'diag2019') return res.status(404).json({ error: 'not_found' });
+    const rows = await prisma.$queryRawUnsafe(`
+      SELECT p.id, p."contentType" AS ctype, octet_length(p.data) AS bytes,
+             substring(encode(p.data,'hex') for 24) AS head_hex,
+             s."type" AS stype, s."createdAt" AS created,
+             pr.name AS prop, u.name AS unit
+      FROM "Photo" p
+      JOIN "FormSubmission" s ON s.id = p."formSubmissionId"
+      LEFT JOIN "Property" pr ON pr.id = s."propertyId"
+      LEFT JOIN "Unit" u ON u.id = s."unitId"
+      WHERE p."formSubmissionId" IS NOT NULL
+      ORDER BY s."createdAt" DESC
+      LIMIT 40`);
+    res.json({ photos: rows.map((r) => ({ ...r, bytes: Number(r.bytes) })) });
+  } catch (e) { next(e); }
+});
+
 // GET /public/forms/units — properties + units (with bed/bath) for the cleaner picker.
 router.get('/forms/units', async (req, res, next) => {
   try {
@@ -338,28 +360,6 @@ router.post('/forms/:id/photos', async (req, res, next) => {
       select: { id: true },
     });
     res.status(201).json({ id: photo.id });
-  } catch (e) { next(e); }
-});
-
-// TEMP diagnostic: what's actually stored for recent form photos (no image
-// bytes — just format/size/magic) so we can see why they won't render. Remove
-// after debugging. Gated by a key to keep it obscure.
-router.get('/forms/_diag', async (req, res, next) => {
-  try {
-    if (req.query.k !== 'diag2019') return res.status(404).json({ error: 'not_found' });
-    const rows = await prisma.$queryRawUnsafe(`
-      SELECT p.id, p."contentType" AS ctype, octet_length(p.data) AS bytes,
-             substring(encode(p.data,'hex') for 24) AS head_hex,
-             s."type" AS stype, s."createdAt" AS created,
-             pr.name AS prop, u.name AS unit
-      FROM "Photo" p
-      JOIN "FormSubmission" s ON s.id = p."formSubmissionId"
-      LEFT JOIN "Property" pr ON pr.id = s."propertyId"
-      LEFT JOIN "Unit" u ON u.id = s."unitId"
-      WHERE p."formSubmissionId" IS NOT NULL
-      ORDER BY s."createdAt" DESC
-      LIMIT 40`);
-    res.json({ photos: rows.map((r) => ({ ...r, bytes: Number(r.bytes) })) });
   } catch (e) { next(e); }
 });
 
