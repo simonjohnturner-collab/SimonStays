@@ -28,7 +28,7 @@ export default function SmartLockView({ onClose }) {
     <div className="invoices-view">
       <header className="topbar">
         <button className="brand linklike" onClick={onClose} title="Back to the board">Simon<span>Stays</span></button>
-        <span className="host">Smart lock health</span>
+        <span className="host">SmartLock dashboard</span>
         <div className="spacer" />
         {msg && <span className="small" style={{ marginRight: 8 }}>{msg}</span>}
         <button className="ghost" onClick={load}>↻ Refresh</button>
