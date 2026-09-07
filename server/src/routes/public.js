@@ -330,8 +330,11 @@ router.post('/forms/:id/photos', async (req, res, next) => {
     if (!sub) return res.status(404).json({ error: 'not_found' });
     const img = decodeFormPhoto(req.body);
     if (!img) return res.status(400).json({ error: 'no_image' });
+    // Transcode HEIC/HEIF (iPhone) to JPEG so it renders in every browser.
+    const { toRenderable } = require('../utils/imagePrep');
+    const out = await toRenderable(img.buffer, img.contentType);
     const photo = await prisma.photo.create({
-      data: { formSubmissionId: sub.id, fieldId: req.body.fieldId || null, data: img.buffer, contentType: img.contentType, filename: req.body.filename || null },
+      data: { formSubmissionId: sub.id, fieldId: req.body.fieldId || null, data: out.buffer, contentType: out.contentType, filename: req.body.filename || null },
       select: { id: true },
     });
     res.status(201).json({ id: photo.id });

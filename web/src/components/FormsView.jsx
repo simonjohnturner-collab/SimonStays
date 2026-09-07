@@ -37,11 +37,20 @@ const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString() : '');
 // that failed to encode on the phone), show a clear placeholder instead of the
 // browser's broken-image icon.
 function Thumb({ ph, onOpen }) {
+  const base = photoUrl(ph.id);
+  const [src, setSrc] = useState(base);
+  const [triedHeal, setTriedHeal] = useState(false);
   const [err, setErr] = useState(false);
+  // On error, retry once with a cache-buster. That bypasses a stale browser
+  // cache and makes the server transcode a legacy HEIC to JPEG on the fly.
+  function onError() {
+    if (!triedHeal) { setTriedHeal(true); setSrc(base + '?heal=' + Date.now()); }
+    else setErr(true);
+  }
   if (err) return <div className="thumb-btn thumb-broken" title={ph.filename || 'photo'}>⚠️<span>didn’t upload</span></div>;
   return (
-    <button type="button" className="thumb-btn" title={ph.filename || 'photo'} onClick={onOpen}>
-      <img src={photoUrl(ph.id)} alt={ph.filename || 'photo'} loading="lazy" onError={() => setErr(true)} />
+    <button type="button" className="thumb-btn" title={ph.filename || 'photo'} onClick={() => onOpen(src)}>
+      <img src={src} alt={ph.filename || 'photo'} loading="lazy" onError={onError} />
     </button>
   );
 }
@@ -191,7 +200,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
               (sel.photos || []).forEach((ph) => { const k = ph.fieldId || ''; (byField[k] = byField[k] || []).push(ph); });
               const Gallery = ({ photos }) => (
                 <div className="sub-photo-grid">
-                  {photos.map((ph) => <Thumb key={ph.id} ph={ph} onOpen={() => setZoom(photoUrl(ph.id))} />)}
+                  {photos.map((ph) => <Thumb key={ph.id} ph={ph} onOpen={(u) => setZoom(u || photoUrl(ph.id))} />)}
                 </div>
               );
               const groupPhotos = (list) => {

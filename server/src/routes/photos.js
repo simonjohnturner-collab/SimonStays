@@ -9,9 +9,21 @@ const router = express.Router();
 router.get('/:id', async (req, res) => {
   const photo = await prisma.photo.findUnique({ where: { id: req.params.id } });
   if (!photo) return res.status(404).json({ error: 'not_found' });
-  res.set('Content-Type', photo.contentType || 'image/jpeg');
+  let buffer = Buffer.from(photo.data);
+  let contentType = photo.contentType || 'image/jpeg';
+  // Heal legacy HEIC uploads (stored before server-side transcoding existed):
+  // convert to JPEG, persist so it's a one-time cost, then serve.
+  const { isHeic, toRenderable } = require('../utils/imagePrep');
+  if (isHeic(buffer, contentType)) {
+    const out = await toRenderable(buffer, contentType);
+    if (out.converted) {
+      buffer = out.buffer; contentType = out.contentType;
+      prisma.photo.update({ where: { id: photo.id }, data: { data: buffer, contentType } }).catch(() => {});
+    }
+  }
+  res.set('Content-Type', contentType);
   res.set('Cache-Control', 'public, max-age=31536000, immutable');
-  res.send(Buffer.from(photo.data));
+  res.send(buffer);
 });
 
 // Decode a data URL (or bare base64) into { buffer, contentType }.
