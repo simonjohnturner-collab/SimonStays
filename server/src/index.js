@@ -69,6 +69,10 @@ const PORT = process.env.PORT || 4000;
 if (require.main === module) {
   app.listen(PORT, () => console.log(`StaySync API on :${PORT}`));
 
+  // One-time, idempotent form clean-up: photos required only in room sections,
+  // plus an optional "guest left behind" photo in the Guests section.
+  require('./utils/formMigrations').normaliseCleanForms().catch((e) => console.error('[forms] migration failed', e.message));
+
   const expr = process.env.SYNC_CRON || '*/30 * * * *';
   if (cron.validate(expr)) {
     cron.schedule(expr, async () => {
