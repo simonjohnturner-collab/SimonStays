@@ -136,6 +136,11 @@ function fmtSub(s) {
     unitId: s.unitId, unitName: s.unit ? s.unit.name : null,
     submitterName: s.submitterName, submitterContact: s.submitterContact,
     photoCount: s._count ? s._count.photos : (s.photos ? s.photos.length : 0),
+    // Issue descriptions (damage reports only) so the summary view can list
+    // what needs fixing without loading each submission's full detail.
+    issues: s.type === 'damage' && s.answers && Array.isArray(s.answers.issues)
+      ? s.answers.issues.map((i) => (i && i.description ? String(i.description) : '')).filter(Boolean)
+      : null,
     createdAt: s.createdAt,
   };
 }

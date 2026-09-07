@@ -47,10 +47,13 @@ function Thumb({ ph, onOpen }) {
 }
 
 export default function FormsView({ onClose, properties = [], initialSubmissionId = null }) {
-  const [tab, setTab] = useState('submissions'); // 'submissions' | 'design'
+  const [tab, setTab] = useState('submissions'); // 'submissions' | 'summary' | 'design'
   const [forms, setForms] = useState(null); // { damage, cleanForms:[...] }
+  const [focusId, setFocusId] = useState(initialSubmissionId); // submission to open in the list
   const [msg, setMsg] = useState('');
   const flash = (t) => { setMsg(t); setTimeout(() => setMsg(''), 1600); };
+  // Jump from the damage summary straight to a submission's full detail.
+  const openReport = (id) => { setFocusId(null); setTimeout(() => { setFocusId(id); setTab('submissions'); }, 0); };
 
   async function loadForms() { const r = await api.listFormTemplates(); setForms(r); }
   useEffect(() => { loadForms(); }, []);
@@ -72,6 +75,7 @@ export default function FormsView({ onClose, properties = [], initialSubmissionI
         <span className="host">Forms</span>
         <div className="forms-tabs">
           <button className={tab === 'submissions' ? 'active' : ''} onClick={() => setTab('submissions')}>📥 Submissions</button>
+          <button className={tab === 'summary' ? 'active' : ''} onClick={() => setTab('summary')}>🧰 Damage summary</button>
           <button className={tab === 'design' ? 'active' : ''} onClick={() => setTab('design')}>🛠 Design forms</button>
         </div>
         <div className="spacer" />
@@ -83,7 +87,9 @@ export default function FormsView({ onClose, properties = [], initialSubmissionI
 
       <div className="forms-wrap">
         {tab === 'submissions'
-          ? <Submissions properties={properties} labelById={labelById} forms={forms} initialSubmissionId={initialSubmissionId} />
+          ? <Submissions properties={properties} labelById={labelById} forms={forms} initialSubmissionId={focusId} />
+          : tab === 'summary'
+          ? <DamageSummary properties={properties} onOpen={openReport} flash={flash} />
           : <Design forms={forms} properties={properties} onReload={loadForms} flash={flash} />}
       </div>
     </div>
@@ -275,6 +281,82 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
       </div>
     )}
     </>
+  );
+}
+
+/* ---------------- Damage summary: unresolved issues grouped by property ---------------- */
+function DamageSummary({ properties, onOpen, flash }) {
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState('');
+
+  async function load() {
+    const r = await api.listFormSubmissions('?type=damage&limit=300');
+    setRows(r.submissions.filter((s) => s.status !== 'resolved'));
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  async function resolve(id) {
+    setBusy(id);
+    try { await api.updateFormSubmission(id, { status: 'resolved' }); flash && flash('Marked resolved.'); await load(); }
+    finally { setBusy(''); }
+  }
+
+  // Group unresolved reports under their property, preserving the board order.
+  const groups = useMemo(() => {
+    if (!rows) return [];
+    const byProp = new Map();
+    rows.forEach((r) => {
+      const key = r.propertyId || '__none__';
+      if (!byProp.has(key)) byProp.set(key, { id: r.propertyId, name: r.propertyName || 'No property', reports: [] });
+      byProp.get(key).reports.push(r);
+    });
+    const order = new Map(properties.map((p, i) => [p.id, i]));
+    return Array.from(byProp.values()).sort((a, b) =>
+      (order.has(a.id) ? order.get(a.id) : 999) - (order.has(b.id) ? order.get(b.id) : 999));
+  }, [rows, properties]);
+
+  const totalReports = rows ? rows.length : 0;
+  const totalIssues = rows ? rows.reduce((n, r) => n + Math.max((r.issues || []).length, 1), 0) : 0;
+
+  return (
+    <div className="dmg-summary">
+      <div className="dmg-head">
+        <h3>Unresolved damage by property</h3>
+        <div className="dmg-tools">
+          {rows && <span className="muted small">{totalIssues} issue{totalIssues !== 1 ? 's' : ''} across {totalReports} report{totalReports !== 1 ? 's' : ''}</span>}
+          <button className="ghost" onClick={load}>↻ Refresh</button>
+        </div>
+      </div>
+
+      {!rows ? <p className="muted small">Loading…</p> : rows.length === 0 ? (
+        <p className="muted small">🎉 No unresolved damage reports. Nothing waiting on a contractor.</p>
+      ) : groups.map((g) => (
+        <section key={g.id || 'none'} className="dmg-group">
+          <div className="dmg-group-head">
+            <span className="dmg-prop">{g.name}</span>
+            <span className="dmg-count">{g.reports.length} open</span>
+          </div>
+          {g.reports.map((r) => (
+            <div key={r.id} className="dmg-report">
+              <div className="dmg-report-main">
+                <div className="dmg-report-top">
+                  {r.unitName && <span className="dmg-unit">{r.unitName}</span>}
+                  <span className={`fstatus ${r.status}`}>{r.status}</span>
+                  <span className="muted small">{r.submitterName || '—'} · {fmtDate(r.createdAt)}{r.photoCount ? ` · 📷 ${r.photoCount}` : ''}</span>
+                </div>
+                {(r.issues && r.issues.length > 0) ? (
+                  <ul className="dmg-issues">{r.issues.map((d, i) => <li key={i}>{d}</li>)}</ul>
+                ) : <p className="muted small dmg-noissue">No description provided — open the report for details.</p>}
+              </div>
+              <div className="dmg-report-actions">
+                <button className="ghost sm" onClick={() => onOpen(r.id)}>Open</button>
+                <button className="sm" disabled={busy === r.id} onClick={() => resolve(r.id)}>{busy === r.id ? '…' : '✓ Resolve'}</button>
+              </div>
+            </div>
+          ))}
+        </section>
+      ))}
+    </div>
   );
 }
 

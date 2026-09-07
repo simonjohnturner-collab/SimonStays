@@ -547,3 +547,23 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .sl-dates { font-size:12px; color:#777; }
 .sl-code { width:96px; text-align:center; font:inherit; padding:6px 8px; border:1px solid #ccc; border-radius:6px; }
 .sl-stay.nocode .sl-code { border-color:#e0a0a0; }
+
+/* --- Damage summary (unresolved by property) --- */
+.dmg-summary { padding:16px; max-width:900px; margin:0 auto; }
+.dmg-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+.dmg-head h3 { margin:0; }
+.dmg-tools { display:flex; align-items:center; gap:10px; }
+.dmg-group { border:1px solid var(--line); border-radius:10px; margin-bottom:14px; overflow:hidden; background:#fff; }
+.dmg-group-head { display:flex; align-items:center; justify-content:space-between; padding:9px 12px; background:#f5f2ee; border-bottom:1px solid var(--line); }
+.dmg-prop { font-weight:700; }
+.dmg-count { font-size:12px; font-weight:700; color:#b06a00; background:#fff3e0; border:1px solid #eccf9a; border-radius:999px; padding:2px 9px; }
+.dmg-report { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:10px 12px; border-top:1px solid #f0ece6; }
+.dmg-report:first-of-type { border-top:0; }
+.dmg-report-main { min-width:0; flex:1; }
+.dmg-report-top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px; }
+.dmg-unit { font-weight:600; background:#eef3ff; color:#2a4d8f; border-radius:6px; padding:1px 7px; font-size:12px; }
+.dmg-issues { margin:2px 0 0; padding-left:18px; }
+.dmg-issues li { margin:1px 0; }
+.dmg-noissue { margin:2px 0 0; }
+.dmg-report-actions { display:flex; flex-direction:column; gap:6px; flex-shrink:0; }
+.dmg-report-actions .sm { padding:4px 10px; font-size:12px; }
