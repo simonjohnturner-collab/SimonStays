@@ -33,6 +33,19 @@ const FIELD_TYPES = [
 const genId = () => 'f_' + Math.random().toString(36).slice(2, 9);
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString() : '');
 
+// One photo thumbnail. If the image bytes are missing/corrupt (older uploads
+// that failed to encode on the phone), show a clear placeholder instead of the
+// browser's broken-image icon.
+function Thumb({ ph, onOpen }) {
+  const [err, setErr] = useState(false);
+  if (err) return <div className="thumb-btn thumb-broken" title={ph.filename || 'photo'}>⚠️<span>didn’t upload</span></div>;
+  return (
+    <button type="button" className="thumb-btn" title={ph.filename || 'photo'} onClick={onOpen}>
+      <img src={photoUrl(ph.id)} alt={ph.filename || 'photo'} loading="lazy" onError={() => setErr(true)} />
+    </button>
+  );
+}
+
 export default function FormsView({ onClose, properties = [], initialSubmissionId = null }) {
   const [tab, setTab] = useState('submissions'); // 'submissions' | 'design'
   const [forms, setForms] = useState(null); // { damage, cleanForms:[...] }
@@ -172,11 +185,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
               (sel.photos || []).forEach((ph) => { const k = ph.fieldId || ''; (byField[k] = byField[k] || []).push(ph); });
               const Gallery = ({ photos }) => (
                 <div className="sub-photo-grid">
-                  {photos.map((ph) => (
-                    <button key={ph.id} type="button" className="thumb-btn" title={ph.filename || 'photo'} onClick={() => setZoom(photoUrl(ph.id))}>
-                      <img src={photoUrl(ph.id)} alt={ph.filename || 'photo'} loading="lazy" />
-                    </button>
-                  ))}
+                  {photos.map((ph) => <Thumb key={ph.id} ph={ph} onOpen={() => setZoom(photoUrl(ph.id))} />)}
                 </div>
               );
               const groupPhotos = (list) => {

@@ -338,14 +338,28 @@ router.post('/forms/:id/photos', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Recognise real image bytes by their magic number, so we never store a
+// corrupt blob (e.g. an empty "data:," canvas result that decodes to 3 bytes).
+function sniffImage(buf) {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png';
+  if (buf.length >= 6 && buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) return 'image/gif';
+  if (buf.length >= 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+  if (buf.length >= 12 && buf.toString('ascii', 4, 8) === 'ftyp') return 'image/heic'; // heic/heif family
+  return null;
+}
+
 function decodeFormPhoto(body) {
   let { dataBase64, contentType } = body || {};
   if (!dataBase64) return null;
   const m = /^data:([^;]+);base64,(.*)$/s.exec(dataBase64);
   if (m) { contentType = contentType || m[1]; dataBase64 = m[2]; }
   const buffer = Buffer.from(dataBase64, 'base64');
-  if (!buffer.length) return null;
-  return { buffer, contentType: contentType || 'image/jpeg' };
+  // Reject anything that isn't a genuine image — this is what stopped the old
+  // 3-byte "data:," uploads that rendered as broken thumbnails.
+  const sniffed = sniffImage(buffer);
+  if (!sniffed || buffer.length < 100) return null;
+  return { buffer, contentType: sniffed || contentType || 'image/jpeg' };
 }
 
 module.exports = router;
