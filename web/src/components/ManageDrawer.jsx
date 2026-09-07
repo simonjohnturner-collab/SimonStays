@@ -50,7 +50,7 @@ export default function ManageDrawer({
             <button className="wide menu-item" onClick={() => setView('property')}>🏠 Add or edit a property</button>
             <button className="wide menu-item" onClick={() => setView('booking')}>📅 Add or edit a booking</button>
             <button className="wide menu-item" onClick={onOpenListings}>🖼️ Listings (descriptions &amp; photos)</button>
-            <button className="wide menu-item" onClick={onOpenForms}>📋 Forms (issues &amp; clean reports)</button>
+            <button className="wide menu-item" onClick={onOpenForms}>📋 Damage &amp; checkout reports</button>
             <button className="wide menu-item" onClick={onOpenCleaners}>🧹 Cleaners (name list)</button>
             <button className="wide menu-item" onClick={onOpenSmartLocks}>🔒 Smart lock health</button>
             <button className="wide menu-item" onClick={onOpenPricing}>💲 Pricing sheet</button>
