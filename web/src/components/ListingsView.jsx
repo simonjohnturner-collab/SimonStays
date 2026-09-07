@@ -278,8 +278,6 @@ export default function ListingsView({ onClose }) {
                       <textarea className="listing-desc" placeholder="Unit description (optional — overrides/adds to the property description)…"
                         value={u.description || ''} onChange={(e) => editUnit(p.id, u.id, { description: e.target.value })} onBlur={() => autoSaveUnit(u)} />
                       <div className="attr-grid">
-                        <label className="attr">Check‑in time<input type="time" value={u.checkInTime || ''} onChange={(e) => editUnit(p.id, u.id, { checkInTime: e.target.value })} /></label>
-                        <label className="attr">Check‑out time<input type="time" value={u.checkOutTime || ''} onChange={(e) => editUnit(p.id, u.id, { checkOutTime: e.target.value })} /></label>
                         <label className="attr">Access (stairs/lift)
                           <select value={u.access || ''} onChange={(e) => editUnit(p.id, u.id, { access: e.target.value })}>
                             <option value="">—</option>
@@ -301,12 +299,17 @@ export default function ListingsView({ onClose }) {
                           <label className="attr wide">Smart lock link <span className="muted small">(for check‑in/out config)</span>
                             <input value={u.smartLockUrl || ''} placeholder="https://…" onChange={(e) => editUnit(p.id, u.id, { smartLockUrl: e.target.value })} /></label>
                         )}
-                        <label className="attr wide">Security<input value={u.security || ''} placeholder="e.g. 24h guard, biometric access, CCTV" onChange={(e) => editUnit(p.id, u.id, { security: e.target.value })} /></label>
-                        <label className="attr">Backup power<input value={u.backupPower || ''} placeholder="e.g. Inverter runs lights & wifi" onChange={(e) => editUnit(p.id, u.id, { backupPower: e.target.value })} /></label>
-                        <label className="attr">Backup water<input value={u.backupWater || ''} placeholder="e.g. 2500L tank" onChange={(e) => editUnit(p.id, u.id, { backupWater: e.target.value })} /></label>
                         <label className="attr wide">Parking bay number<input value={u.parkingNotes || ''} placeholder="e.g. Bay 12 (basement)" onChange={(e) => editUnit(p.id, u.id, { parkingNotes: e.target.value })} /></label>
                         <label className="attr">Wi‑Fi network<input value={u.wifiName || ''} placeholder="Network name" onChange={(e) => editUnit(p.id, u.id, { wifiName: e.target.value })} /></label>
                         <label className="attr">Wi‑Fi password<input value={u.wifiPassword || ''} placeholder="Password" onChange={(e) => editUnit(p.id, u.id, { wifiPassword: e.target.value })} /></label>
+                      </div>
+                      <div className="attr-subhead">General</div>
+                      <div className="attr-grid">
+                        <label className="attr">Check‑in time<input type="time" value={u.checkInTime || ''} onChange={(e) => editUnit(p.id, u.id, { checkInTime: e.target.value })} /></label>
+                        <label className="attr">Check‑out time<input type="time" value={u.checkOutTime || ''} onChange={(e) => editUnit(p.id, u.id, { checkOutTime: e.target.value })} /></label>
+                        <label className="attr wide">Security<input value={u.security || ''} placeholder="e.g. 24h guard, biometric access, CCTV" onChange={(e) => editUnit(p.id, u.id, { security: e.target.value })} /></label>
+                        <label className="attr">Backup power<input value={u.backupPower || ''} placeholder="e.g. Inverter runs lights & wifi" onChange={(e) => editUnit(p.id, u.id, { backupPower: e.target.value })} /></label>
+                        <label className="attr">Backup water<input value={u.backupWater || ''} placeholder="e.g. 2500L tank" onChange={(e) => editUnit(p.id, u.id, { backupWater: e.target.value })} /></label>
                       </div>
                       <PhotoGrid photos={u.photos} busy={busyPhoto === u.id}
                         onAdd={(files) => addPhotos('unit', p.id, u.id, files)}

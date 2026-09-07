@@ -584,3 +584,6 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .map-search input { flex:1; }
 .map-search button { flex-shrink:0; white-space:nowrap; }
 .map-search-note { margin:0; }
+
+/* --- Listings sub-section heading --- */
+.attr-subhead { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.3px; color:var(--muted); margin:12px 0 4px; }
