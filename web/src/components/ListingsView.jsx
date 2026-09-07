@@ -76,6 +76,8 @@ export default function ListingsView({ onClose }) {
   const [selectedId, setSelectedId] = useState(null); // property shown in the detail pane
   const [msg, setMsg] = useState('');
   const [busyPhoto, setBusyPhoto] = useState(null); // id of the property/unit currently uploading
+  const [dirty, setDirty] = useState(false); // unsaved edits pending
+  const [saving, setSaving] = useState(false);
 
   async function load() {
     const r = await api.getListings();
@@ -85,36 +87,45 @@ export default function ListingsView({ onClose }) {
   useEffect(() => { load(); }, []);
 
   // ---- local edits (kept in state; saved on the Save button) ----
-  const editProp = (pid, patch) => setProperties((ps) => ps.map((p) => (p.id === pid ? { ...p, ...patch } : p)));
-  const editUnit = (pid, uid, patch) =>
-    setProperties((ps) => ps.map((p) => (p.id !== pid ? p : { ...p, units: p.units.map((u) => (u.id === uid ? { ...u, ...patch } : u)) })));
+  const editProp = (pid, patch) => { setDirty(true); setProperties((ps) => ps.map((p) => (p.id === pid ? { ...p, ...patch } : p))); };
+  const editUnit = (pid, uid, patch) => { setDirty(true);
+    setProperties((ps) => ps.map((p) => (p.id !== pid ? p : { ...p, units: p.units.map((u) => (u.id === uid ? { ...u, ...patch } : u)) }))); };
 
-  async function saveProp(p) {
+  async function saveProp(p, quiet) {
     setMsg('');
-    try {
-      await api.saveProperty(p.id, {
-        name: p.name, address: p.address || '', description: p.description || '',
-        latitude: p.latitude ?? null, longitude: p.longitude ?? null,
-      });
-      flash('Saved.');
-    } catch (e) { setMsg(e.message); }
+    await api.saveProperty(p.id, {
+      name: p.name, address: p.address || '', description: p.description || '',
+      latitude: p.latitude ?? null, longitude: p.longitude ?? null,
+    });
+    if (!quiet) flash('Saved.');
   }
-  async function saveUnit(u) {
+  async function saveUnit(u, quiet) {
     setMsg('');
-    try {
-      await api.saveUnit(u.id, {
-        name: u.name, capacity: u.capacity, description: u.description || '',
-        bedrooms: u.bedrooms ?? null, bathrooms: u.bathrooms ?? null,
-        wifiName: u.wifiName || '', wifiPassword: u.wifiPassword || '',
-        checkInTime: u.checkInTime || '', checkOutTime: u.checkOutTime || '',
-        security: u.security || '', access: u.access || '',
-        accessMethod: u.accessMethod || '', smartLockUrl: u.smartLockUrl || '',
-        backupPower: u.backupPower || '', backupWater: u.backupWater || '',
-        parkingBays: u.parkingBays ?? null, parkingNotes: u.parkingNotes || '',
-      });
-      flash('Saved.');
-    } catch (e) { setMsg(e.message); }
+    await api.saveUnit(u.id, {
+      name: u.name, capacity: u.capacity, description: u.description || '',
+      bedrooms: u.bedrooms ?? null, bathrooms: u.bathrooms ?? null,
+      wifiName: u.wifiName || '', wifiPassword: u.wifiPassword || '',
+      checkInTime: u.checkInTime || '', checkOutTime: u.checkOutTime || '',
+      security: u.security || '', access: u.access || '',
+      accessMethod: u.accessMethod || '', smartLockUrl: u.smartLockUrl || '',
+      backupPower: u.backupPower || '', backupWater: u.backupWater || '',
+      parkingBays: u.parkingBays ?? null, parkingNotes: u.parkingNotes || '',
+    });
+    if (!quiet) flash('Saved.');
   }
+  // Save the whole property + every unit at once (the top "Save all" button).
+  async function saveAll(p) {
+    setSaving(true); setMsg('');
+    try {
+      await saveProp(p, true);
+      for (const u of p.units) { await saveUnit(u, true); }
+      setDirty(false); flash('All changes saved.');
+    } catch (e) { setMsg(e.message || 'Save failed'); }
+    finally { setSaving(false); }
+  }
+  // Auto-save a single record when a field loses focus, so nothing is lost.
+  async function autoSaveProp(p) { try { await saveProp(p, true); setDirty(false); flash('Saved.'); } catch (e) { setMsg(e.message); } }
+  async function autoSaveUnit(u) { try { await saveUnit(u, true); setDirty(false); flash('Saved.'); } catch (e) { setMsg(e.message); } }
   function flash(t) { setMsg(t); setTimeout(() => setMsg(''), 1500); }
 
   // ---- photos ----
@@ -157,9 +168,14 @@ export default function ListingsView({ onClose }) {
     <div className="invoices-view">
       <header className="topbar">
         <button className="brand linklike" onClick={onClose} title="Back to the board">Simon<span>Stays</span></button>
-        <span className="host">Listings — descriptions &amp; photos</span>
+        <span className="host">Listings</span>
         <div className="spacer" />
+        {dirty && <span className="unsaved-dot" title="You have unsaved changes">● Unsaved</span>}
         {msg && <span className="small" style={{ marginRight: 8 }}>{msg}</span>}
+        {properties && properties.length > 0 && (() => {
+          const cur = properties.find((x) => x.id === selectedId) || properties[0];
+          return <button className={dirty ? '' : 'secondary'} disabled={saving} onClick={() => cur && saveAll(cur)}>{saving ? 'Saving…' : '💾 Save all'}</button>;
+        })()}
         <button className="ghost" onClick={onClose}>🏠 Home</button>
       </header>
 
@@ -189,7 +205,7 @@ export default function ListingsView({ onClose }) {
                     <button className="ghost save" onClick={() => saveProp(p)}>💾 Save</button>
                   </div>
                   <textarea className="listing-desc" placeholder="Property description — paste from your Airbnb listing…"
-                    value={p.description || ''} onChange={(e) => editProp(p.id, { description: e.target.value })} />
+                    value={p.description || ''} onChange={(e) => editProp(p.id, { description: e.target.value })} onBlur={() => autoSaveProp(p)} />
                   <PhotoGrid photos={p.photos} busy={busyPhoto === p.id}
                     onAdd={(files) => addPhotos('property', p.id, null, files)}
                     onCover={(id) => coverPhoto('property', p.id, null, id)}
@@ -223,7 +239,7 @@ export default function ListingsView({ onClose }) {
                         <button className="ghost save" onClick={() => saveUnit(u)}>💾 Save</button>
                       </div>
                       <textarea className="listing-desc" placeholder="Unit description (optional — overrides/adds to the property description)…"
-                        value={u.description || ''} onChange={(e) => editUnit(p.id, u.id, { description: e.target.value })} />
+                        value={u.description || ''} onChange={(e) => editUnit(p.id, u.id, { description: e.target.value })} onBlur={() => autoSaveUnit(u)} />
                       <div className="attr-grid">
                         <label className="attr">Check‑in time<input type="time" value={u.checkInTime || ''} onChange={(e) => editUnit(p.id, u.id, { checkInTime: e.target.value })} /></label>
                         <label className="attr">Check‑out time<input type="time" value={u.checkOutTime || ''} onChange={(e) => editUnit(p.id, u.id, { checkOutTime: e.target.value })} /></label>

@@ -574,3 +574,6 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .forms-item-row .forms-item { flex:1; }
 .forms-item-row .fi-check { width:18px; height:18px; align-self:center; flex-shrink:0; }
 .forms-item-row.selecting .forms-item { cursor:pointer; }
+
+/* --- Listings unsaved indicator --- */
+.unsaved-dot { color:#ffd27a; font-weight:700; font-size:12px; margin-right:10px; }
