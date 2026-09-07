@@ -11,7 +11,10 @@ const { syncAll } = require('./utils/sync');
 
 const app = express();
 app.set('trust proxy', 1); // behind Render's proxy (correct https in req.protocol)
-app.use(helmet());
+// The admin web app is a separate origin (simonstays.onrender.com) that embeds
+// images served by this API via <img>. Helmet's default CORP of "same-origin"
+// blocks that cross-origin embedding, so photos render as broken. Allow it.
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors());
 app.use(express.json({ limit: '12mb' })); // room for base64 photo uploads
 
