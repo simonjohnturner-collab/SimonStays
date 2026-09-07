@@ -37,14 +37,16 @@ const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString() : '');
 // that failed to encode on the phone), show a clear placeholder instead of the
 // browser's broken-image icon.
 function Thumb({ ph, onOpen }) {
-  const base = photoUrl(ph.id);
+  // ?v=2 busts the year-long "immutable" cache of the old broken HEIC bytes,
+  // forcing one fresh fetch that the server transcodes to JPEG.
+  const base = photoUrl(ph.id) + '?v=2';
   const [src, setSrc] = useState(base);
   const [triedHeal, setTriedHeal] = useState(false);
   const [err, setErr] = useState(false);
-  // On error, retry once with a cache-buster. That bypasses a stale browser
-  // cache and makes the server transcode a legacy HEIC to JPEG on the fly.
+  // On error, retry once with a stronger cache-buster (in case ?v=2 was itself
+  // cached), which makes the server transcode a legacy HEIC to JPEG on the fly.
   function onError() {
-    if (!triedHeal) { setTriedHeal(true); setSrc(base + '?heal=' + Date.now()); }
+    if (!triedHeal) { setTriedHeal(true); setSrc(photoUrl(ph.id) + '?heal=' + Date.now()); }
     else setErr(true);
   }
   if (err) return <div className="thumb-btn thumb-broken" title={ph.filename || 'photo'}>⚠️<span>didn’t upload</span></div>;
