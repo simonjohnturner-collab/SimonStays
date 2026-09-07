@@ -248,11 +248,10 @@ export default function ListingsView({ onClose }) {
                           <label className="attr wide">Smart lock link <span className="muted small">(for check‑in/out config)</span>
                             <input value={u.smartLockUrl || ''} placeholder="https://…" onChange={(e) => editUnit(p.id, u.id, { smartLockUrl: e.target.value })} /></label>
                         )}
-                        <label className="attr">Parking bays<input type="number" min="0" value={u.parkingBays ?? ''} onChange={(e) => editUnit(p.id, u.id, { parkingBays: e.target.value === '' ? null : Number(e.target.value) })} /></label>
                         <label className="attr wide">Security<input value={u.security || ''} placeholder="e.g. 24h guard, biometric access, CCTV" onChange={(e) => editUnit(p.id, u.id, { security: e.target.value })} /></label>
                         <label className="attr">Backup power<input value={u.backupPower || ''} placeholder="e.g. Inverter runs lights & wifi" onChange={(e) => editUnit(p.id, u.id, { backupPower: e.target.value })} /></label>
                         <label className="attr">Backup water<input value={u.backupWater || ''} placeholder="e.g. 2500L tank" onChange={(e) => editUnit(p.id, u.id, { backupWater: e.target.value })} /></label>
-                        <label className="attr wide">Where is the parking?<input value={u.parkingNotes || ''} placeholder="e.g. Basement bays 12 & 13, gate code 4455" onChange={(e) => editUnit(p.id, u.id, { parkingNotes: e.target.value })} /></label>
+                        <label className="attr wide">Parking bay number<input value={u.parkingNotes || ''} placeholder="e.g. Bay 12 (basement)" onChange={(e) => editUnit(p.id, u.id, { parkingNotes: e.target.value })} /></label>
                         <label className="attr">Wi‑Fi network<input value={u.wifiName || ''} placeholder="Network name" onChange={(e) => editUnit(p.id, u.id, { wifiName: e.target.value })} /></label>
                         <label className="attr">Wi‑Fi password<input value={u.wifiPassword || ''} placeholder="Password" onChange={(e) => editUnit(p.id, u.id, { wifiPassword: e.target.value })} /></label>
                       </div>
