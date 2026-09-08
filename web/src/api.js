@@ -115,6 +115,13 @@ export const api = {
   updateProvider: (id, data) => req('PUT', `/providers/${id}`, data),
   deleteProvider: (id) => req('DELETE', `/providers/${id}`),
 
+  // guest contact book
+  listGuests: (q = '') => req('GET', `/guests${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  createGuest: (data) => req('POST', '/guests', data),
+  updateGuest: (id, data) => req('PUT', `/guests/${id}`, data),
+  deleteGuest: (id) => req('DELETE', `/guests/${id}`),
+  importGuestsFromBookings: () => req('POST', '/guests/import-from-bookings'),
+
   // forms (admin): design templates + review submissions
   listFormTemplates: () => req('GET', '/forms/templates'), // { damage, cleanForms }
   saveDamageForm: (data) => req('PUT', '/forms/templates/damage', data),

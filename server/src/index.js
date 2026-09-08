@@ -63,6 +63,7 @@ app.use('/invoices', require('./routes/invoices'));
 app.use('/forms', require('./routes/forms'));
 app.use('/cleaners', require('./routes/cleaners'));
 app.use('/providers', require('./routes/providers'));
+app.use('/guests', require('./routes/guests'));
 app.use('/smartlocks', require('./routes/smartlocks'));
 app.use('/groups', require('./routes/groups'));
 app.use('/properties', require('./routes/properties'));

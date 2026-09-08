@@ -8,7 +8,7 @@ const router = express.Router();
 router.use(authHost);
 
 function fmt(p) {
-  return { id: p.id, name: p.name, role: p.role, phone: p.phone || '', notes: p.notes || '', unitIds: Array.isArray(p.unitIds) ? p.unitIds : [] };
+  return { id: p.id, name: p.name, role: p.role, phone: p.phone || '', notes: p.notes || '', propertyIds: Array.isArray(p.propertyIds) ? p.propertyIds : [] };
 }
 function clean(b) {
   return {
@@ -16,7 +16,7 @@ function clean(b) {
     role: String(b.role || 'Cleaner').trim() || 'Cleaner',
     phone: b.phone ? String(b.phone).trim() : null,
     notes: b.notes ? String(b.notes).trim() : null,
-    unitIds: Array.isArray(b.unitIds) ? b.unitIds.filter(Boolean) : [],
+    propertyIds: Array.isArray(b.propertyIds) ? b.propertyIds.filter(Boolean) : [],
   };
 }
 

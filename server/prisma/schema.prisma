@@ -35,6 +35,7 @@ model Host {
   formTemplates   FormTemplate[]
   formSubmissions FormSubmission[]
   serviceProviders ServiceProvider[]
+  guests           Guest[]
 }
 
 // A service provider the host works with — cleaners, electricians, plumbers,
@@ -43,12 +44,31 @@ model ServiceProvider {
   id        String   @id @default(uuid())
   hostId    String
   host      Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  name        String
+  role        String   @default("Cleaner") // Cleaner | Electrician | Plumber | Handyman | Other…
+  phone       String?
+  notes       String?
+  propertyIds Json     @default("[]") // ids of properties this provider works in
+  unitIds     Json     @default("[]") // (dormant) previously per-unit allocation
+  createdAt   DateTime @default(now())
+
+  @@index([hostId])
+}
+
+// A guest contact-book entry — built up from bookings, invoices and direct
+// bookings so the host keeps a track record (contact details, notes, damages).
+model Guest {
+  id        String   @id @default(uuid())
+  hostId    String
+  host      Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
   name      String
-  role      String   @default("Cleaner") // Cleaner | Electrician | Plumber | Handyman | Other…
   phone     String?
+  email     String?
+  address   String? // business/postal address
   notes     String?
-  unitIds   Json     @default("[]") // ids of units this provider works in
+  damages   String? // running record of previous damages
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([hostId])
 }

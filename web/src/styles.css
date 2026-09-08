@@ -659,3 +659,20 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .sp-units-label { font-size:12px; color:var(--muted); font-weight:600; margin-right:2px; }
 .sp-unit { background:#eef1f4; color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:12px; }
 .sp-unit.on { background:var(--green); color:#fff; border-color:var(--green); }
+
+/* --- Guest contact book --- */
+.gb-wrap { max-width:900px; margin:0 auto; padding:16px 18px 50px; }
+.gb-tools { margin-bottom:12px; }
+.gb-add { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+.gb-add input { flex:1; min-width:120px; }
+.gb-add button { flex-shrink:0; }
+.gb-card { border:1px solid var(--line); border-radius:12px; background:#fff; padding:12px 14px; margin-bottom:12px; }
+.gb-top { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.gb-name { flex:2; min-width:140px; font-weight:600; }
+.gb-phone { flex:1; min-width:120px; }
+.gb-email { flex:1.5; min-width:150px; }
+.gb-addr { width:100%; margin-top:8px; }
+.gb-two { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+.gb-two textarea { min-height:56px; }
+.gb-damages { background:#fff8f7; }
+@media(max-width:600px){ .gb-two { grid-template-columns:1fr; } }

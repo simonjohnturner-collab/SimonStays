@@ -15,6 +15,7 @@ import BoardSearch from './BoardSearch.jsx';
 import FormsView from './FormsView.jsx';
 import NotificationsBell from './NotificationsBell.jsx';
 import ServiceProvidersView from './ServiceProvidersView.jsx';
+import GuestBookView from './GuestBookView.jsx';
 import SmartLockView from './SmartLockView.jsx';
 import AccountView from './AccountView.jsx';
 
@@ -38,6 +39,7 @@ export default function Main() {
   const [groups, setGroups] = useState([]);
   const [cleaners, setCleaners] = useState([]);
   const [providersOpen, setProvidersOpen] = useState(false);
+  const [guestsOpen, setGuestsOpen] = useState(false);
   const [pricingMatrix, setPricingMatrix] = useState(false);
   const [listings, setListings] = useState(false);
   const [forms, setForms] = useState(false);
@@ -187,10 +189,13 @@ export default function Main() {
     return (
       <ServiceProvidersView
         onClose={() => setProvidersOpen(false)}
-        units={properties.flatMap((p) => p.units.map((u) => ({ id: u.id, label: `${p.name} · ${u.name}` })))}
+        properties={properties.map((p) => ({ id: p.id, name: p.name }))}
         onChanged={() => api.listCleaners().then((c) => setCleaners(c.cleaners || [])).catch(() => {})}
       />
     );
+  }
+  if (guestsOpen) {
+    return <GuestBookView onClose={() => setGuestsOpen(false)} />;
   }
   if (monthUnit) {
     return (
@@ -293,6 +298,7 @@ export default function Main() {
           onOpenListings={() => { setMenuOpen(false); setListings(true); }}
           onOpenForms={() => { setMenuOpen(false); setForms(true); }}
           onOpenCleaners={() => { setMenuOpen(false); setProvidersOpen(true); }}
+          onOpenGuests={() => { setMenuOpen(false); setGuestsOpen(true); }}
           onOpenSmartLocks={() => { setMenuOpen(false); setSmartLocks(true); }}
           onOpenAccount={() => { setMenuOpen(false); setAccount(true); }}
           onReorderProperties={reorderProperties}

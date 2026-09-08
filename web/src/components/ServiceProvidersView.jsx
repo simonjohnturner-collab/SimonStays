@@ -6,7 +6,7 @@ import { api } from '../api.js';
 // units this provider works in.
 const ROLES = ['Cleaner', 'Electrician', 'Plumber', 'Handyman', 'Gardener', 'Pool service', 'Security', 'Other'];
 
-export default function ServiceProvidersView({ onClose, units = [], onChanged }) {
+export default function ServiceProvidersView({ onClose, properties = [], onChanged }) {
   const [rows, setRows] = useState(null);
   const [msg, setMsg] = useState('');
   const [nw, setNw] = useState({ name: '', role: 'Cleaner', phone: '' });
@@ -23,7 +23,7 @@ export default function ServiceProvidersView({ onClose, units = [], onChanged })
     catch (e) { setMsg(e.message); }
   }
   async function saveRow(r) {
-    try { await api.updateProvider(r.id, { name: r.name, role: r.role, phone: r.phone, notes: r.notes, unitIds: r.unitIds }); onChanged && onChanged(); flash('Saved.'); }
+    try { await api.updateProvider(r.id, { name: r.name, role: r.role, phone: r.phone, notes: r.notes, propertyIds: r.propertyIds }); onChanged && onChanged(); flash('Saved.'); }
     catch (e) { setMsg(e.message); }
   }
   async function removeRow(r) {
@@ -31,11 +31,11 @@ export default function ServiceProvidersView({ onClose, units = [], onChanged })
     try { await api.deleteProvider(r.id); await load(); onChanged && onChanged(); }
     catch (e) { setMsg(e.message); }
   }
-  function toggleUnit(r, uid) {
-    const has = (r.unitIds || []).includes(uid);
-    const unitIds = has ? r.unitIds.filter((x) => x !== uid) : [...(r.unitIds || []), uid];
-    editLocal(r.id, { unitIds });
-    api.updateProvider(r.id, { name: r.name, role: r.role, phone: r.phone, notes: r.notes, unitIds }).then(() => onChanged && onChanged()).catch((e) => setMsg(e.message));
+  function toggleProperty(r, pid) {
+    const has = (r.propertyIds || []).includes(pid);
+    const propertyIds = has ? r.propertyIds.filter((x) => x !== pid) : [...(r.propertyIds || []), pid];
+    editLocal(r.id, { propertyIds });
+    api.updateProvider(r.id, { name: r.name, role: r.role, phone: r.phone, notes: r.notes, propertyIds }).then(() => onChanged && onChanged()).catch((e) => setMsg(e.message));
   }
 
   return (
@@ -71,11 +71,11 @@ export default function ServiceProvidersView({ onClose, units = [], onChanged })
               <button className="del" title="Remove" onClick={() => removeRow(r)}>🗑</button>
             </div>
             <input className="sp-notes" placeholder="Notes (rates, availability, speciality…)" value={r.notes || ''} onChange={(e) => editLocal(r.id, { notes: e.target.value })} onBlur={() => saveRow(r)} />
-            {units.length > 0 && (
+            {properties.length > 0 && (
               <div className="sp-units">
-                <span className="sp-units-label">Works in:</span>
-                {units.map((u) => (
-                  <button key={u.id} type="button" className={`sp-unit ${(r.unitIds || []).includes(u.id) ? 'on' : ''}`} onClick={() => toggleUnit(r, u.id)}>{u.label}</button>
+                <span className="sp-units-label">Works at:</span>
+                {properties.map((p) => (
+                  <button key={p.id} type="button" className={`sp-unit ${(r.propertyIds || []).includes(p.id) ? 'on' : ''}`} onClick={() => toggleProperty(r, p.id)}>{p.name}</button>
                 ))}
               </div>
             )}
