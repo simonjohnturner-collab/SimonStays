@@ -249,6 +249,37 @@ export default function ListingsView({ onClose }) {
     try { await api.deletePhoto(id); } catch (e) { setMsg(e.message); }
   }
 
+  // ---- property & unit management (moved here from the old property menu) ----
+  async function addProperty() {
+    const name = window.prompt('New property name');
+    if (!name || !name.trim()) return;
+    try { const r = await api.createProperty(name.trim()); await load(); if (r && r.property) setSelectedId(r.property.id); flash('Property added.'); }
+    catch (e) { setMsg(e.message); }
+  }
+  async function addUnit(pid) {
+    const name = window.prompt('New unit name (e.g. 23, or Main)');
+    if (!name || !name.trim()) return;
+    try { await api.createUnit(pid, name.trim()); await load(); flash('Unit added.'); }
+    catch (e) { setMsg(e.message); }
+  }
+  async function removeProperty(p) {
+    if (!window.confirm(`Delete property “${p.name}” and ALL its units, bookings and photos? This cannot be undone.`)) return;
+    try { await api.deleteProperty(p.id); setSelectedId(null); await load(); flash('Property deleted.'); }
+    catch (e) { setMsg(e.message); }
+  }
+  async function removeUnit(u) {
+    if (!window.confirm(`Delete unit “${u.name}” and its bookings & photos? This cannot be undone.`)) return;
+    try { await api.deleteUnit(u.id); await load(); flash('Unit deleted.'); }
+    catch (e) { setMsg(e.message); }
+  }
+  async function moveProp(i, dir) {
+    const j = i + dir;
+    if (j < 0 || j >= properties.length) return;
+    const ids = properties.map((x) => x.id);
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    try { await api.reorderProperties(ids); await load(); } catch (e) { setMsg(e.message); }
+  }
+
   return (
     <div className="invoices-view">
       <header className="topbar">
@@ -265,7 +296,10 @@ export default function ListingsView({ onClose }) {
       </header>
 
       {!properties ? <p className="muted small" style={{ padding: 16 }}>Loading…</p> : properties.length === 0 ? (
-        <p className="muted small" style={{ padding: 16 }}>No properties yet. Add one from ☰ Manage properties, then come back here to add descriptions and photos.</p>
+        <div style={{ padding: 16 }}>
+          <p className="muted small">No properties yet.</p>
+          <button onClick={addProperty}>➕ Add a property</button>
+        </div>
       ) : (
         <div className="listings-layout">
           <aside className="listings-index">
@@ -276,6 +310,7 @@ export default function ListingsView({ onClose }) {
                 <span className="li-sub">{p.units.length} unit{p.units.length === 1 ? '' : 's'}{p.photos.length ? ` · ${p.photos.length} photo${p.photos.length === 1 ? '' : 's'}` : ''}</span>
               </button>
             ))}
+            <button className="li-add" onClick={addProperty}>➕ Add a property</button>
           </aside>
 
           <div className="listings-detail">
@@ -288,6 +323,14 @@ export default function ListingsView({ onClose }) {
                     <input className="listing-name" placeholder="Property name" value={p.name} onChange={(e) => editProp(p.id, { name: e.target.value })} />
                     <input className="listing-addr" placeholder="Property address" value={p.address || ''} onChange={(e) => editProp(p.id, { address: e.target.value })} />
                     <button className="ghost save" onClick={() => saveProp(p)}>💾 Save</button>
+                  </div>
+                  <div className="listing-prop-actions">
+                    {(() => { const pi = properties.findIndex((x) => x.id === p.id); return (<>
+                      <button className="mini" title="Move up" disabled={pi <= 0} onClick={() => moveProp(pi, -1)}>▲ up</button>
+                      <button className="mini" title="Move down" disabled={pi >= properties.length - 1} onClick={() => moveProp(pi, 1)}>▼ down</button>
+                    </>); })()}
+                    <span className="spacer" />
+                    <button className="mini danger" onClick={() => removeProperty(p)}>🗑 Delete property</button>
                   </div>
                   <textarea className="listing-desc" placeholder="Property description — paste from your Airbnb listing…"
                     value={p.description || ''} onChange={(e) => editProp(p.id, { description: e.target.value })} onBlur={() => autoSaveProp(p)} />
@@ -308,7 +351,10 @@ export default function ListingsView({ onClose }) {
                     <button className="ghost save" style={{ marginTop: 10 }} onClick={() => saveProp(p)}>💾 Save location</button>
                   </div>
 
-                  {p.units.length > 0 && <div className="units-label">Units</div>}
+                  <div className="units-label-row">
+                    <div className="units-label">Units</div>
+                    <button className="mini" onClick={() => addUnit(p.id)}>➕ Add unit</button>
+                  </div>
                   {p.units.map((u) => (
                     <div key={u.id} className="listing-unit">
                       <div className="listing-head">
@@ -323,6 +369,7 @@ export default function ListingsView({ onClose }) {
                           <input type="number" min="0" value={u.bathrooms ?? ''} onChange={(e) => editUnit(p.id, u.id, { bathrooms: e.target.value === '' ? null : Number(e.target.value) })} />
                         </label>
                         <button className="ghost save" onClick={() => saveUnit(u)}>💾 Save</button>
+                        <button className="mini danger" title="Delete unit" onClick={() => removeUnit(u)}>🗑</button>
                       </div>
                       <textarea className="listing-desc" placeholder="Unit description (optional — overrides/adds to the property description)…"
                         value={u.description || ''} onChange={(e) => editUnit(p.id, u.id, { description: e.target.value })} onBlur={() => autoSaveUnit(u)} />

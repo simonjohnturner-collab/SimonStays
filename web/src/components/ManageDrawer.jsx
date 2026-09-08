@@ -47,7 +47,6 @@ export default function ManageDrawer({
 
         {view === 'main' && (
           <div className="menu-main">
-            <button className="wide menu-item" onClick={() => setView('property')}>🏠 Add or edit a property</button>
             <button className="wide menu-item" onClick={() => setView('booking')}>📅 Add or edit a booking</button>
             <button className="wide menu-item" onClick={onOpenListings}>🖼️ Listings</button>
             <button className="wide menu-item" onClick={onOpenForms}>📋 Checkout &amp; damage reports</button>

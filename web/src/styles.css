@@ -637,3 +637,9 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .um-pricebar .rand-in { display:inline-flex; align-items:center; gap:2px; }
 .um-pricebar .rand-in input { width:100px; }
 .um-pricebar button.dark { color:var(--ink); }
+
+/* --- Listings: property & unit management --- */
+.li-add { width:100%; margin-top:8px; }
+.listing-prop-actions { display:flex; align-items:center; gap:6px; margin:2px 0 12px; }
+.listing-prop-actions .spacer { flex:1; }
+.units-label-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:6px; }
