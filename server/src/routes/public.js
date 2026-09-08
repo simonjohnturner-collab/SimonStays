@@ -73,8 +73,10 @@ router.get('/properties', async (req, res, next) => {
       const fromCents = units.map((u) => fromNightlyCents(u.pricingGroup)).filter((v) => v != null);
       out.push({
         id: p.id, name: p.name, address: p.address || null, description: p.description || null,
+        latitude: p.latitude ?? null, longitude: p.longitude ?? null,
         coverPhotoId: cover ? cover.id : null,
         maxCapacity: p.units.reduce((m, u) => Math.max(m, u.capacity || 0), 0),
+        beds: p.units.reduce((m, u) => Math.max(m, u.bedrooms || 0), 0),
         fromNightlyCents: fromCents.length ? Math.min(...fromCents) : null,
         unitCount: units.length,
         stayFromCents, // cheapest total for the chosen dates (only when searching)
@@ -96,9 +98,17 @@ router.get('/properties/:id', async (req, res, next) => {
     res.json({
       property: {
         id: p.id, name: p.name, address: p.address || null, description: p.description || null,
+        latitude: p.latitude ?? null, longitude: p.longitude ?? null,
         photos: p.photos.map((ph) => ({ id: ph.id })),
         units: p.units.map((u) => ({
           id: u.id, name: u.name, capacity: u.capacity, description: u.description || null,
+          bedrooms: u.bedrooms ?? null, bathrooms: u.bathrooms ?? null,
+          // Guest-relevant amenities only — sensitive fields (wifi password,
+          // smart-lock URL, access codes, lock battery) are deliberately omitted.
+          checkInTime: u.checkInTime || null, checkOutTime: u.checkOutTime || null,
+          access: u.access || null, security: u.security || null,
+          backupPower: u.backupPower || null, backupWater: u.backupWater || null,
+          parking: u.parkingNotes || null, wifi: u.wifiName ? true : false,
           photos: u.photos.map((ph) => ({ id: ph.id })),
           fromNightlyCents: fromNightlyCents(u.pricingGroup),
           hasPricing: !!u.pricingGroupId,

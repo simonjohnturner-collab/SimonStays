@@ -43,6 +43,18 @@ app.get(['/clean', '/report/clean'], (req, res) => {
   res.type('html').send(cleanHtml);
 });
 
+// Public booking site (shopfront). Self-contained page; talks to /public API
+// same-origin. Needs Leaflet (cdnjs) + OpenStreetMap tiles for the map view.
+const STAY_CSP = "default-src 'self'; img-src 'self' data: https://*.tile.openstreetmap.org; " +
+  "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " +
+  "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " +
+  "font-src 'self' data:; connect-src 'self'";
+const stayHtml = fs.readFileSync(path.join(__dirname, 'pages/stay.html'), 'utf8');
+app.get(['/', '/stay', '/book'], (req, res) => {
+  res.setHeader('Content-Security-Policy', STAY_CSP);
+  res.type('html').send(stayHtml);
+});
+
 app.use('/auth', require('./routes/auth'));
 app.use('/email', require('./routes/email'));
 app.use('/biller', require('./routes/biller'));

@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SimonStays — Book your stay</title>
+<link rel="icon" href="/favicon.svg" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+  :root{ --green:#1a7a3a; --green-d:#14622f; --ink:#1f2430; --muted:#6b7280; --line:#e5e7eb; --bg:#f7f8fa; --card:#fff; --red:#c0392b; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+  a{ color:var(--green); text-decoration:none; }
+  button{ font:inherit; cursor:pointer; border:0; border-radius:8px; padding:10px 16px; background:var(--green); color:#fff; }
+  button:hover{ background:var(--green-d); }
+  button.ghost{ background:#eef1f4; color:var(--ink); }
+  button.ghost:hover{ background:#e2e6ea; }
+  button:disabled{ opacity:.5; cursor:default; }
+  input,select{ font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; width:100%; background:#fff; }
+  header.top{ background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:30; }
+  .top-in{ max-width:1120px; margin:0 auto; padding:12px 18px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .brand{ font-weight:800; font-size:22px; color:var(--green); letter-spacing:-.5px; white-space:nowrap; }
+  .brand span{ color:var(--ink); }
+  .search{ display:flex; gap:8px; flex:1; flex-wrap:wrap; align-items:end; min-width:280px; }
+  .search .fld{ display:flex; flex-direction:column; gap:3px; }
+  .search .fld label{ font-size:11px; color:var(--muted); font-weight:600; padding-left:2px; }
+  .search .fld.q{ flex:1; min-width:180px; }
+  .search .fld.d input{ width:150px; }
+  .search .fld.g input{ width:80px; }
+  .wrap{ max-width:1120px; margin:0 auto; padding:16px 18px 60px; }
+  .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 0 14px; flex-wrap:wrap; }
+  .count{ color:var(--muted); font-size:14px; }
+  .toggle{ display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .toggle button{ background:#fff; color:var(--ink); border-radius:0; padding:8px 14px; }
+  .toggle button.on{ background:var(--green); color:#fff; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; cursor:pointer; transition:box-shadow .15s, transform .15s; }
+  .card:hover{ box-shadow:0 8px 26px rgba(0,0,0,.10); transform:translateY(-2px); }
+  .card .ph{ aspect-ratio:4/3; background:#e9edf1 center/cover no-repeat; }
+  .card .body{ padding:12px 14px; }
+  .card .nm{ font-weight:700; font-size:16px; }
+  .card .sub{ color:var(--muted); font-size:13px; margin-top:2px; }
+  .card .price{ margin-top:8px; font-weight:700; }
+  .card .price small{ color:var(--muted); font-weight:400; }
+  #map{ height:70vh; min-height:420px; border-radius:14px; border:1px solid var(--line); }
+  .empty{ text-align:center; color:var(--muted); padding:60px 20px; }
+  /* Detail overlay */
+  .overlay{ position:fixed; inset:0; background:rgba(15,20,30,.55); z-index:50; display:flex; justify-content:center; align-items:flex-start; padding:24px; overflow:auto; }
+  .sheet{ background:#fff; border-radius:16px; max-width:900px; width:100%; overflow:hidden; }
+  .sheet-head{ display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--line); position:sticky; top:0; background:#fff; z-index:2; }
+  .sheet-head h2{ margin:0; font-size:19px; }
+  .x{ background:transparent; color:var(--muted); font-size:26px; line-height:1; padding:0 8px; }
+  .x:hover{ background:transparent; color:var(--ink); }
+  .sheet-body{ padding:18px; }
+  .gallery{ display:grid; grid-template-columns:2fr 1fr 1fr; grid-auto-rows:120px; gap:6px; border-radius:12px; overflow:hidden; margin-bottom:14px; }
+  .gallery .g0{ grid-row:span 2; grid-column:1; }
+  .gallery img{ width:100%; height:100%; object-fit:cover; cursor:zoom-in; }
+  .desc{ white-space:pre-wrap; line-height:1.5; color:#374151; margin:10px 0 16px; }
+  .amen{ display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 18px; }
+  .amen .a{ background:#eef6f0; color:var(--green-d); border-radius:999px; padding:5px 12px; font-size:13px; }
+  .units{ display:flex; flex-direction:column; gap:10px; }
+  .unit{ border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .unit.sel{ border-color:var(--green); box-shadow:0 0 0 2px rgba(26,122,58,.15); }
+  .unit-top{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .unit-nm{ font-weight:700; }
+  .unit-meta{ color:var(--muted); font-size:13px; }
+  .book-panel{ margin-top:16px; border-top:1px solid var(--line); padding-top:16px; }
+  .cal-wrap{ display:flex; gap:18px; flex-wrap:wrap; }
+  .cal{ border:1px solid var(--line); border-radius:12px; padding:10px; width:260px; }
+  .cal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; font-weight:700; font-size:14px; }
+  .cal-head button{ background:#eef1f4; color:var(--ink); padding:2px 10px; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+  .cal-dow{ font-size:11px; color:var(--muted); text-align:center; padding:2px 0; }
+  .cal-day{ text-align:center; padding:7px 0; border-radius:7px; font-size:13px; cursor:pointer; user-select:none; }
+  .cal-day.pad{ visibility:hidden; }
+  .cal-day.off{ color:#c8ccd2; text-decoration:line-through; cursor:default; }
+  .cal-day.booked{ background:#fdecec; color:#c0392b; text-decoration:line-through; cursor:default; }
+  .cal-day.avail:hover{ background:#eef6f0; }
+  .cal-day.inrange{ background:#dff0e6; }
+  .cal-day.end{ background:var(--green); color:#fff; }
+  .cal-legend{ font-size:12px; color:var(--muted); margin-top:6px; display:flex; gap:12px; flex-wrap:wrap; }
+  .cal-legend i{ display:inline-block; width:10px; height:10px; border-radius:3px; vertical-align:-1px; margin-right:3px; }
+  .side{ flex:1; min-width:240px; }
+  .qbox{ border:1px solid var(--line); border-radius:12px; padding:14px; background:#fafbfc; }
+  .qrow{ display:flex; justify-content:space-between; padding:3px 0; }
+  .qtot{ font-weight:800; font-size:18px; border-top:1px solid var(--line); margin-top:6px; padding-top:8px; }
+  .frm{ display:grid; gap:8px; margin-top:12px; }
+  .frm .two{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .note{ font-size:13px; color:var(--muted); }
+  .todo{ background:#fff7e6; border:1px solid #f0d9a8; color:#8a5a00; border-radius:10px; padding:10px 12px; font-size:13px; margin:10px 0; }
+  .msg{ padding:9px 12px; border-radius:8px; margin:8px 0; font-size:14px; }
+  .msg.err{ background:#fdecec; color:#c0392b; }
+  .msg.ok{ background:#eafaf0; color:var(--green-d); }
+  .done{ text-align:center; padding:26px 10px; }
+  .done .big{ font-size:40px; }
+  .lightbox{ position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:70; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .lightbox img{ max-width:100%; max-height:100%; border-radius:8px; }
+  .lightbox .x{ position:absolute; top:14px; right:18px; color:#fff; font-size:34px; }
+  @media(max-width:640px){ .gallery{ grid-template-columns:1fr 1fr; } .gallery .g0{ grid-column:span 2; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div class="brand">Simon<span>Stays</span></div>
+    <div class="search">
+      <div class="fld q"><label>Where to?</label><input id="q" placeholder="Search area, complex or address…" /></div>
+      <div class="fld d"><label>Check-in</label><input id="ci" type="date" /></div>
+      <div class="fld d"><label>Check-out</label><input id="co" type="date" /></div>
+      <div class="fld g"><label>Guests</label><input id="g" type="number" min="1" placeholder="2" /></div>
+      <div class="fld"><label>&nbsp;</label><button id="searchBtn">Search</button></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="toolbar">
+    <div class="count" id="count">Loading stays…</div>
+    <div class="toggle">
+      <button id="tList" class="on">☰ List</button>
+      <button id="tMap">🗺 Map</button>
+    </div>
+  </div>
+  <div id="results" class="grid"></div>
+  <div id="map" style="display:none"></div>
+</div>
+
+<div id="detail"></div>
+<div id="lightbox"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+  var API=''; // same origin (served by the API)
+  var PROPS=[], VIEW='list', MAP=null, LAYER=null;
+  var $=function(s){ return document.querySelector(s); };
+  var el=function(t,c,h){ var e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e; };
+  var rand=function(c){ return 'R'+(c/100).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+  var iso=function(d){ return d.toISOString().slice(0,10); };
+  var todayISO=iso(new Date());
+  $('#ci').min=todayISO; $('#co').min=todayISO;
+
+  function qs(){
+    var p=new URLSearchParams();
+    if($('#ci').value && $('#co').value){ p.set('checkIn',$('#ci').value); p.set('checkOut',$('#co').value); }
+    if($('#g').value) p.set('guests',$('#g').value);
+    return p.toString();
+  }
+  function textMatch(p,q){
+    if(!q) return true; q=q.toLowerCase();
+    return (p.name||'').toLowerCase().indexOf(q)>=0 || (p.address||'').toLowerCase().indexOf(q)>=0 || (p.description||'').toLowerCase().indexOf(q)>=0;
+  }
+
+  async function load(){
+    $('#count').textContent='Loading stays…';
+    try{
+      var r=await fetch(API+'/public/properties'+(qs()?'?'+qs():''));
+      var d=await r.json(); PROPS=d.properties||[]; render();
+    }catch(e){ $('#count').textContent='Could not load stays. Please refresh.'; }
+  }
+
+  function filtered(){ var q=$('#q').value.trim(); return PROPS.filter(function(p){ return textMatch(p,q); }); }
+
+  function priceLabel(p){
+    if(p.stayFromCents!=null) return '<span class="price">'+rand(p.stayFromCents)+' <small>total for your dates</small></span>';
+    if(p.fromNightlyCents!=null) return '<span class="price">from '+rand(p.fromNightlyCents)+' <small>/ night</small></span>';
+    return '<span class="price"><small>Call for pricing</small></span>';
+  }
+
+  function render(){
+    var list=filtered();
+    $('#count').textContent=list.length+' '+(list.length===1?'stay':'stays')+(($('#ci').value&&$('#co').value)?' available for your dates':'');
+    var box=$('#results'); box.innerHTML='';
+    if(list.length===0){ box.appendChild(el('div','empty','No stays match your search. Try a different area or clear the dates.')); }
+    list.forEach(function(p){
+      var c=el('div','card');
+      var img=p.coverPhotoId?('background-image:url('+API+'/photos/'+p.coverPhotoId+')'):'';
+      c.innerHTML='<div class="ph" style="'+img+'"></div><div class="body"><div class="nm">'+esc(p.name)+'</div>'+
+        '<div class="sub">'+esc(p.address||'')+(p.maxCapacity?(' · sleeps up to '+p.maxCapacity):'')+'</div>'+priceLabel(p)+'</div>';
+      c.onclick=function(){ openProp(p.id); };
+      box.appendChild(c);
+    });
+    if(VIEW==='map') drawMap(list);
+  }
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];}); }
+
+  // ---- Map ----
+  function drawMap(list){
+    if(!MAP){
+      MAP=L.map('map').setView([-26.15,28.04],11);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(MAP);
+    }
+    if(LAYER) MAP.removeLayer(LAYER);
+    LAYER=L.layerGroup().addTo(MAP);
+    var pts=[];
+    list.forEach(function(p){
+      if(p.latitude==null||p.longitude==null) return;
+      var m=L.marker([p.latitude,p.longitude]).addTo(LAYER);
+      var pl=p.stayFromCents!=null?rand(p.stayFromCents):(p.fromNightlyCents!=null?('from '+rand(p.fromNightlyCents)+'/night'):'');
+      m.bindPopup('<b>'+esc(p.name)+'</b><br>'+esc(p.address||'')+'<br>'+pl+'<br><a href="#" data-id="'+p.id+'" class="mpop">View & book →</a>');
+      pts.push([p.latitude,p.longitude]);
+    });
+    setTimeout(function(){ MAP.invalidateSize(); if(pts.length) MAP.fitBounds(pts,{padding:[40,40],maxZoom:14}); },80);
+  }
+  document.addEventListener('click',function(e){ if(e.target.classList&&e.target.classList.contains('mpop')){ e.preventDefault(); openProp(e.target.getAttribute('data-id')); } });
+
+  function setView(v){
+    VIEW=v; $('#tList').classList.toggle('on',v==='list'); $('#tMap').classList.toggle('on',v==='map');
+    $('#results').style.display=v==='list'?'grid':'none'; $('#map').style.display=v==='map'?'block':'none';
+    if(v==='map') drawMap(filtered());
+  }
+  $('#tList').onclick=function(){ setView('list'); };
+  $('#tMap').onclick=function(){ setView('map'); };
+  $('#searchBtn').onclick=load;
+  $('#q').addEventListener('input',render);
+  ['ci','co'].forEach(function(id){ $('#'+id).addEventListener('change',function(){ if($('#ci').value) $('#co').min=$('#ci').value; }); });
+
+  // ---- Property detail + booking ----
+  var STATE={};
+  async function openProp(id){
+    var host=$('#detail'); host.innerHTML='<div class="overlay"><div class="sheet"><div class="sheet-body"><p class="note">Loading…</p></div></div></div>';
+    var closeOnBg=host.firstChild; closeOnBg.onclick=function(e){ if(e.target===closeOnBg) host.innerHTML=''; };
+    try{
+      var r=await fetch(API+'/public/properties/'+id); var d=await r.json(); var p=d.property;
+      STATE={ prop:p, unit:(p.units||[])[0]||null, ci:$('#ci').value||'', co:$('#co').value||'', month:startMonth(), booked:[] };
+      renderDetail();
+      if(STATE.unit) loadCal();
+    }catch(e){ host.innerHTML=''; alert('Could not load this stay.'); }
+  }
+  function startMonth(){ var d=new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; }
+
+  function renderDetail(){
+    var p=STATE.prop, host=$('#detail');
+    var photos=(p.photos||[]).slice(0,5);
+    var gal=photos.length?('<div class="gallery">'+photos.map(function(ph,i){ return '<img class="g'+i+'" data-full="'+API+'/photos/'+ph.id+'" src="'+API+'/photos/'+ph.id+'">'; }).join('')+'</div>'):'';
+    var amenChips=[];
+    (p.units||[]).forEach(function(u){});
+    var overlay=el('div','overlay');
+    overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
+    var units=(p.units||[]).map(function(u,i){
+      var meta=[]; if(u.capacity)meta.push('sleeps '+u.capacity); if(u.bedrooms)meta.push(u.bedrooms+' bed'); if(u.bathrooms)meta.push(u.bathrooms+' bath');
+      var price=u.fromNightlyCents!=null?('from '+rand(u.fromNightlyCents)+'/night'):(u.hasPricing?'':'call to book');
+      return '<div class="unit'+(STATE.unit&&STATE.unit.id===u.id?' sel':'')+'" data-uid="'+u.id+'"><div class="unit-top"><div><div class="unit-nm">Unit '+esc(u.name)+'</div><div class="unit-meta">'+meta.join(' · ')+'</div></div><div class="unit-meta">'+price+'</div></div></div>';
+    }).join('');
+    var u=STATE.unit||{};
+    var amen=[];
+    if(u.checkInTime)amen.push('Check-in '+u.checkInTime); if(u.checkOutTime)amen.push('Check-out '+u.checkOutTime);
+    if(u.wifi)amen.push('Wi-Fi'); if(u.backupPower)amen.push('Backup power'); if(u.backupWater)amen.push('Backup water');
+    if(u.security)amen.push('Security'); if(u.parking)amen.push('Parking'); if(u.access)amen.push(u.access);
+    var amenHtml=amen.length?('<div class="amen">'+amen.map(function(a){return '<span class="a">'+esc(a)+'</span>';}).join('')+'</div>'):'';
+    overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>'+esc(p.name)+'</h2><button class="x">&times;</button></div>'+
+      '<div class="sheet-body">'+gal+
+      '<div class="note">'+esc(p.address||'')+'</div>'+
+      (p.description?('<div class="desc">'+esc(p.description)+'</div>'):'')+
+      amenHtml+
+      '<h3 style="margin:6px 0">Choose a unit</h3><div class="units">'+units+'</div>'+
+      '<div class="book-panel" id="bookPanel"></div>'+
+      '</div></div>';
+    host.innerHTML=''; host.appendChild(overlay);
+    overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
+    overlay.querySelectorAll('.unit').forEach(function(node){ node.onclick=function(){ var uid=node.getAttribute('data-uid'); STATE.unit=(p.units||[]).find(function(x){return x.id===uid;}); STATE.ciSel=null; STATE.coSel=null; renderDetail(); loadCal(); }; });
+    overlay.querySelectorAll('.gallery img').forEach(function(img){ img.onclick=function(){ lightbox(img.getAttribute('data-full')); }; });
+    renderBookPanel();
+  }
+
+  function lightbox(src){ var l=$('#lightbox'); l.innerHTML='<div class="lightbox"><span class="x">&times;</span><img src="'+src+'"></div>'; l.firstChild.onclick=function(){ l.innerHTML=''; }; }
+
+  async function loadCal(){
+    if(!STATE.unit) return;
+    try{
+      var from=todayISO, to=iso(new Date(Date.now()+365*864e5));
+      var r=await fetch(API+'/public/units/'+STATE.unit.id+'/calendar?from='+from+'&to='+to);
+      var d=await r.json(); STATE.booked=d.booked||[]; renderBookPanel();
+    }catch(e){ STATE.booked=[]; renderBookPanel(); }
+  }
+
+  // Build the set of booked NIGHTS (checkIn..checkOut-1) — checkout day stays bookable.
+  function bookedNights(){
+    var set={};
+    (STATE.booked||[]).forEach(function(b){
+      var d=new Date(b.checkIn+'T00:00:00'), end=new Date(b.checkOut+'T00:00:00');
+      for(; d<end; d.setDate(d.getDate()+1)) set[iso(d)]=1;
+    });
+    return set;
+  }
+  function rangeHasBooked(a,b){ var nb=bookedNights(); var d=new Date(a+'T00:00:00'), end=new Date(b+'T00:00:00'); for(; d<end; d.setDate(d.getDate()+1)){ if(nb[iso(d)]) return true; } return false; }
+
+  function monthCal(base, nb){
+    var y=base.getFullYear(), m=base.getMonth();
+    var first=new Date(y,m,1), start=first.getDay();
+    var days=new Date(y,m+1,0).getDate();
+    var name=base.toLocaleDateString('en-ZA',{month:'long',year:'numeric'});
+    var cells='';
+    ['S','M','T','W','T','F','S'].forEach(function(d){ cells+='<div class="cal-dow">'+d+'</div>'; });
+    for(var i=0;i<start;i++) cells+='<div class="cal-day pad"></div>';
+    for(var day=1; day<=days; day++){
+      var ds=iso(new Date(y,m,day));
+      var cls='cal-day'; var past=ds<todayISO;
+      if(past) cls+=' off';
+      else if(nb[ds]) cls+=' booked';
+      else{
+        cls+=' avail';
+        if(STATE.ciSel && STATE.coSel && ds>=STATE.ciSel && ds<STATE.coSel) cls+=' inrange';
+        if(ds===STATE.ciSel || ds===STATE.coSel) cls+=' end';
+      }
+      cells+='<div class="'+cls+'" data-d="'+ds+'">'+day+'</div>';
+    }
+    return '<div class="cal"><div class="cal-head"><button class="cnav" data-dir="-1">‹</button><span>'+name+'</span><button class="cnav" data-dir="1">›</button></div><div class="cal-grid">'+cells+'</div></div>';
+  }
+
+  function renderBookPanel(){
+    var panel=$('#bookPanel'); if(!panel) return;
+    var u=STATE.unit;
+    if(!u){ panel.innerHTML='<p class="note">Select a unit above to see availability and prices.</p>'; return; }
+    if(!u.hasPricing){ panel.innerHTML='<div class="todo">This unit isn’t set up for online booking yet — please contact us to book.</div>'; return; }
+    var nb=bookedNights();
+    var m2=new Date(STATE.month); m2.setMonth(m2.getMonth()+1);
+    panel.innerHTML='<h3 style="margin:0 0 10px">Pick your dates</h3>'+
+      '<div class="cal-wrap"><div>'+
+        '<div style="display:flex; gap:10px; flex-wrap:wrap">'+monthCal(new Date(STATE.month),nb)+monthCal(m2,nb)+'</div>'+
+        '<div class="cal-legend"><span><i style="background:#fdecec"></i>Booked</span><span><i style="background:var(--green)"></i>Your dates</span></div>'+
+      '</div><div class="side" id="side"></div></div>';
+    // calendar interactions
+    panel.querySelectorAll('.cnav').forEach(function(b){ b.onclick=function(){ var mo=new Date(STATE.month); mo.setMonth(mo.getMonth()+Number(b.getAttribute('data-dir'))); if(mo<startMonth())mo=startMonth(); STATE.month=mo; renderBookPanel(); }; });
+    panel.querySelectorAll('.cal-day.avail').forEach(function(node){ node.onclick=function(){ pickDate(node.getAttribute('data-d')); }; });
+    renderSide();
+  }
+
+  function pickDate(ds){
+    if(!STATE.ciSel || (STATE.ciSel && STATE.coSel)){ STATE.ciSel=ds; STATE.coSel=null; STATE.quote=null; }
+    else if(ds<=STATE.ciSel){ STATE.ciSel=ds; STATE.coSel=null; STATE.quote=null; }
+    else if(rangeHasBooked(STATE.ciSel,ds)){ STATE.ciSel=ds; STATE.coSel=null; STATE.quote=null; }
+    else{ STATE.coSel=ds; getQuote(); }
+    renderBookPanel();
+  }
+
+  async function getQuote(){
+    if(!STATE.ciSel||!STATE.coSel) return;
+    try{
+      var r=await fetch(API+'/public/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unitId:STATE.unit.id,checkIn:STATE.ciSel,checkOut:STATE.coSel})});
+      var d=await r.json(); STATE.quote=d.quote||null; STATE.quoteErr=d.quote?null:(d.message||'No price available for these dates.');
+    }catch(e){ STATE.quote=null; STATE.quoteErr='Could not price these dates.'; }
+    renderSide();
+  }
+
+  function renderSide(){
+    var side=$('#side'); if(!side) return;
+    if(!STATE.ciSel||!STATE.coSel){ side.innerHTML='<p class="note">Click a check-in day, then a check-out day on the calendar.</p>'; return; }
+    var q=STATE.quote;
+    var head='<div class="note" style="margin-bottom:8px"><b>'+STATE.ciSel+'</b> → <b>'+STATE.coSel+'</b></div>';
+    if(!q){ side.innerHTML=head+'<div class="msg err">'+esc(STATE.quoteErr||'Pricing…')+'</div>'; return; }
+    var lines='<div class="qrow"><span>'+q.nights+' night'+(q.nights>1?'s':'')+' @ '+rand(q.avgNightlyCents)+'</span><span>'+rand(q.avgNightlyCents*q.nights)+'</span></div>';
+    if(q.discountPercent) lines+='<div class="qrow"><span>'+q.discountPercent+'% length discount</span><span>–</span></div>';
+    if(q.cleaningCents) lines+='<div class="qrow"><span>Cleaning</span><span>'+rand(q.cleaningCents)+'</span></div>';
+    side.innerHTML=head+'<div class="qbox">'+lines+'<div class="qrow qtot"><span>Total</span><span>'+rand(q.totalCents)+'</span></div></div>'+
+      '<div class="todo">💳 Online payment is coming soon. For now this creates a booking request and a <b>test confirmation</b> (no charge).</div>'+
+      '<div class="frm">'+
+        '<input id="gName" placeholder="Your full name" />'+
+        '<div class="two"><input id="gEmail" type="email" placeholder="Email" /><input id="gPhone" placeholder="Phone" /></div>'+
+        '<input id="gGuests" type="number" min="1" placeholder="Number of guests" />'+
+        '<input id="gMsg" placeholder="Anything we should know? (optional)" />'+
+        '<div id="bmsg"></div>'+
+        '<button id="reqBtn">Request booking · '+rand(q.totalCents)+'</button>'+
+      '</div>';
+    if($('#g').value) $('#gGuests').value=$('#g').value;
+    $('#reqBtn').onclick=requestBooking;
+  }
+
+  async function requestBooking(){
+    var name=$('#gName').value.trim(), email=$('#gEmail').value.trim(), phone=$('#gPhone').value.trim();
+    var bm=$('#bmsg');
+    if(!name){ bm.innerHTML='<div class="msg err">Please enter your name.</div>'; return; }
+    if(!email && !phone){ bm.innerHTML='<div class="msg err">Please give an email or phone number.</div>'; return; }
+    var btn=$('#reqBtn'); btn.disabled=true; btn.textContent='Booking…'; bm.innerHTML='';
+    try{
+      var body={ unitId:STATE.unit.id, checkIn:STATE.ciSel, checkOut:STATE.coSel, guestName:name, guestEmail:email, guestPhone:phone, guests:$('#gGuests').value||undefined, message:$('#gMsg').value||undefined };
+      var r=await fetch(API+'/public/book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      var d=await r.json();
+      if(!r.ok){ bm.innerHTML='<div class="msg err">'+esc(d.message||'Could not create the booking.')+'</div>'; btn.disabled=false; btn.textContent='Request booking'; return; }
+      // Payment step. TODO: when a vendor is live, d.payment.mode==='redirect' → window.location=d.payment.url.
+      if(d.payment && d.payment.mode==='redirect'){ window.location=d.payment.url; return; }
+      btn.textContent='Confirming…';
+      var pr=await fetch(API+'/public/book/'+d.bookingId+'/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      var pd=await pr.json();
+      if(!pr.ok){ bm.innerHTML='<div class="msg err">'+esc(pd.message||'Could not confirm.')+'</div>'; btn.disabled=false; btn.textContent='Request booking'; return; }
+      showDone(pd);
+    }catch(e){ bm.innerHTML='<div class="msg err">Something went wrong. Please try again.</div>'; btn.disabled=false; btn.textContent='Request booking'; }
+  }
+
+  function showDone(pd){
+    var host=$('#detail');
+    var overlay=el('div','overlay'); overlay.onclick=function(e){ if(e.target===overlay){ host.innerHTML=''; load(); } };
+    overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>Booking confirmed</h2><button class="x">&times;</button></div>'+
+      '<div class="sheet-body"><div class="done"><div class="big">✅</div>'+
+      '<h3>You’re booked, '+esc(($('#gName')&&$('#gName').value)||'')+'!</h3>'+
+      '<p class="note">'+esc(pd.property)+' · Unit '+esc(pd.unit)+'<br>'+esc(pd.booking.checkIn)+' → '+esc(pd.booking.checkOut)+'</p>'+
+      '<div class="todo" style="text-align:left">This was a <b>test confirmation</b> (no payment taken yet). Online payment will be added next — once it’s live, the calendar is only blocked after a successful charge.</div>'+
+      '<p class="note">Reference: '+esc(pd.booking.id)+'</p>'+
+      '<button id="doneBtn">Done</button></div></div></div>';
+    host.innerHTML=''; host.appendChild(overlay);
+    overlay.querySelector('.x').onclick=overlay.querySelector('#doneBtn').onclick=function(){ host.innerHTML=''; load(); };
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>
