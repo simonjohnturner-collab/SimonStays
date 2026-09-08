@@ -18,10 +18,35 @@ function publicAccount(h) {
   return out;
 }
 
+async function hostPhotoId(hostId) {
+  const p = await prisma.photo.findFirst({ where: { hostId }, orderBy: { createdAt: 'desc' }, select: { id: true } });
+  return p ? p.id : null;
+}
+
 router.get('/', async (req, res) => {
   const h = await prisma.host.findUnique({ where: { id: req.hostId } });
   if (!h) return res.status(404).json({ error: 'not_found' });
-  res.json({ account: publicAccount(h) });
+  res.json({ account: { ...publicAccount(h), photoId: await hostPhotoId(h.id) } });
+});
+
+// POST /account/photo { dataBase64, contentType } — set the host's profile photo
+// (replaces any existing one). DELETE removes it.
+router.post('/photo', async (req, res) => {
+  let { dataBase64, contentType } = req.body || {};
+  if (!dataBase64) return res.status(400).json({ error: 'no_image' });
+  const m = /^data:([^;]+);base64,(.*)$/s.exec(dataBase64);
+  if (m) { contentType = contentType || m[1]; dataBase64 = m[2]; }
+  let buffer = Buffer.from(dataBase64, 'base64');
+  if (buffer.length < 100) return res.status(400).json({ error: 'no_image' });
+  const out = await require('../utils/imagePrep').toRenderable(buffer, contentType || 'image/jpeg');
+  await prisma.photo.deleteMany({ where: { hostId: req.hostId } }); // one profile photo
+  const photo = await prisma.photo.create({ data: { hostId: req.hostId, data: out.buffer, contentType: out.contentType, filename: 'profile' }, select: { id: true } });
+  res.status(201).json({ photoId: photo.id });
+});
+
+router.delete('/photo', async (req, res) => {
+  await prisma.photo.deleteMany({ where: { hostId: req.hostId } });
+  res.json({ ok: true });
 });
 
 // PUT /account/profile — name + payout details

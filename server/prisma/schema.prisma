@@ -36,6 +36,7 @@ model Host {
   formSubmissions FormSubmission[]
   serviceProviders ServiceProvider[]
   guests           Guest[]
+  photos           Photo[]           @relation("HostPhotos")
 }
 
 // A service provider the host works with — cleaners, electricians, plumbers,
@@ -262,6 +263,9 @@ model Photo {
   // A photo can instead belong to a form submission (guest/cleaner uploads).
   formSubmissionId String?
   formSubmission   FormSubmission? @relation(fields: [formSubmissionId], references: [id], onDelete: Cascade)
+  // …or be a host's profile photo ("Hosted by").
+  hostId      String?
+  hostProfile Host?     @relation("HostPhotos", fields: [hostId], references: [id], onDelete: Cascade)
   fieldId     String? // which form question this photo answers
   data        Bytes // resized JPEG/PNG bytes
   contentType String

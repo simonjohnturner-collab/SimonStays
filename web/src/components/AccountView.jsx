@@ -1,5 +1,27 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api.js';
+import { api, photoUrl } from '../api.js';
+
+// Downscale a picked image to a small square-ish JPEG for the profile photo.
+function toDataUrl(file, maxDim = 600, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const img = new Image(); const url = URL.createObjectURL(file);
+    img.onload = () => {
+      try {
+        URL.revokeObjectURL(url);
+        let { width: w, height: h } = img;
+        if (Math.max(w, h) > maxDim) { const s = maxDim / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        const out = c.toDataURL('image/jpeg', quality);
+        if (!out || out.length < 100) return readRaw(file).then(resolve, reject);
+        resolve(out);
+      } catch { readRaw(file).then(resolve, reject); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); readRaw(file).then(resolve, reject); };
+    img.src = url;
+  });
+}
+function readRaw(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); }); }
 
 // Host account: payout details (where SimonStays pays this host out) and login
 // credential management. Everything is scoped to the logged-in host.
@@ -10,6 +32,21 @@ export default function AccountView({ onClose, onEmailChanged }) {
 
   useEffect(() => { api.getAccount().then((r) => setAcct(r.account)).catch((e) => setMsg(e.message)); }, []);
   const set = (k, v) => setAcct((a) => ({ ...a, [k]: v }));
+
+  const [photoBusy, setPhotoBusy] = useState(false);
+  async function onPickPhoto(e) {
+    const file = e.target.files && e.target.files[0]; e.target.value = '';
+    if (!file) return;
+    setPhotoBusy(true); setMsg('');
+    try { const dataBase64 = await toDataUrl(file); const r = await api.uploadAccountPhoto(dataBase64, 'image/jpeg'); setAcct((a) => ({ ...a, photoId: r.photoId })); flash('Photo updated.'); }
+    catch (err) { setMsg(err.message || 'Photo upload failed.'); } finally { setPhotoBusy(false); }
+  }
+  async function removePhoto() {
+    if (!window.confirm('Remove your profile photo?')) return;
+    setPhotoBusy(true);
+    try { await api.deleteAccountPhoto(); setAcct((a) => ({ ...a, photoId: null })); flash('Photo removed.'); }
+    catch (err) { setMsg(err.message); } finally { setPhotoBusy(false); }
+  }
 
   const [savingP, setSavingP] = useState(false);
   async function savePayout() {
@@ -56,6 +93,19 @@ export default function AccountView({ onClose, onEmailChanged }) {
       <div className="account-wrap">
         {!acct ? <p className="muted small">Loading…</p> : (
           <>
+            <section className="acct-card">
+              <h3>👤 Your profile</h3>
+              <p className="muted small">Your name and photo appear as “Hosted by …” on the public booking site.</p>
+              <div className="acct-photo-row">
+                <div className="acct-avatar">{acct.photoId ? <img src={photoUrl(acct.photoId)} alt="profile" /> : <span>🙂</span>}</div>
+                <div className="acct-photo-actions">
+                  <label className="btn-like">{photoBusy ? 'Uploading…' : (acct.photoId ? 'Change photo' : 'Upload photo')}
+                    <input type="file" accept="image/*" disabled={photoBusy} onChange={onPickPhoto} hidden /></label>
+                  {acct.photoId && <button className="secondary" disabled={photoBusy} onClick={removePhoto}>Remove</button>}
+                </div>
+              </div>
+            </section>
+
             <section className="acct-card">
               <h3>💳 Payout details</h3>
               <p className="muted small">SimonStays collects guest bookings &amp; payments, then pays you out to the account below. Keep this accurate so payouts reach you.</p>

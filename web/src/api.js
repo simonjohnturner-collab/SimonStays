@@ -47,6 +47,8 @@ export const api = {
   saveAccount: (data) => req('PUT', '/account/profile', data),
   changePassword: (currentPassword, newPassword) => req('PUT', '/account/password', { currentPassword, newPassword }),
   changeEmail: (currentPassword, newEmail) => req('PUT', '/account/email', { currentPassword, newEmail }),
+  uploadAccountPhoto: (dataBase64, contentType) => req('POST', '/account/photo', { dataBase64, contentType }),
+  deleteAccountPhoto: () => req('DELETE', '/account/photo'),
 
   // properties + units
   listProperties: () => req('GET', '/properties'),

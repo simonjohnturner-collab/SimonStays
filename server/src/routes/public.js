@@ -31,6 +31,17 @@ function fromNightlyCents(rc) {
 
 const unitInclude = { pricingGroup: true, photos: { orderBy: { sort: 'asc' } } };
 
+// GET /public/host — who hosts this shopfront ("Hosted by …") + profile photo.
+router.get('/host', async (req, res, next) => {
+  try {
+    const hostId = await publicHostId();
+    if (!hostId) return res.json({ host: null });
+    const h = await prisma.host.findUnique({ where: { id: hostId }, select: { name: true } });
+    const photo = await prisma.photo.findFirst({ where: { hostId }, orderBy: { createdAt: 'desc' }, select: { id: true } });
+    res.json({ host: { name: (h && h.name) || null, photoId: photo ? photo.id : null } });
+  } catch (e) { next(e); }
+});
+
 // GET /public/properties?checkIn=&checkOut=&guests= — browse list.
 // With dates, only properties with a free unit for that stay are returned, and
 // stayFromCents is the cheapest available total for those dates.
