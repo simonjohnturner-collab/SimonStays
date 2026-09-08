@@ -67,6 +67,44 @@ router.get('/:id/bookings', requireOwnedUnit, async (req, res) => {
   res.json({ bookings });
 });
 
+// GET /units/:id/night-rates?from=&to= — the effective nightly base for each
+// date (rate-card nightly + flex, or a manual override), for the month view.
+router.get('/:id/night-rates', requireOwnedUnit, async (req, res) => {
+  const { effectiveNightly } = require('../utils/pricing');
+  const { dateOnly } = require('../utils/ical');
+  const unit = await prisma.unit.findUnique({ where: { id: req.unit.id }, include: { pricingGroup: true } });
+  const rc = unit.pricingGroup;
+  const from = req.query.from ? new Date(req.query.from + 'T00:00:00Z') : new Date();
+  const to = req.query.to ? new Date(req.query.to + 'T00:00:00Z') : new Date(Date.now() + 62 * 864e5);
+  const rows = await prisma.nightPrice.findMany({ where: { unitId: unit.id, date: { gte: dateOnly(from.toISOString().slice(0, 10)), lte: dateOnly(to.toISOString().slice(0, 10)) } } });
+  const ov = {}; rows.forEach((r) => { ov[r.date.toISOString().slice(0, 10)] = r.priceCents; });
+  const nights = [];
+  for (let d = new Date(from); d <= to; d.setUTCDate(d.getUTCDate() + 1)) {
+    const iso = d.toISOString().slice(0, 10);
+    if (rc) { const e = effectiveNightly(rc, new Date(iso + 'T12:00:00Z'), ov); nights.push({ date: iso, cents: e.cents, baseCents: e.baseCents, overridden: e.overridden, flexPercent: e.flexPercent, weekend: e.weekend }); }
+    else nights.push({ date: iso, cents: ov[iso] != null ? ov[iso] : null, overridden: ov[iso] != null, weekend: [5, 6].includes(new Date(iso + 'T12:00:00Z').getUTCDay()) });
+  }
+  res.json({ nights, hasPricing: !!rc });
+});
+
+// PUT /units/:id/night-prices — { dates:[ISO], priceCents } sets an override for
+// those nights; priceCents null/'' clears them.
+router.put('/:id/night-prices', requireOwnedUnit, async (req, res) => {
+  const { dateOnly } = require('../utils/ical');
+  const b = req.body || {};
+  const dates = Array.isArray(b.dates) ? b.dates : [];
+  if (!dates.length) return res.status(400).json({ error: 'dates_required' });
+  const clear = b.priceCents == null || b.priceCents === '';
+  const cents = clear ? null : Math.round(Number(b.priceCents));
+  if (!clear && !(cents >= 0)) return res.status(400).json({ error: 'invalid_price' });
+  for (const ds of dates) {
+    const date = dateOnly(String(ds).slice(0, 10));
+    if (clear) await prisma.nightPrice.deleteMany({ where: { unitId: req.unit.id, date } });
+    else await prisma.nightPrice.upsert({ where: { unitId_date: { unitId: req.unit.id, date } }, update: { priceCents: cents }, create: { unitId: req.unit.id, date, priceCents: cents } });
+  }
+  res.json({ ok: true, count: dates.length, cleared: clear });
+});
+
 // POST /units/:id/sync — pull this unit's channel calendars now.
 router.post('/:id/sync', requireOwnedUnit, async (req, res) => {
   try {
@@ -113,7 +151,13 @@ router.post('/:id/quote', requireOwnedUnit, async (req, res) => {
   if (!req.unit.pricingGroupId) return res.status(404).json({ error: 'no_rate_card' });
   const g = await prisma.pricingGroup.findUnique({ where: { id: req.unit.pricingGroupId } });
   if (!g) return res.status(404).json({ error: 'no_rate_card' });
-  const q = quote(g, req.body || {});
+  const body = req.body || {};
+  let overrides = null;
+  if (body.checkIn && body.checkOut) {
+    const { overridesFor } = require('../utils/nightPrices');
+    overrides = await overridesFor(req.unit.id, String(body.checkIn).slice(0, 10), String(body.checkOut).slice(0, 10));
+  }
+  const q = quote(g, { ...body, overrides });
   if (!q) return res.status(400).json({ error: 'invalid_dates' });
   res.json({ quote: q });
 });

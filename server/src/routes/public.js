@@ -195,7 +195,8 @@ router.post('/quote', async (req, res, next) => {
     const unit = await prisma.unit.findFirst({ where: { id: unitId, property: { hostId } }, include: { pricingGroup: true } });
     if (!unit) return res.status(404).json({ error: 'not_found' });
     if (!unit.pricingGroup) return res.status(400).json({ error: 'no_pricing', message: 'This unit has no online pricing — please call to book.' });
-    const q = quote(unit.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1 });
+    const overrides = await require('../utils/nightPrices').overridesFor(unit.id, iso(checkIn), iso(checkOut));
+    const q = quote(unit.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1, overrides });
     if (!q) return res.status(400).json({ error: 'invalid_dates' });
     res.json({ quote: q });
   } catch (e) { next(e); }
@@ -221,7 +222,8 @@ router.post('/book', async (req, res, next) => {
       return res.status(409).json({ error: 'dates_unavailable', message: 'Sorry — those dates were just taken. Please choose different dates.' });
     }
 
-    const q = quote(unit.pricingGroup, { checkIn: iso(b.checkIn), checkOut: iso(b.checkOut), cleans: 1 });
+    const bookOverrides = await require('../utils/nightPrices').overridesFor(unit.id, iso(b.checkIn), iso(b.checkOut));
+    const q = quote(unit.pricingGroup, { checkIn: iso(b.checkIn), checkOut: iso(b.checkOut), cleans: 1, overrides: bookOverrides });
     if (!q) return res.status(400).json({ error: 'invalid_dates' });
 
     const contact = [b.guestEmail, b.guestPhone].filter(Boolean).join(' · ');

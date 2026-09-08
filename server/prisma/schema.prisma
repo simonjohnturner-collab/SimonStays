@@ -193,10 +193,25 @@ model Unit {
   syncLogs       SyncLog[]
   photos         Photo[]
   formSubmissions FormSubmission[]
+  nightPrices    NightPrice[]
   pricingGroupId String?
   pricingGroup   PricingGroup?       @relation(fields: [pricingGroupId], references: [id], onDelete: SetNull)
 
   @@index([propertyId])
+}
+
+// A manual per-night base-rate override for one unit on one date. Replaces the
+// rate-card base nightly rate for that night only (fees/cleaning/deposit unchanged).
+model NightPrice {
+  id         String   @id @default(uuid())
+  unitId     String
+  unit       Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  date       DateTime // date-only (stored at noon UTC) — the night being priced
+  priceCents Int
+  createdAt  DateTime @default(now())
+
+  @@unique([unitId, date])
+  @@index([unitId, date])
 }
 
 // A listing photo for a Property or a Unit. Bytes are stored in Postgres so

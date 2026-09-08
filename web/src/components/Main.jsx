@@ -188,9 +188,11 @@ export default function Main() {
       <UnitMonthView
         unit={monthUnit.unit}
         propertyName={monthUnit.propertyName}
+        units={properties.flatMap((p) => p.units.map((u) => ({ ...u, label: `${p.name} · ${u.name}` })))}
+        groups={groups}
+        cleaners={cleaners}
         onClose={() => setMonthUnit(null)}
-        onEditBooking={(booking, unit) => { setMonthUnit(null); setBookingCtx({ booking, unit }); }}
-        onNewBooking={(unit) => { setMonthUnit(null); setBookingCtx({ unit }); }}
+        onBookingsChanged={() => loadBookings(properties)}
       />
     );
   }

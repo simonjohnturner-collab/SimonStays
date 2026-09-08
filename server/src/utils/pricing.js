@@ -21,13 +21,24 @@ function baseRateFor(rc, nightIndex) {
   return add != null ? add : (first != null ? first : 0);
 }
 
-// Nightly base for one night: a weekend rate (if set) overrides the standard
-// nightly on Fri/Sat. The first night bundles one clean either way.
-function nightBase(rc, i, date) {
+// The nightly base rate for one night: a weekend rate (if set) overrides the
+// standard nightly on Fri/Sat. No first-night bundling — the checkout clean is
+// charged explicitly below (firstNightCents == nightly + clean by construction,
+// so totals are unchanged; this makes per-night overrides clean).
+function nightlyRate(rc, date) {
   const wk = rc.weekendNightCents;
-  const weekendRate = (isWeekend(date) && wk != null);
-  if (i === 0) return weekendRate ? (wk + (rc.cleaningCents || 0)) : baseRateFor(rc, 0);
-  return weekendRate ? wk : baseRateFor(rc, i);
+  if (isWeekend(date) && wk != null) return wk;
+  return rc.additionalNightCents != null ? rc.additionalNightCents : (rc.firstNightCents != null ? rc.firstNightCents : 0);
+}
+
+// The effective displayed nightly for a date: a manual override wins (exact, no
+// flex); otherwise the rate-card nightly + any seasonal flex.
+function effectiveNightly(rc, date, overrides) {
+  const iso = date.toISOString().slice(0, 10);
+  if (overrides && overrides[iso] != null) return { baseCents: overrides[iso], flexPercent: 0, cents: overrides[iso], overridden: true, weekend: isWeekend(date) };
+  const base = nightlyRate(rc, date);
+  const flex = nightFlex(rc, date);
+  return { baseCents: base, flexPercent: flex, cents: Math.round(base * (1 + flex / 100)), overridden: false, weekend: isWeekend(date) };
 }
 
 // Seasonal flex periods match by month-day (recurring every year); Dec->Jan wraps.
@@ -49,19 +60,17 @@ function nightFlex(rc, date) {
  * quote(rc, { checkIn, checkOut, mattress, earlyCheckIn, lateCheckOut, cleans })
  * cleans = number of chargeable cleans (defaults to 1 — the checkout clean).
  */
-function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, lateCheckOut = false, cleans = 1 }) {
+function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, lateCheckOut = false, cleans = 1, overrides = null }) {
   if (!rc || !checkIn || !checkOut) return null;
   const nights = eachNight(checkIn, checkOut);
   const n = nights.length;
   if (n <= 0) return null;
 
   let accommodation = 0;
-  const nightLines = nights.map((d, i) => {
-    const base = nightBase(rc, i, d);
-    const flex = nightFlex(rc, d);
-    const cents = Math.round(base * (1 + flex / 100));
-    accommodation += cents;
-    return { date: d.toISOString().slice(0, 10), baseCents: base, flexPercent: flex, weekend: isWeekend(d), cents };
+  const nightLines = nights.map((d) => {
+    const e = effectiveNightly(rc, d, overrides);
+    accommodation += e.cents;
+    return { date: d.toISOString().slice(0, 10), baseCents: e.baseCents, flexPercent: e.flexPercent, weekend: e.weekend, overridden: e.overridden, cents: e.cents };
   });
 
   let discountPercent = 0;
@@ -69,8 +78,10 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
   else if (n >= 7) discountPercent = rc.weeklyDiscountPercent || 0;
   const discountCents = Math.round(accommodation * discountPercent / 100);
 
-  // First night already bundles one (checkout) clean, so only charge EXTRA cleans.
-  const cleaningCents = (rc.cleaningCents || 0) * Math.max(0, cleans - 1);
+  // Checkout clean is charged explicitly (one per stay by default, plus any
+  // mid-stay cleans). Firenza's firstNight already equalled nightly + clean, so
+  // the stay total is unchanged versus the old bundled model.
+  const cleaningCents = (rc.cleaningCents || 0) * Math.max(0, cleans);
   const earlyCents = earlyCheckIn ? (rc.earlyCheckInCents || 0) : 0;
   const lateCents = lateCheckOut ? (rc.lateCheckOutCents || 0) : 0;
   const mattressCents = mattress ? (rc.mattressCents || 0) : 0;
@@ -91,4 +102,4 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
   };
 }
 
-module.exports = { quote, baseRateFor };
+module.exports = { quote, baseRateFor, nightlyRate, effectiveNightly };

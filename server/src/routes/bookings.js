@@ -175,10 +175,12 @@ router.get('/bookings/:id/quote', async (req, res) => {
   if (!rc) return res.status(404).json({ error: 'no_rate_card' });
   const iso = (d) => new Date(d).toISOString().slice(0, 10);
   const prepaidCleans = (booking.cleans || []).filter((c) => c.paymentMethod !== 'direct').length;
+  const { overridesFor } = require('../utils/nightPrices');
+  const overrides = await overridesFor(booking.unitId, iso(booking.checkIn), iso(booking.checkOut));
   const q = quote(rc, {
     checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut),
     mattress: booking.extraMattress, earlyCheckIn: booking.earlyCheckIn, lateCheckOut: booking.lateCheckOut,
-    cleans: 1 + prepaidCleans,
+    cleans: 1 + prepaidCleans, overrides,
   });
   res.json({ quote: q });
 });
