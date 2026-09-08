@@ -171,9 +171,9 @@
   function filtered(){ var q=$('#q').value.trim(); return UNITS.filter(function(u){ return textMatch(u,q); }); }
 
   function priceLabel(u){
-    if(u.stayFromCents!=null) return '<span class="price">'+rand(u.stayFromCents)+' <small>total for your dates</small></span>';
-    if(u.fromNightlyCents!=null) return '<span class="price">from '+rand(u.fromNightlyCents)+' <small>/ night</small></span>';
-    return '<span class="price"><small>Call for pricing</small></span>';
+    if(u.stayFromCents>0) return '<span class="price">'+rand(u.stayFromCents)+' <small>total for your dates</small></span>';
+    if(u.fromNightlyCents>0) return '<span class="price">from '+rand(u.fromNightlyCents)+' <small>/ night</small></span>';
+    return '<span class="price"><small>Contact us to book</small></span>';
   }
   function unitTitle(u){ return esc(u.propertyName)+' · Unit '+esc(u.unitName); }
   function unitSub(u){ var m=[]; if(u.capacity)m.push('sleeps '+u.capacity); if(u.bedrooms)m.push(u.bedrooms+' bed'); if(u.bathrooms)m.push(u.bathrooms+' bath'); return (u.address?esc(u.address):'')+(m.length?(' · '+m.join(' · ')):''); }
@@ -211,7 +211,7 @@
       var k=u.latitude+','+u.longitude; var n=seen[k]=(seen[k]||0)+1;
       var lat=u.latitude+(n-1)*0.00012, lng=u.longitude+(n-1)*0.00012;
       var m=L.marker([lat,lng]).addTo(LAYER);
-      var pl=u.stayFromCents!=null?rand(u.stayFromCents):(u.fromNightlyCents!=null?('from '+rand(u.fromNightlyCents)+'/night'):'');
+      var pl=u.stayFromCents>0?rand(u.stayFromCents):(u.fromNightlyCents>0?('from '+rand(u.fromNightlyCents)+'/night'):'Contact us to book');
       m.bindPopup('<b>'+unitTitle(u)+'</b><br>'+esc(u.address||'')+'<br>'+pl+'<br><a href="#" data-i="'+i+'" class="mpop">View & book →</a>');
       pts.push([lat,lng]);
     });
