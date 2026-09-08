@@ -84,9 +84,14 @@ async function syncUnit(unitId) {
       }
     }
 
-    // Remove this channel's bookings that vanished from the feed (cancellations).
+    // Remove this channel's bookings that vanished from the feed (cancellations),
+    // but ONLY upcoming/current ones. Past bookings drop off the Airbnb feed after
+    // checkout — they are completed history, not cancellations — so a booking that
+    // has already checked out is never deleted. (This is what previously wiped
+    // past reservations on every sync.)
+    const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
     const stale = await prisma.booking.findMany({
-      where: { unitId, source, externalUid: { not: null } },
+      where: { unitId, source, externalUid: { not: null }, checkOut: { gte: startOfToday } },
       select: { id: true, externalUid: true },
     });
     const toRemove = stale.filter((b) => !seen.has(b.externalUid)).map((b) => b.id);
