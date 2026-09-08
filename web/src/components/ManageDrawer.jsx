@@ -6,7 +6,7 @@ export default function ManageDrawer({
   properties, bookingsByUnit, onClose,
   onAddProperty, onRenameProperty, onDeleteProperty,
   onAddUnit, onDeleteUnit, onOpenUnit, onOpenPricing,
-  onAddBooking, onAddFloating, onEditBooking, onOpenInvoices, onOpenListings, onOpenForms, onOpenCleaners, onOpenSmartLocks,
+  onAddBooking, onAddFloating, onEditBooking, onOpenInvoices, onOpenListings, onOpenForms, onOpenCleaners, onOpenSmartLocks, onOpenAccount,
   onReorderProperties,
   groups = [], onAssignGroup, onCreateGroup,
 }) {
@@ -55,6 +55,7 @@ export default function ManageDrawer({
             <button className="wide menu-item" onClick={onOpenSmartLocks}>🔒 SmartLock dashboard</button>
             <button className="wide menu-item" onClick={onOpenPricing}>💲 Pricing sheet</button>
             <button className="wide menu-item" onClick={onOpenInvoices}>🧾 Invoicing</button>
+            <button className="wide menu-item" onClick={onOpenAccount}>👤 Account &amp; payouts</button>
           </div>
         )}
 

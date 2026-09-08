@@ -15,6 +15,7 @@ import FormsView from './FormsView.jsx';
 import NotificationsBell from './NotificationsBell.jsx';
 import CleanersModal from './CleanersModal.jsx';
 import SmartLockView from './SmartLockView.jsx';
+import AccountView from './AccountView.jsx';
 
 const WINDOW_DAYS = 35;
 
@@ -39,6 +40,7 @@ export default function Main() {
   const [listings, setListings] = useState(false);
   const [forms, setForms] = useState(false);
   const [smartLocks, setSmartLocks] = useState(false);
+  const [account, setAccount] = useState(false);
   const [formsInitialId, setFormsInitialId] = useState(null); // open Forms straight to this submission
   const [focus, setFocus] = useState(null); // { unitId, bookingId, key } — jump target
   function openFormsSubmission(id) { setFormsInitialId(id || null); setForms(true); }
@@ -176,6 +178,9 @@ export default function Main() {
   if (smartLocks) {
     return <SmartLockView onClose={() => setSmartLocks(false)} />;
   }
+  if (account) {
+    return <AccountView onClose={() => setAccount(false)} />;
+  }
 
   return (
     <div className="app">
@@ -263,6 +268,7 @@ export default function Main() {
           onOpenForms={() => { setMenuOpen(false); setForms(true); }}
           onOpenCleaners={() => { setMenuOpen(false); setCleanersOpen(true); }}
           onOpenSmartLocks={() => { setMenuOpen(false); setSmartLocks(true); }}
+          onOpenAccount={() => { setMenuOpen(false); setAccount(true); }}
           onReorderProperties={reorderProperties}
         />
       )}

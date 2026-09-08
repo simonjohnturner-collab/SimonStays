@@ -594,3 +594,13 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .photo-tile:active { cursor:grabbing; }
 .photo-tile.dragging { opacity:.4; }
 .photo-tile.drag-over { outline:2px dashed var(--green); outline-offset:2px; border-radius:8px; }
+
+/* --- Account & payouts --- */
+.account-wrap { max-width:640px; margin:0 auto; padding:18px; display:flex; flex-direction:column; gap:16px; }
+.acct-card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+.acct-card h3 { margin:0 0 4px; }
+.acct-card label { display:block; font-size:12px; color:var(--muted); margin:10px 0 2px; }
+.acct-card input { width:100%; }
+.acct-card .two { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.acct-card button { margin-top:14px; }
+@media(max-width:520px){ .acct-card .two { grid-template-columns:1fr; } }

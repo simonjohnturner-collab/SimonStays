@@ -42,6 +42,12 @@ export const api = {
   login: (email, password) => req('POST', '/auth/login', { email, password }),
   me: () => req('GET', '/auth/me'),
 
+  // account: payout details + credential management
+  getAccount: () => req('GET', '/account'),
+  saveAccount: (data) => req('PUT', '/account/profile', data),
+  changePassword: (currentPassword, newPassword) => req('PUT', '/account/password', { currentPassword, newPassword }),
+  changeEmail: (currentPassword, newEmail) => req('PUT', '/account/email', { currentPassword, newEmail }),
+
   // properties + units
   listProperties: () => req('GET', '/properties'),
   createProperty: (name, address) => req('POST', '/properties', { name, address }),

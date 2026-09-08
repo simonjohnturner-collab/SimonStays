@@ -17,6 +17,13 @@ model Host {
   passwordHash String
   name         String?
   cleaners     Json          @default("[]") // list of cleaner names for dropdowns
+  // Payout details — where SimonStays pays this host out for the bookings it collects.
+  payoutMethod        String? // e.g. "Bank transfer (EFT)"
+  payoutBankName      String?
+  payoutAccountName   String? // account holder
+  payoutAccountNumber String?
+  payoutBranchCode    String?
+  payoutNotes         String?
   createdAt    DateTime      @default(now())
   properties    Property[]
   guestLookups  GuestLookup[]
