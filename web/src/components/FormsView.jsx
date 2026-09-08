@@ -281,23 +281,60 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
               const ordered = template && Array.isArray(template.fields) ? template.fields : null;
               if (ordered) {
                 const doneAns = new Set(), usedPh = new Set();
-                const match = (id) => (sel.photos || []).filter((p) => p.fieldId === id || (p.fieldId || '').startsWith(id + '__'));
-                const rows = [];
+                // Group template fields into sections, exactly as the form does.
+                const groups = []; let curG = { section: null, fields: [] };
                 ordered.forEach((f) => {
-                  if (f.type === 'section') { rows.push(<div key={'sec-' + f.id} className="ans-section-head">{f.label}</div>); return; }
-                  if (f.type === 'photos') {
-                    const ph = match(f.id);
-                    ph.forEach((p) => usedPh.add(p.id));
-                    if (ph.length === 0) { rows.push(<div key={f.id} className="sub-photos"><div className="ans-label">{f.label}</div><span className="muted small">No photos uploaded.</span></div>); return; }
-                    const g = {}; ph.forEach((p) => { const k = p.fieldId || ''; (g[k] = g[k] || []).push(p); });
-                    Object.entries(g).forEach(([fid, photos]) => rows.push(
-                      <div key={fid} className="sub-photos"><div className="ans-label">{labelFor(fid, labelById)} ({photos.length})</div><Gallery photos={photos} /></div>
-                    ));
-                    return;
-                  }
-                  const keys = Object.keys(answers).filter((k) => k === f.id || k.startsWith(f.id + '__'));
-                  keys.forEach((k) => { doneAns.add(k); rows.push(<div key={k} className="ans-row"><div className="ans-label">{labelFor(k, labelById)}</div><div className="ans-val">{formatAnswer(answers[k])}</div></div>); });
+                  if (f.type === 'section') { if (curG.section || curG.fields.length) groups.push(curG); curG = { section: f, fields: [] }; }
+                  else curG.fields.push(f);
                 });
+                if (curG.section || curG.fields.length) groups.push(curG);
+
+                // Which instances of a (repeated) section actually have data? Answers
+                // and photos for instance N are keyed "<fieldId>__N" (base id = single).
+                const instancesFor = (g) => {
+                  const suf = new Set();
+                  const scan = (key) => g.fields.forEach((f) => {
+                    if (key === f.id) suf.add('');
+                    else if (key.startsWith(f.id + '__')) suf.add(key.slice(f.id.length));
+                  });
+                  Object.keys(answers).forEach(scan);
+                  (sel.photos || []).forEach((p) => scan(p.fieldId || ''));
+                  const arr = [...suf].sort((a, b) => (a === '' ? 0 : +a.slice(2)) - (b === '' ? 0 : +b.slice(2)));
+                  return arr.length ? arr : [''];
+                };
+
+                const rows = [];
+                groups.forEach((g, gi) => {
+                  const sec = g.section;
+                  const repeat = sec && (sec.repeat === 'bedroom' || sec.repeat === 'bathroom');
+                  const insts = sec ? instancesFor(g) : [''];
+                  const multi = insts.length > 1;
+                  insts.forEach((sfx, idx) => {
+                    if (sec) {
+                      const head = (repeat && multi) ? `${sec.label} ${idx + 1}` : sec.label;
+                      rows.push(<div key={`sec-${gi}-${idx}`} className="ans-section-head">{head}</div>);
+                    }
+                    g.fields.forEach((f) => {
+                      const key = f.id + sfx;
+                      if (f.type === 'photos') {
+                        const ph = (sel.photos || []).filter((p) => (p.fieldId || '') === key);
+                        ph.forEach((p) => usedPh.add(p.id));
+                        rows.push(
+                          <div key={key} className="sub-photos">
+                            <div className="ans-label">{f.label}{ph.length ? ` (${ph.length})` : ''}</div>
+                            {ph.length ? <Gallery photos={ph} /> : <span className="muted small">No photos uploaded.</span>}
+                          </div>
+                        );
+                        return;
+                      }
+                      if (Object.prototype.hasOwnProperty.call(answers, key)) {
+                        doneAns.add(key);
+                        rows.push(<div key={key} className="ans-row"><div className="ans-label">{f.label}</div><div className="ans-val">{formatAnswer(answers[key])}</div></div>);
+                      }
+                    });
+                  });
+                });
+                // Any answers not covered by the template (e.g. date) go up top.
                 Object.entries(answers).forEach(([k, v]) => { if (!doneAns.has(k)) rows.unshift(<div key={'x-' + k} className="ans-row"><div className="ans-label">{known[k] || labelFor(k, labelById)}</div><div className="ans-val">{formatAnswer(v)}</div></div>); });
                 const orphan = (sel.photos || []).filter((ph) => !usedPh.has(ph.id));
                 return (<><div className="sub-answers">{rows}</div>{orphan.length > 0 && groupPhotos(orphan)}</>);
