@@ -59,11 +59,16 @@
   .amen{ display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 18px; }
   .amen .a{ background:#eef6f0; color:var(--green-d); border-radius:999px; padding:5px 12px; font-size:13px; }
   .units{ display:flex; flex-direction:column; gap:10px; }
-  .unit{ border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .unit{ border:1px solid var(--line); border-radius:12px; padding:10px; cursor:pointer; display:flex; gap:12px; align-items:stretch; }
+  .unit:hover{ border-color:#cdd3da; }
   .unit.sel{ border-color:var(--green); box-shadow:0 0 0 2px rgba(26,122,58,.15); }
+  .unit-thumb{ width:110px; flex-shrink:0; border-radius:8px; background:#e9edf1 center/cover no-repeat; align-self:stretch; min-height:80px; }
+  .unit-thumb.empty{ background:#eef1f4; }
+  .unit-info{ flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
   .unit-top{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
   .unit-nm{ font-weight:700; }
   .unit-meta{ color:var(--muted); font-size:13px; }
+  .unit-desc{ font-size:13px; color:#4b5563; line-height:1.4; margin-top:2px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .book-panel{ margin-top:16px; border-top:1px solid var(--line); padding-top:16px; }
   .cal-wrap{ display:flex; gap:18px; flex-wrap:wrap; }
   .cal{ border:1px solid var(--line); border-radius:12px; padding:10px; width:260px; }
@@ -223,7 +228,11 @@
     var closeOnBg=host.firstChild; closeOnBg.onclick=function(e){ if(e.target===closeOnBg) host.innerHTML=''; };
     try{
       var r=await fetch(API+'/public/properties/'+id); var d=await r.json(); var p=d.property;
-      STATE={ prop:p, unit:(p.units||[])[0]||null, ci:$('#ci').value||'', co:$('#co').value||'', month:startMonth(), booked:[] };
+      // Show only "real" units — ones with photos or online pricing — so empty
+      // duplicate unit records don't clutter the picker. Fall back to all if none qualify.
+      var real=(p.units||[]).filter(function(u){ return (u.photos&&u.photos.length) || u.hasPricing; });
+      if(!real.length) real=(p.units||[]);
+      STATE={ prop:p, units:real, unit:real[0]||null, ci:$('#ci').value||'', co:$('#co').value||'', month:startMonth(), booked:[] };
       renderDetail();
       if(STATE.unit) loadCal();
     }catch(e){ host.innerHTML=''; alert('Could not load this stay.'); }
@@ -232,29 +241,35 @@
 
   function renderDetail(){
     var p=STATE.prop, host=$('#detail');
-    var photos=(p.photos||[]).slice(0,5);
+    var u=STATE.unit||{};
+    var unitList=STATE.units||p.units||[];
+    // Gallery follows the selected unit's photos; fall back to the property's.
+    var photos=((u.photos&&u.photos.length)?u.photos:(p.photos||[])).slice(0,5);
     var gal=photos.length?('<div class="gallery">'+photos.map(function(ph,i){ return '<img class="g'+i+'" data-full="'+API+'/photos/'+ph.id+'" src="'+API+'/photos/'+ph.id+'">'; }).join('')+'</div>'):'';
-    var amenChips=[];
-    (p.units||[]).forEach(function(u){});
     var overlay=el('div','overlay');
     overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
-    var units=(p.units||[]).map(function(u,i){
-      var meta=[]; if(u.capacity)meta.push('sleeps '+u.capacity); if(u.bedrooms)meta.push(u.bedrooms+' bed'); if(u.bathrooms)meta.push(u.bathrooms+' bath');
-      var price=u.fromNightlyCents!=null?('from '+rand(u.fromNightlyCents)+'/night'):(u.hasPricing?'':'call to book');
-      return '<div class="unit'+(STATE.unit&&STATE.unit.id===u.id?' sel':'')+'" data-uid="'+u.id+'"><div class="unit-top"><div><div class="unit-nm">Unit '+esc(u.name)+'</div><div class="unit-meta">'+meta.join(' · ')+'</div></div><div class="unit-meta">'+price+'</div></div></div>';
+    var multi=unitList.length>1;
+    var units=unitList.map(function(uu,i){
+      var meta=[]; if(uu.capacity)meta.push('sleeps '+uu.capacity); if(uu.bedrooms)meta.push(uu.bedrooms+' bed'); if(uu.bathrooms)meta.push(uu.bathrooms+' bath');
+      var price=uu.fromNightlyCents!=null?('from '+rand(uu.fromNightlyCents)+'/night'):(uu.hasPricing?'':'call to book');
+      var thumb=(uu.photos&&uu.photos.length)?('<div class="unit-thumb" style="background-image:url('+API+'/photos/'+uu.photos[0].id+')"></div>'):'<div class="unit-thumb empty"></div>';
+      return '<div class="unit'+(STATE.unit&&STATE.unit.id===uu.id?' sel':'')+'" data-uid="'+uu.id+'">'+thumb+
+        '<div class="unit-info"><div class="unit-top"><div class="unit-nm">Unit '+esc(uu.name)+'</div><div class="unit-meta">'+price+'</div></div>'+
+        '<div class="unit-meta">'+meta.join(' · ')+'</div>'+
+        (uu.description?('<div class="unit-desc">'+esc(uu.description)+'</div>'):'')+'</div></div>';
     }).join('');
-    var u=STATE.unit||{};
     var amen=[];
     if(u.checkInTime)amen.push('Check-in '+u.checkInTime); if(u.checkOutTime)amen.push('Check-out '+u.checkOutTime);
     if(u.wifi)amen.push('Wi-Fi'); if(u.backupPower)amen.push('Backup power'); if(u.backupWater)amen.push('Backup water');
     if(u.security)amen.push('Security'); if(u.parking)amen.push('Parking'); if(u.access)amen.push(u.access);
     var amenHtml=amen.length?('<div class="amen">'+amen.map(function(a){return '<span class="a">'+esc(a)+'</span>';}).join('')+'</div>'):'';
-    overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>'+esc(p.name)+'</h2><button class="x">&times;</button></div>'+
+    var descText=u.description||p.description||'';
+    overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>'+esc(p.name)+(multi?'':(' · Unit '+esc(u.name||'')))+'</h2><button class="x">&times;</button></div>'+
       '<div class="sheet-body">'+gal+
       '<div class="note">'+esc(p.address||'')+'</div>'+
-      (p.description?('<div class="desc">'+esc(p.description)+'</div>'):'')+
+      (descText?('<div class="desc">'+esc(descText)+'</div>'):'')+
       amenHtml+
-      '<h3 style="margin:6px 0">Choose a unit</h3><div class="units">'+units+'</div>'+
+      (multi?'<h3 style="margin:6px 0">Choose a unit</h3>':'')+'<div class="units">'+units+'</div>'+
       '<div class="book-panel" id="bookPanel"></div>'+
       '</div></div>';
     host.innerHTML=''; host.appendChild(overlay);
