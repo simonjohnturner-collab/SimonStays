@@ -4,3 +4,6 @@ node_modules/
 dist/
 build/
 .DS_Store
+
+# local DB restore scripts (contain booking data)
+restore-bookings*.sql
