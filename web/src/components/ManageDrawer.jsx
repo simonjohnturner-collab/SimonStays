@@ -53,7 +53,7 @@ export default function ManageDrawer({
             <button className="wide menu-item" onClick={onOpenCleaners}>🧰 Service providers</button>
             <button className="wide menu-item" onClick={onOpenGuests}>📇 Guest contact book</button>
             <button className="wide menu-item" onClick={onOpenSmartLocks}>🔒 SmartLock dashboard</button>
-            <button className="wide menu-item" onClick={onOpenPricing}>💲 Pricing sheet</button>
+            <button className="wide menu-item" onClick={onOpenPricing}>💲 Pricing</button>
             <button className="wide menu-item" onClick={onOpenInvoices}>🧾 Invoicing</button>
             <button className="wide menu-item" onClick={onOpenAccount}>👤 Account &amp; payouts</button>
           </div>

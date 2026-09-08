@@ -178,8 +178,8 @@ model PricingGroup {
   firstNightCents      Int?
   additionalNightCents Int?
   weekendNightCents    Int? // optional Fri/Sat nightly rate — overrides the nightly rate on weekend nights when set
-  weeklyDiscountPercent  Float @default(0) // 7+ nights
-  monthlyDiscountPercent Float @default(0) // 28+ nights
+  weeklyDiscountPercent  Float @default(10) // 7+ nights
+  monthlyDiscountPercent Float @default(20) // 28+ nights
   // Up to 4 seasonal upward flexes, each its own period + %: [{start, end, percent}]
   // Dates match by month-day (recurring annually); Dec->Jan wraps.
   flexes Json @default("[]")
