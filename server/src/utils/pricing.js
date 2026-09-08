@@ -21,14 +21,22 @@ function baseRateFor(rc, nightIndex) {
   return add != null ? add : (first != null ? first : 0);
 }
 
-// The nightly base rate for one night: a weekend rate (if set) overrides the
-// standard nightly on Fri/Sat. No first-night bundling — the checkout clean is
-// charged explicitly below (firstNightCents == nightly + clean by construction,
-// so totals are unchanged; this makes per-night overrides clean).
+// The standalone nightly rate for a date (for the month-view display): a weekend
+// rate (if set) overrides the standard nightly on Fri/Sat. No first-night clean.
 function nightlyRate(rc, date) {
   const wk = rc.weekendNightCents;
   if (isWeekend(date) && wk != null) return wk;
   return rc.additionalNightCents != null ? rc.additionalNightCents : (rc.firstNightCents != null ? rc.firstNightCents : 0);
+}
+
+// The night's base within a STAY (used by quote): the first night keeps the
+// rate card's firstNightCents (which bundles a clean); a weekend rate overrides
+// the nightly on Fri/Sat. This preserves existing stay totals exactly.
+function stayNightBase(rc, i, date) {
+  const wk = rc.weekendNightCents;
+  const weekendRate = (isWeekend(date) && wk != null);
+  if (i === 0) return weekendRate ? (wk + (rc.cleaningCents || 0)) : baseRateFor(rc, 0);
+  return weekendRate ? wk : baseRateFor(rc, i);
 }
 
 // The effective displayed nightly for a date: a manual override wins (exact, no
@@ -67,10 +75,14 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
   if (n <= 0) return null;
 
   let accommodation = 0;
-  const nightLines = nights.map((d) => {
-    const e = effectiveNightly(rc, d, overrides);
-    accommodation += e.cents;
-    return { date: d.toISOString().slice(0, 10), baseCents: e.baseCents, flexPercent: e.flexPercent, weekend: e.weekend, overridden: e.overridden, cents: e.cents };
+  const nightLines = nights.map((d, i) => {
+    const dISO = d.toISOString().slice(0, 10);
+    const ov = overrides && overrides[dISO] != null ? overrides[dISO] : null;
+    let base, flex, cents;
+    if (ov != null) { base = ov; flex = 0; cents = ov; } // manual override = exact base, no flex
+    else { base = stayNightBase(rc, i, d); flex = nightFlex(rc, d); cents = Math.round(base * (1 + flex / 100)); }
+    accommodation += cents;
+    return { date: dISO, baseCents: base, flexPercent: flex, weekend: isWeekend(d), overridden: ov != null, cents };
   });
 
   let discountPercent = 0;
@@ -78,10 +90,11 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
   else if (n >= 7) discountPercent = rc.weeklyDiscountPercent || 0;
   const discountCents = Math.round(accommodation * discountPercent / 100);
 
-  // Checkout clean is charged explicitly (one per stay by default, plus any
-  // mid-stay cleans). Firenza's firstNight already equalled nightly + clean, so
-  // the stay total is unchanged versus the old bundled model.
-  const cleaningCents = (rc.cleaningCents || 0) * Math.max(0, cleans);
+  // The first night bundles one (checkout) clean, so normally only EXTRA cleans
+  // are charged. But if the first night was price-overridden, its bundled clean
+  // is gone, so charge the checkout clean too.
+  const firstOverridden = overrides && overrides[nights[0].toISOString().slice(0, 10)] != null;
+  const cleaningCents = (rc.cleaningCents || 0) * (firstOverridden ? Math.max(0, cleans) : Math.max(0, cleans - 1));
   const earlyCents = earlyCheckIn ? (rc.earlyCheckInCents || 0) : 0;
   const lateCents = lateCheckOut ? (rc.lateCheckOutCents || 0) : 0;
   const mattressCents = mattress ? (rc.mattressCents || 0) : 0;
