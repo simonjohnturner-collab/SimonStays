@@ -99,6 +99,10 @@
   .frm .two{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
   .note{ font-size:13px; color:var(--muted); }
   .todo{ background:#fff7e6; border:1px solid #f0d9a8; color:#8a5a00; border-radius:10px; padding:10px 12px; font-size:13px; margin:10px 0; }
+  .addons{ border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin:10px 0; }
+  .addon{ display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer; font-size:14px; }
+  .addon input{ width:auto; }
+  .note.small{ font-size:12px; line-height:1.4; }
   .msg{ padding:9px 12px; border-radius:8px; margin:8px 0; font-size:14px; }
   .msg.err{ background:#fdecec; color:#c0392b; }
   .msg.ok{ background:#eafaf0; color:var(--green-d); }
@@ -373,7 +377,7 @@
   async function getQuote(){
     if(!STATE.ciSel||!STATE.coSel) return;
     try{
-      var r=await fetch(API+'/public/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unitId:STATE.unit.id,checkIn:STATE.ciSel,checkOut:STATE.coSel})});
+      var r=await fetch(API+'/public/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unitId:STATE.unit.id,checkIn:STATE.ciSel,checkOut:STATE.coSel,earlyCheckIn:!!STATE.early,lateCheckOut:!!STATE.late})});
       var d=await r.json(); STATE.quote=d.quote||null; STATE.quoteErr=d.quote?null:(d.message||'No price available for these dates.');
     }catch(e){ STATE.quote=null; STATE.quoteErr='Could not price these dates.'; }
     renderSide();
@@ -388,10 +392,22 @@
     var lines='<div class="qrow"><span>'+q.nights+' night'+(q.nights>1?'s':'')+' @ '+rand(q.avgNightlyCents)+'</span><span>'+rand(q.accommodationCents)+'</span></div>';
     if(q.discountCents) lines+='<div class="qrow"><span>'+q.discountPercent+'% length discount</span><span>−'+rand(q.discountCents)+'</span></div>';
     if(q.cleaningCents) lines+='<div class="qrow"><span>Cleaning</span><span>'+rand(q.cleaningCents)+'</span></div>';
+    if(q.earlyCents) lines+='<div class="qrow"><span>Early check-in</span><span>'+rand(q.earlyCents)+'</span></div>';
+    if(q.lateCents) lines+='<div class="qrow"><span>Late checkout</span><span>'+rand(q.lateCents)+'</span></div>';
     lines+='<div class="qrow" style="border-top:1px solid var(--line);margin-top:4px;padding-top:6px"><span>Rental subtotal</span><span>'+rand(q.rentalCents)+'</span></div>';
     if(q.depositCents) lines+='<div class="qrow"><span>Refundable breakage deposit</span><span>'+rand(q.depositCents)+'</span></div>';
     var depoNote = q.depositCents ? ('<div class="note" style="margin:8px 0">🔒 The '+rand(q.depositCents)+' breakage deposit is held and <b>refunded after checkout</b>, subject to no damage.</div>') : '';
+    // Optional add-ons — only offered when a fee is configured on the rate card.
+    var addons='';
+    if((q.earlyFeeCents||0)>0 || (q.lateFeeCents||0)>0){
+      addons='<div class="addons">';
+      if((q.earlyFeeCents||0)>0) addons+='<label class="addon"><input type="checkbox" id="optEarly"'+(STATE.early?' checked':'')+'> Early check-in <span class="muted">(+'+rand(q.earlyFeeCents)+')</span></label>';
+      if((q.lateFeeCents||0)>0) addons+='<label class="addon"><input type="checkbox" id="optLate"'+(STATE.late?' checked':'')+'> Late checkout <span class="muted">(+'+rand(q.lateFeeCents)+')</span></label>';
+      addons+='<div class="note small" style="margin-top:4px">Early check-in &amp; late checkout are only possible if no guests are arriving or leaving that day. Late checkout allows checkout by <b>14:00</b>, provided cleaning can still start by 13:00.</div>';
+      addons+='</div>';
+    }
     side.innerHTML=head+'<div class="qbox">'+lines+'<div class="qrow qtot"><span>Payable now</span><span>'+rand(q.totalCents)+'</span></div></div>'+
+      addons+
       depoNote+
       '<div class="todo">💳 Online payment (and the deposit refund) is coming soon. For now this creates a booking request and a <b>test confirmation</b> (no charge).</div>'+
       '<div class="frm">'+
@@ -404,6 +420,8 @@
       '</div>';
     if($('#g').value) $('#gGuests').value=$('#g').value;
     $('#reqBtn').onclick=requestBooking;
+    var oe=$('#optEarly'); if(oe) oe.onchange=function(){ STATE.early=oe.checked; getQuote(); };
+    var ol=$('#optLate'); if(ol) ol.onchange=function(){ STATE.late=ol.checked; getQuote(); };
   }
 
   async function requestBooking(){
@@ -413,7 +431,7 @@
     if(!email && !phone){ bm.innerHTML='<div class="msg err">Please give an email or phone number.</div>'; return; }
     var btn=$('#reqBtn'); btn.disabled=true; btn.textContent='Booking…'; bm.innerHTML='';
     try{
-      var body={ unitId:STATE.unit.id, checkIn:STATE.ciSel, checkOut:STATE.coSel, guestName:name, guestEmail:email, guestPhone:phone, guests:$('#gGuests').value||undefined, message:$('#gMsg').value||undefined };
+      var body={ unitId:STATE.unit.id, checkIn:STATE.ciSel, checkOut:STATE.coSel, guestName:name, guestEmail:email, guestPhone:phone, guests:$('#gGuests').value||undefined, message:$('#gMsg').value||undefined, earlyCheckIn:!!STATE.early, lateCheckOut:!!STATE.late };
       var r=await fetch(API+'/public/book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       var d=await r.json();
       if(!r.ok){ bm.innerHTML='<div class="msg err">'+esc(d.message||'Could not create the booking.')+'</div>'; btn.disabled=false; btn.textContent='Request booking'; return; }

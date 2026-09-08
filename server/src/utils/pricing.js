@@ -111,6 +111,9 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
     nights: n, avgNightlyCents,
     accommodationCents: accommodation, discountPercent, discountCents,
     cleaningCents, earlyCents, lateCents, mattressCents, breakageCents,
+    // The configured add-on fees (regardless of selection), so the shopfront can
+    // label the optional early/late line items.
+    earlyFeeCents: rc.earlyCheckInCents || 0, lateFeeCents: rc.lateCheckOutCents || 0,
     rentalCents, depositCents, totalCents, nightLines,
   };
 }
