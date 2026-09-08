@@ -17,10 +17,8 @@ const ROWS = [
   { key: 'cleaning', label: 'Cleaning per clean', type: 'money' },
   { key: 'firstNight', label: 'First night (nightly + clean)', type: 'calc', calc: cFirst },
   { section: 'Discounts, deposit & fees' },
-  { key: 'weekly', label: 'Weekly discount %', type: 'pct' },
-  { key: 'weeklyPrice', label: '↳ Weekly price (7 nights)', type: 'calc', calc: cWeekly },
-  { key: 'monthly', label: 'Monthly discount %', type: 'pct' },
-  { key: 'monthlyPrice', label: '↳ Monthly price (~30.25 nights)', type: 'calc', calc: cMonthly },
+  { key: 'weekly', label: 'Weekly discount % (7 nights)', type: 'pctcalc', calc: cWeekly },
+  { key: 'monthly', label: 'Monthly discount % (~30.25 nights)', type: 'pctcalc', calc: cMonthly },
   { key: 'breakage', label: 'Breakage deposit (refundable)', type: 'money' },
   { key: 'early', label: 'Early check-in', type: 'money' },
   { key: 'late', label: 'Late checkout', type: 'money' },
@@ -140,6 +138,22 @@ export default function RateCardMatrix({ onClose }) {
                   <tr key={row.key} className="calc-row">
                     <th className="rowhead"><span>{row.label}</span></th>
                     {cols.map((c) => <td key={c.id} className="calc-cell">{fmtR(row.calc(c.v))}</td>)}
+                  </tr>
+                );
+                if (row.type === 'pctcalc') return (
+                  <tr key={row.key}>
+                    <th className="rowhead">
+                      <span>{row.label}</span>
+                      <button className="fill" title="Copy the first group’s value across all groups" onClick={() => fillRow(row.key)}>→</button>
+                    </th>
+                    {cols.map((c, ci) => (
+                      <td key={c.id}>
+                        <div className="pctcalc-cell">
+                          <input value={c.v[row.key]} onChange={(e) => setCell(ci, row.key, e.target.value)} />
+                          <span className="pctcalc-eq">= {fmtR(row.calc(c.v))}</span>
+                        </div>
+                      </td>
+                    ))}
                   </tr>
                 );
                 return (
