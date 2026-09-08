@@ -46,9 +46,14 @@ async function syncUnit(unitId) {
       continue;
     }
 
+    const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
     const seen = new Set();
     let added = 0, updated = 0;
     for (const ev of events) {
+      // Only sync current/future stays. Past events are left entirely alone —
+      // never created, updated, or (below) deleted — so completed bookings stay
+      // as history and Airbnb never churns past days.
+      if (ev.end < startOfToday) continue;
       const uid = ev.uid || `${ch.type}|${ev.start.toISOString()}|${ev.end.toISOString()}`;
       seen.add(uid);
       const code = ev.resCode || null;
@@ -89,7 +94,6 @@ async function syncUnit(unitId) {
     // checkout — they are completed history, not cancellations — so a booking that
     // has already checked out is never deleted. (This is what previously wiped
     // past reservations on every sync.)
-    const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
     const stale = await prisma.booking.findMany({
       where: { unitId, source, externalUid: { not: null }, checkOut: { gte: startOfToday } },
       select: { id: true, externalUid: true },
