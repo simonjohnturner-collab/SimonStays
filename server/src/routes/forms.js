@@ -131,7 +131,7 @@ router.delete('/submissions/:id', async (req, res) => {
 
 function fmtSub(s) {
   return {
-    id: s.id, type: s.type, status: s.status,
+    id: s.id, type: s.type, status: s.status, templateId: s.templateId,
     propertyId: s.propertyId, propertyName: s.property ? s.property.name : null,
     unitId: s.unitId, unitName: s.unit ? s.unit.name : null,
     submitterName: s.submitterName, submitterContact: s.submitterContact,
