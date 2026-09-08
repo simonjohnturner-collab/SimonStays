@@ -16,7 +16,7 @@ export default function AccountView({ onClose, onEmailChanged }) {
     setSavingP(true); setMsg('');
     try {
       const r = await api.saveAccount({
-        name: acct.name || '',
+        name: acct.name || '', contactPhone: acct.contactPhone || '',
         payoutMethod: acct.payoutMethod || '', payoutBankName: acct.payoutBankName || '',
         payoutAccountName: acct.payoutAccountName || '', payoutAccountNumber: acct.payoutAccountNumber || '',
         payoutBranchCode: acct.payoutBranchCode || '', payoutNotes: acct.payoutNotes || '',
@@ -60,6 +60,7 @@ export default function AccountView({ onClose, onEmailChanged }) {
               <h3>💳 Payout details</h3>
               <p className="muted small">SimonStays collects guest bookings &amp; payments, then pays you out to the account below. Keep this accurate so payouts reach you.</p>
               <label>Your name / trading name<input value={acct.name || ''} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Catwalk Property Services" /></label>
+              <label>Contact number<input value={acct.contactPhone || ''} onChange={(e) => set('contactPhone', e.target.value)} placeholder="e.g. +27 82 123 4567" /></label>
               <div className="two">
                 <label>Payout method<input value={acct.payoutMethod || ''} onChange={(e) => set('payoutMethod', e.target.value)} placeholder="Bank transfer (EFT)" /></label>
                 <label>Bank<input value={acct.payoutBankName || ''} onChange={(e) => set('payoutBankName', e.target.value)} placeholder="e.g. FNB" /></label>

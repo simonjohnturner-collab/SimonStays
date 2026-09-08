@@ -13,7 +13,7 @@ router.use(authHost);
 const PAYOUT = ['payoutMethod', 'payoutBankName', 'payoutAccountName', 'payoutAccountNumber', 'payoutBranchCode', 'payoutNotes'];
 
 function publicAccount(h) {
-  const out = { id: h.id, email: h.email, name: h.name, createdAt: h.createdAt };
+  const out = { id: h.id, email: h.email, name: h.name, contactPhone: h.contactPhone || null, createdAt: h.createdAt };
   PAYOUT.forEach((k) => { out[k] = h[k] || null; });
   return out;
 }
@@ -29,6 +29,7 @@ router.put('/profile', async (req, res) => {
   const b = req.body || {};
   const data = {};
   if ('name' in b) data.name = b.name || null;
+  if ('contactPhone' in b) data.contactPhone = b.contactPhone || null;
   PAYOUT.forEach((k) => { if (k in b) data[k] = b[k] || null; });
   const h = await prisma.host.update({ where: { id: req.hostId }, data });
   res.json({ account: publicAccount(h) });

@@ -16,6 +16,7 @@ model Host {
   email        String        @unique
   passwordHash String
   name         String?
+  contactPhone String?
   cleaners     Json          @default("[]") // list of cleaner names for dropdowns
   // Payout details — where SimonStays pays this host out for the bookings it collects.
   payoutMethod        String? // e.g. "Bank transfer (EFT)"
