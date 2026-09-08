@@ -118,6 +118,57 @@ router.get('/properties/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /public/units?checkIn=&checkOut=&guests= — flat, unit-level browse. Each
+// bookable unit is its own listing (with its complex's name/location). Duplicate
+// unit records are de-duped by property+name (keeping the richest: most photos).
+router.get('/units', async (req, res, next) => {
+  try {
+    const hostId = await publicHostId();
+    if (!hostId) return res.json({ units: [], filtered: false });
+    const { checkIn, checkOut, guests } = req.query;
+    const filtering = !!(checkIn && checkOut);
+    const minGuests = guests ? Number(guests) : 0;
+
+    const props = await prisma.property.findMany({
+      where: { hostId }, orderBy: { sortOrder: 'asc' },
+      include: { photos: { orderBy: { sort: 'asc' } }, units: { include: unitInclude } },
+    });
+
+    // Collect candidate (real) units, de-duped by property + unit name.
+    const best = new Map(); // key -> { unit, prop, photos }
+    for (const p of props) {
+      for (const u of p.units) {
+        const nPhotos = (u.photos || []).length;
+        if (!(u.pricingGroupId || nPhotos)) continue; // skip empty duplicate shells
+        const key = p.id + '|' + (u.name || '');
+        const prev = best.get(key);
+        if (!prev || nPhotos > prev.nPhotos) best.set(key, { u, p, nPhotos });
+      }
+    }
+
+    const out = [];
+    for (const { u, p } of best.values()) {
+      if (minGuests && u.capacity && u.capacity < minGuests) continue;
+      let stayFromCents = null;
+      if (filtering) {
+        const av = await checkAvailability(u.id, iso(checkIn), iso(checkOut), null);
+        if (!av.available) continue;
+        if (u.pricingGroup) { const q = quote(u.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1 }); if (q) stayFromCents = q.totalCents; }
+      }
+      const cover = u.photos[0] || p.photos[0] || null;
+      out.push({
+        unitId: u.id, unitName: u.name, propertyId: p.id, propertyName: p.name,
+        address: p.address || null, latitude: p.latitude ?? null, longitude: p.longitude ?? null,
+        capacity: u.capacity, bedrooms: u.bedrooms ?? null, bathrooms: u.bathrooms ?? null,
+        coverPhotoId: cover ? cover.id : null,
+        fromNightlyCents: fromNightlyCents(u.pricingGroup), hasPricing: !!u.pricingGroupId,
+        stayFromCents,
+      });
+    }
+    res.json({ units: out, filtered: filtering });
+  } catch (e) { next(e); }
+});
+
 // GET /public/units/:unitId/calendar?from=&to= — confirmed booked ranges (to grey out)
 router.get('/units/:unitId/calendar', async (req, res, next) => {
   try {

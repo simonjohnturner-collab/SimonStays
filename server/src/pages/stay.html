@@ -56,6 +56,10 @@
   .gallery .g0{ grid-row:span 2; grid-column:1; }
   .gallery img{ width:100%; height:100%; object-fit:cover; cursor:zoom-in; }
   .desc{ white-space:pre-wrap; line-height:1.5; color:#374151; margin:10px 0 16px; }
+  .sec{ margin:18px 0 8px; font-size:16px; }
+  .detail-map{ height:220px; border-radius:12px; border:1px solid var(--line); margin:8px 0 6px; }
+  .gallery.small{ grid-template-columns:repeat(3,1fr); grid-auto-rows:90px; }
+  .gallery.small .g0{ grid-row:auto; grid-column:auto; }
   .amen{ display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 18px; }
   .amen .a{ background:#eef6f0; color:var(--green-d); border-radius:999px; padding:5px 12px; font-size:13px; }
   .units{ display:flex; flex-direction:column; gap:10px; }
@@ -137,7 +141,7 @@
 <script>
 (function(){
   var API=''; // same origin (served by the API)
-  var PROPS=[], VIEW='list', MAP=null, LAYER=null;
+  var UNITS=[], VIEW='list', MAP=null, LAYER=null;
   var $=function(s){ return document.querySelector(s); };
   var el=function(t,c,h){ var e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e; };
   var rand=function(c){ return 'R'+(c/100).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2}); };
@@ -151,38 +155,40 @@
     if($('#g').value) p.set('guests',$('#g').value);
     return p.toString();
   }
-  function textMatch(p,q){
+  function textMatch(u,q){
     if(!q) return true; q=q.toLowerCase();
-    return (p.name||'').toLowerCase().indexOf(q)>=0 || (p.address||'').toLowerCase().indexOf(q)>=0 || (p.description||'').toLowerCase().indexOf(q)>=0;
+    return (u.propertyName||'').toLowerCase().indexOf(q)>=0 || (u.unitName||'').toLowerCase().indexOf(q)>=0 || (u.address||'').toLowerCase().indexOf(q)>=0;
   }
 
   async function load(){
     $('#count').textContent='Loading stays…';
     try{
-      var r=await fetch(API+'/public/properties'+(qs()?'?'+qs():''));
-      var d=await r.json(); PROPS=d.properties||[]; render();
+      var r=await fetch(API+'/public/units'+(qs()?'?'+qs():''));
+      var d=await r.json(); UNITS=d.units||[]; render();
     }catch(e){ $('#count').textContent='Could not load stays. Please refresh.'; }
   }
 
-  function filtered(){ var q=$('#q').value.trim(); return PROPS.filter(function(p){ return textMatch(p,q); }); }
+  function filtered(){ var q=$('#q').value.trim(); return UNITS.filter(function(u){ return textMatch(u,q); }); }
 
-  function priceLabel(p){
-    if(p.stayFromCents!=null) return '<span class="price">'+rand(p.stayFromCents)+' <small>total for your dates</small></span>';
-    if(p.fromNightlyCents!=null) return '<span class="price">from '+rand(p.fromNightlyCents)+' <small>/ night</small></span>';
+  function priceLabel(u){
+    if(u.stayFromCents!=null) return '<span class="price">'+rand(u.stayFromCents)+' <small>total for your dates</small></span>';
+    if(u.fromNightlyCents!=null) return '<span class="price">from '+rand(u.fromNightlyCents)+' <small>/ night</small></span>';
     return '<span class="price"><small>Call for pricing</small></span>';
   }
+  function unitTitle(u){ return esc(u.propertyName)+' · Unit '+esc(u.unitName); }
+  function unitSub(u){ var m=[]; if(u.capacity)m.push('sleeps '+u.capacity); if(u.bedrooms)m.push(u.bedrooms+' bed'); if(u.bathrooms)m.push(u.bathrooms+' bath'); return (u.address?esc(u.address):'')+(m.length?(' · '+m.join(' · ')):''); }
 
   function render(){
     var list=filtered();
     $('#count').textContent=list.length+' '+(list.length===1?'stay':'stays')+(($('#ci').value&&$('#co').value)?' available for your dates':'');
     var box=$('#results'); box.innerHTML='';
     if(list.length===0){ box.appendChild(el('div','empty','No stays match your search. Try a different area or clear the dates.')); }
-    list.forEach(function(p){
+    list.forEach(function(u){
       var c=el('div','card');
-      var img=p.coverPhotoId?('background-image:url('+API+'/photos/'+p.coverPhotoId+')'):'';
-      c.innerHTML='<div class="ph" style="'+img+'"></div><div class="body"><div class="nm">'+esc(p.name)+'</div>'+
-        '<div class="sub">'+esc(p.address||'')+(p.maxCapacity?(' · sleeps up to '+p.maxCapacity):'')+'</div>'+priceLabel(p)+'</div>';
-      c.onclick=function(){ openProp(p.id); };
+      var img=u.coverPhotoId?('background-image:url('+API+'/photos/'+u.coverPhotoId+')'):'';
+      c.innerHTML='<div class="ph" style="'+img+'"></div><div class="body"><div class="nm">'+unitTitle(u)+'</div>'+
+        '<div class="sub">'+unitSub(u)+'</div>'+priceLabel(u)+'</div>';
+      c.onclick=function(){ openUnit(u); };
       box.appendChild(c);
     });
     if(VIEW==='map') drawMap(list);
@@ -198,17 +204,21 @@
     }
     if(LAYER) MAP.removeLayer(LAYER);
     LAYER=L.layerGroup().addTo(MAP);
-    var pts=[];
-    list.forEach(function(p){
-      if(p.latitude==null||p.longitude==null) return;
-      var m=L.marker([p.latitude,p.longitude]).addTo(LAYER);
-      var pl=p.stayFromCents!=null?rand(p.stayFromCents):(p.fromNightlyCents!=null?('from '+rand(p.fromNightlyCents)+'/night'):'');
-      m.bindPopup('<b>'+esc(p.name)+'</b><br>'+esc(p.address||'')+'<br>'+pl+'<br><a href="#" data-id="'+p.id+'" class="mpop">View & book →</a>');
-      pts.push([p.latitude,p.longitude]);
+    var pts=[], seen={};
+    list.forEach(function(u,i){
+      if(u.latitude==null||u.longitude==null) return;
+      // Nudge overlapping pins (multiple units at one complex) so all are clickable.
+      var k=u.latitude+','+u.longitude; var n=seen[k]=(seen[k]||0)+1;
+      var lat=u.latitude+(n-1)*0.00012, lng=u.longitude+(n-1)*0.00012;
+      var m=L.marker([lat,lng]).addTo(LAYER);
+      var pl=u.stayFromCents!=null?rand(u.stayFromCents):(u.fromNightlyCents!=null?('from '+rand(u.fromNightlyCents)+'/night'):'');
+      m.bindPopup('<b>'+unitTitle(u)+'</b><br>'+esc(u.address||'')+'<br>'+pl+'<br><a href="#" data-i="'+i+'" class="mpop">View & book →</a>');
+      pts.push([lat,lng]);
     });
-    setTimeout(function(){ MAP.invalidateSize(); if(pts.length) MAP.fitBounds(pts,{padding:[40,40],maxZoom:14}); },80);
+    MAP._unitList=list;
+    setTimeout(function(){ MAP.invalidateSize(); if(pts.length) MAP.fitBounds(pts,{padding:[40,40],maxZoom:15}); },80);
   }
-  document.addEventListener('click',function(e){ if(e.target.classList&&e.target.classList.contains('mpop')){ e.preventDefault(); openProp(e.target.getAttribute('data-id')); } });
+  document.addEventListener('click',function(e){ if(e.target.classList&&e.target.classList.contains('mpop')){ e.preventDefault(); var i=Number(e.target.getAttribute('data-i')); if(MAP&&MAP._unitList&&MAP._unitList[i]) openUnit(MAP._unitList[i]); } });
 
   function setView(v){
     VIEW=v; $('#tList').classList.toggle('on',v==='list'); $('#tMap').classList.toggle('on',v==='map');
@@ -221,61 +231,66 @@
   $('#q').addEventListener('input',render);
   ['ci','co'].forEach(function(id){ $('#'+id).addEventListener('change',function(){ if($('#ci').value) $('#co').min=$('#ci').value; }); });
 
-  // ---- Property detail + booking ----
-  var STATE={};
-  async function openProp(id){
+  // ---- Unit detail + booking (one unit per listing; no sibling navigation) ----
+  var STATE={}, DMAP=null;
+  async function openUnit(card){
     var host=$('#detail'); host.innerHTML='<div class="overlay"><div class="sheet"><div class="sheet-body"><p class="note">Loading…</p></div></div></div>';
-    var closeOnBg=host.firstChild; closeOnBg.onclick=function(e){ if(e.target===closeOnBg) host.innerHTML=''; };
+    host.firstChild.onclick=function(e){ if(e.target===host.firstChild) host.innerHTML=''; };
     try{
-      var r=await fetch(API+'/public/properties/'+id); var d=await r.json(); var p=d.property;
-      // Show only "real" units — ones with photos or online pricing — so empty
-      // duplicate unit records don't clutter the picker. Fall back to all if none qualify.
-      var real=(p.units||[]).filter(function(u){ return (u.photos&&u.photos.length) || u.hasPricing; });
-      if(!real.length) real=(p.units||[]);
-      STATE={ prop:p, units:real, unit:real[0]||null, ci:$('#ci').value||'', co:$('#co').value||'', month:startMonth(), booked:[] };
+      var r=await fetch(API+'/public/properties/'+card.propertyId); var d=await r.json(); var p=d.property;
+      var unit=(p.units||[]).find(function(x){return x.id===card.unitId;}) || (p.units||[])[0];
+      STATE={ prop:p, unit:unit, month:startMonth(), booked:[], ciSel:null, coSel:null, quote:null };
       renderDetail();
-      if(STATE.unit) loadCal();
+      loadCal();
     }catch(e){ host.innerHTML=''; alert('Could not load this stay.'); }
   }
   function startMonth(){ var d=new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; }
+  function galleryHtml(photos){ return '<div class="gallery">'+photos.map(function(ph,i){ return '<img class="g'+i+'" data-full="'+API+'/photos/'+ph.id+'" src="'+API+'/photos/'+ph.id+'">'; }).join('')+'</div>'; }
 
   function renderDetail(){
-    var p=STATE.prop, host=$('#detail');
-    var u=STATE.unit||{};
-    var unitList=STATE.units||p.units||[];
-    // Gallery follows the selected unit's photos; fall back to the property's.
-    var photos=((u.photos&&u.photos.length)?u.photos:(p.photos||[])).slice(0,5);
-    var gal=photos.length?('<div class="gallery">'+photos.map(function(ph,i){ return '<img class="g'+i+'" data-full="'+API+'/photos/'+ph.id+'" src="'+API+'/photos/'+ph.id+'">'; }).join('')+'</div>'):'';
-    var overlay=el('div','overlay');
-    overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
-    var multi=unitList.length>1;
-    var units=unitList.map(function(uu,i){
-      var meta=[]; if(uu.capacity)meta.push('sleeps '+uu.capacity); if(uu.bedrooms)meta.push(uu.bedrooms+' bed'); if(uu.bathrooms)meta.push(uu.bathrooms+' bath');
-      var price=uu.fromNightlyCents!=null?('from '+rand(uu.fromNightlyCents)+'/night'):(uu.hasPricing?'':'call to book');
-      var thumb=(uu.photos&&uu.photos.length)?('<div class="unit-thumb" style="background-image:url('+API+'/photos/'+uu.photos[0].id+')"></div>'):'<div class="unit-thumb empty"></div>';
-      return '<div class="unit'+(STATE.unit&&STATE.unit.id===uu.id?' sel':'')+'" data-uid="'+uu.id+'">'+thumb+
-        '<div class="unit-info"><div class="unit-top"><div class="unit-nm">Unit '+esc(uu.name)+'</div><div class="unit-meta">'+price+'</div></div>'+
-        '<div class="unit-meta">'+meta.join(' · ')+'</div>'+
-        (uu.description?('<div class="unit-desc">'+esc(uu.description)+'</div>'):'')+'</div></div>';
-    }).join('');
+    var p=STATE.prop, u=STATE.unit||{}, host=$('#detail');
+    var unitPhotos=(u.photos||[]);
+    var heroPhotos=(unitPhotos.length?unitPhotos:(p.photos||[])).slice(0,5);
+    var usedPropAsHero=!unitPhotos.length;
+    var gal=heroPhotos.length?galleryHtml(heroPhotos):'';
     var amen=[];
+    if(u.capacity)amen.push('Sleeps '+u.capacity); if(u.bedrooms)amen.push(u.bedrooms+' bed'); if(u.bathrooms)amen.push(u.bathrooms+' bath');
     if(u.checkInTime)amen.push('Check-in '+u.checkInTime); if(u.checkOutTime)amen.push('Check-out '+u.checkOutTime);
     if(u.wifi)amen.push('Wi-Fi'); if(u.backupPower)amen.push('Backup power'); if(u.backupWater)amen.push('Backup water');
     if(u.security)amen.push('Security'); if(u.parking)amen.push('Parking'); if(u.access)amen.push(u.access);
     var amenHtml=amen.length?('<div class="amen">'+amen.map(function(a){return '<span class="a">'+esc(a)+'</span>';}).join('')+'</div>'):'';
-    var descText=u.description||p.description||'';
-    overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>'+esc(p.name)+(multi?'':(' · Unit '+esc(u.name||'')))+'</h2><button class="x">&times;</button></div>'+
+    var hasLoc=(p.latitude!=null&&p.longitude!=null);
+    // "About the complex" — property description + property photos (unless already the hero)
+    var complexPhotos=(usedPropAsHero?[]:(p.photos||[])).slice(0,6);
+    var complexBlock='';
+    if(p.description || complexPhotos.length){
+      complexBlock='<h3 class="sec">About the complex</h3>'+
+        (p.description?('<div class="desc">'+esc(p.description)+'</div>'):'')+
+        (complexPhotos.length?('<div class="gallery small">'+complexPhotos.map(function(ph){ return '<img data-full="'+API+'/photos/'+ph.id+'" src="'+API+'/photos/'+ph.id+'">'; }).join('')+'</div>'):'');
+    }
+    var overlay=el('div','overlay');
+    overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
+    overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>'+esc(p.name)+' · Unit '+esc(u.name||'')+'</h2><button class="x">&times;</button></div>'+
       '<div class="sheet-body">'+gal+
-      '<div class="note">'+esc(p.address||'')+'</div>'+
-      (descText?('<div class="desc">'+esc(descText)+'</div>'):'')+
+      '<div class="note">📍 '+esc(p.address||'Location shared on booking')+'</div>'+
+      (hasLoc?'<div id="detailMap" class="detail-map"></div>':'')+
+      '<h3 class="sec">About this unit</h3>'+
+      (u.description?('<div class="desc">'+esc(u.description)+'</div>'):'')+
       amenHtml+
-      (multi?'<h3 style="margin:6px 0">Choose a unit</h3>':'')+'<div class="units">'+units+'</div>'+
+      complexBlock+
       '<div class="book-panel" id="bookPanel"></div>'+
       '</div></div>';
     host.innerHTML=''; host.appendChild(overlay);
     overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
-    overlay.querySelectorAll('.unit').forEach(function(node){ node.onclick=function(){ var uid=node.getAttribute('data-uid'); STATE.unit=(p.units||[]).find(function(x){return x.id===uid;}); STATE.ciSel=null; STATE.coSel=null; renderDetail(); loadCal(); }; });
     overlay.querySelectorAll('.gallery img').forEach(function(img){ img.onclick=function(){ lightbox(img.getAttribute('data-full')); }; });
+    if(hasLoc){
+      try{
+        DMAP=L.map('detailMap',{scrollWheelZoom:false}).setView([p.latitude,p.longitude],15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(DMAP);
+        L.marker([p.latitude,p.longitude]).addTo(DMAP);
+        setTimeout(function(){ DMAP.invalidateSize(); },150);
+      }catch(e){}
+    }
     renderBookPanel();
   }
 
