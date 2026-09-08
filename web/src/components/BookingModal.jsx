@@ -130,6 +130,8 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
           <div className="reslabel">Airbnb confirmation code&nbsp;<code title="Click to select, then copy">{booking.resCode}</code></div>
         )}
 
+        <label>Guest<input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Guest name" /></label>
+
         <div className="row2">
           <label>Check-in<input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} /></label>
           <label>Check-out<input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} /></label>
@@ -142,8 +144,6 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
             {quote.breakageCents ? ` · breakage ${fmtR(quote.breakageCents)}` : ''}
           </div>
         )}
-
-        <label>Guest<input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Guest name" /></label>
 
         {editing && !isFloating && booking.source === 'manual' && units.length > 0 && (
           <label>Move to a different unit <span className="muted small">(reassigns this booking &amp; blocks the new unit)</span>
