@@ -136,6 +136,7 @@ export default function ListingsView({ onClose }) {
   const [busyPhoto, setBusyPhoto] = useState(null); // id of the property/unit currently uploading
   const [dirty, setDirty] = useState(false); // unsaved edits pending
   const [saving, setSaving] = useState(false);
+  const [calBusy, setCalBusy] = useState(null); // unit id whose calendar is saving
 
   async function load() {
     const r = await api.getListings();
@@ -185,6 +186,23 @@ export default function ListingsView({ onClose }) {
   async function autoSaveProp(p) { try { await saveProp(p, true); setDirty(false); flash('Saved.'); } catch (e) { setMsg(e.message); } }
   async function autoSaveUnit(u) { try { await saveUnit(u, true); setDirty(false); flash('Saved.'); } catch (e) { setMsg(e.message); } }
   function flash(t) { setMsg(t); setTimeout(() => setMsg(''), 1500); }
+
+  // Calendar/channel sync (moved here from the old unit panel).
+  async function saveCalendarLink(u) {
+    setCalBusy(u.id); setMsg('');
+    try {
+      await api.setCalendar(u.id, (u.importUrl || '').trim());
+      if ((u.importUrl || '').trim()) await api.syncUnit(u.id);
+      const ch = await api.listChannels(u.id).catch(() => ({ channels: [] }));
+      const c = (ch.channels || [])[0];
+      setProperties((ps) => ps.map((pp) => ({ ...pp, units: pp.units.map((x) => (x.id === u.id ? { ...x, channelStatus: (c && c.lastStatus) || '' } : x)) })));
+      flash((u.importUrl || '').trim() ? 'Calendar saved & synced.' : 'Calendar link cleared.');
+    } catch (e) { setMsg(e.message); } finally { setCalBusy(null); }
+  }
+  function copyFeed(u) {
+    try { navigator.clipboard.writeText(u.feedUrl || ''); flash('Lock link copied.'); }
+    catch (e) { setMsg('Copy failed — select the link and copy it manually.'); }
+  }
 
   // ---- photos ----
   function setPhotos(kind, pid, uid, updater) {
@@ -342,6 +360,21 @@ export default function ListingsView({ onClose }) {
                         <label className="attr">Backup power<input value={u.backupPower || ''} placeholder="e.g. Inverter runs lights & wifi" onChange={(e) => editUnit(p.id, u.id, { backupPower: e.target.value })} /></label>
                         <label className="attr">Backup water<input value={u.backupWater || ''} placeholder="e.g. 2500L tank" onChange={(e) => editUnit(p.id, u.id, { backupWater: e.target.value })} /></label>
                       </div>
+
+                      <div className="attr-subhead">Calendar &amp; channel sync</div>
+                      <div className="cal-sync">
+                        <label className="attr wide">iCal calendar link <span className="muted small">— the channel calendar we pull bookings from</span>
+                          <input value={u.importUrl || ''} placeholder="https://…/calendar.ics" onChange={(e) => editUnit(p.id, u.id, { importUrl: e.target.value })} /></label>
+                        <div className="cal-sync-row">
+                          {u.channelStatus && <span className="muted small">{u.channelStatus}</span>}
+                          <span className="spacer" />
+                          <button className="ghost" disabled={calBusy === u.id} onClick={() => saveCalendarLink(u)}>{calBusy === u.id ? 'Saving…' : '💾 Save & sync'}</button>
+                        </div>
+                        <label className="attr wide">Lock link <span className="muted small">— paste into a channel’s “Import calendar” to block these dates</span>
+                          <input readOnly value={u.feedUrl || ''} onFocus={(e) => e.target.select()} /></label>
+                        <div className="cal-sync-row"><span className="spacer" /><button className="ghost" onClick={() => copyFeed(u)}>📋 Copy lock link</button></div>
+                      </div>
+
                       <PhotoGrid photos={u.photos} busy={busyPhoto === u.id}
                         onAdd={(files) => addPhotos('unit', p.id, u.id, files)}
                         onCover={(id) => coverPhoto('unit', p.id, u.id, id)}

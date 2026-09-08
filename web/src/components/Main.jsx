@@ -5,6 +5,7 @@ import { today, addDays, ymd } from '../dates.js';
 import Board from './Board.jsx';
 import BookingModal from './BookingModal.jsx';
 import UnitPanel from './UnitPanel.jsx';
+import UnitMonthView from './UnitMonthView.jsx';
 import EmailModal from './EmailModal.jsx';
 import ManageDrawer from './ManageDrawer.jsx';
 import InvoicesView from './InvoicesView.jsx';
@@ -30,6 +31,7 @@ export default function Main() {
 
   const [bookingCtx, setBookingCtx] = useState(null); // { unit } | { booking, unit }
   const [panelUnit, setPanelUnit] = useState(null);
+  const [monthUnit, setMonthUnit] = useState(null); // { unit, propertyName } for the single-unit month view
   const [emailOpen, setEmailOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [invoices, setInvoices] = useState(null); // { initialId } when open
@@ -181,6 +183,17 @@ export default function Main() {
   if (account) {
     return <AccountView onClose={() => setAccount(false)} />;
   }
+  if (monthUnit) {
+    return (
+      <UnitMonthView
+        unit={monthUnit.unit}
+        propertyName={monthUnit.propertyName}
+        onClose={() => setMonthUnit(null)}
+        onEditBooking={(booking, unit) => { setMonthUnit(null); setBookingCtx({ booking, unit }); }}
+        onNewBooking={(unit) => { setMonthUnit(null); setBookingCtx({ unit }); }}
+      />
+    );
+  }
 
   return (
     <div className="app">
@@ -220,7 +233,7 @@ export default function Main() {
               focus={focus}
               onNewBooking={(unit) => setBookingCtx({ unit })}
               onEditBooking={(booking, unit) => setBookingCtx({ booking, unit })}
-              onOpenUnit={(unit) => setPanelUnit(unit)}
+              onOpenUnit={(unit) => setMonthUnit({ unit, propertyName: (properties.find((p) => p.id === unit.propertyId) || {}).name })}
               onAddUnit={addUnit}
             />
           )}

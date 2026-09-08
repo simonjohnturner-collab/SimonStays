@@ -18,11 +18,23 @@ router.get('/', async (req, res) => {
       photos: { select: photoSelect, orderBy: photoOrder },
       units: {
         orderBy: { createdAt: 'asc' },
-        include: { photos: { select: photoSelect, orderBy: photoOrder } },
+        include: { photos: { select: photoSelect, orderBy: photoOrder }, channels: true },
       },
     },
   });
-  res.json({ properties });
+  // Attach each unit's calendar-sync links (the iCal we import bookings from, and
+  // the lock/feed link channels subscribe to) so they can live on the Listings page.
+  const base = (process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  const out = properties.map((p) => ({
+    ...p,
+    units: p.units.map((u) => {
+      const ch = (u.channels || [])[0];
+      return { ...u, channels: undefined,
+        importUrl: ch ? (ch.importUrl || '') : '', channelStatus: ch ? (ch.lastStatus || '') : '',
+        feedUrl: `${base}/feed/${u.id}.ics?token=${u.publishToken}` };
+    }),
+  }));
+  res.json({ properties: out });
 });
 
 module.exports = router;

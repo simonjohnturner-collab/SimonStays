@@ -604,3 +604,25 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .acct-card .two { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 .acct-card button { margin-top:14px; }
 @media(max-width:520px){ .acct-card .two { grid-template-columns:1fr; } }
+
+/* --- Listings calendar-sync block --- */
+.cal-sync { margin-bottom:6px; }
+.cal-sync-row { display:flex; align-items:center; gap:8px; margin:4px 0 12px; }
+.cal-sync-row .spacer { flex:1; }
+
+/* --- Single-unit month view --- */
+.um-wrap { max-width:760px; margin:0 auto; padding:16px 18px 50px; }
+.um-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; }
+.um-head h3 { margin:0; }
+.um-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+.um-dows { margin-bottom:4px; }
+.um-dow { text-align:center; font-size:11px; color:var(--muted); font-weight:700; padding:2px 0; }
+.um-day { min-height:64px; border:1px solid var(--line); border-radius:8px; padding:4px 6px; cursor:pointer; background:#fff; display:flex; flex-direction:column; gap:2px; }
+.um-day.pad { border:0; background:transparent; cursor:default; }
+.um-day.free:hover { border-color:var(--green); }
+.um-day.booked { background:var(--blue); border-color:#8fb8dd; }
+.um-day.today .um-num { background:var(--green); color:#fff; border-radius:50%; }
+.um-num { font-size:12px; font-weight:700; width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; }
+.um-guest { font-size:12px; font-weight:600; line-height:1.15; overflow:hidden; }
+.um-guest.owing { color:var(--red); }
+.um-cont { color:#4d739e; font-size:12px; }
