@@ -5,7 +5,7 @@ const { authHost } = require('../middleware/auth');
 const router = express.Router();
 router.use(authHost);
 
-const RATE_INT = ['breakageDepositCents', 'firstNightCents', 'additionalNightCents', 'earlyCheckInCents', 'lateCheckOutCents', 'cleaningCents', 'mattressCents'];
+const RATE_INT = ['breakageDepositCents', 'firstNightCents', 'additionalNightCents', 'weekendNightCents', 'earlyCheckInCents', 'lateCheckOutCents', 'cleaningCents', 'mattressCents'];
 const RATE_FLOAT = ['weeklyDiscountPercent', 'monthlyDiscountPercent', 'weekendFlexPercent', 'flex1Percent', 'flex2Percent', 'flex3Percent'];
 
 // GET /groups — the host's pricing groups (with assigned unit ids).
@@ -35,6 +35,7 @@ router.put('/:id', async (req, res) => {
   RATE_INT.forEach((k) => { if (k in b) data[k] = b[k] === '' || b[k] == null ? null : Math.round(Number(b[k])); });
   RATE_FLOAT.forEach((k) => { if (k in b) data[k] = Number(b[k]) || 0; });
   if ('specialDates' in b) data.specialDates = b.specialDates;
+  if ('flexes' in b) data.flexes = Array.isArray(b.flexes) ? b.flexes : [];
   const group = await prisma.pricingGroup.update({ where: { id: g.id }, data });
   res.json({ group });
 });

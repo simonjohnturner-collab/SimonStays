@@ -380,11 +380,15 @@
     var q=STATE.quote;
     var head='<div class="note" style="margin-bottom:8px"><b>'+STATE.ciSel+'</b> → <b>'+STATE.coSel+'</b></div>';
     if(!q){ side.innerHTML=head+'<div class="msg err">'+esc(STATE.quoteErr||'Pricing…')+'</div>'; return; }
-    var lines='<div class="qrow"><span>'+q.nights+' night'+(q.nights>1?'s':'')+' @ '+rand(q.avgNightlyCents)+'</span><span>'+rand(q.avgNightlyCents*q.nights)+'</span></div>';
-    if(q.discountPercent) lines+='<div class="qrow"><span>'+q.discountPercent+'% length discount</span><span>–</span></div>';
+    var lines='<div class="qrow"><span>'+q.nights+' night'+(q.nights>1?'s':'')+' @ '+rand(q.avgNightlyCents)+'</span><span>'+rand(q.accommodationCents)+'</span></div>';
+    if(q.discountCents) lines+='<div class="qrow"><span>'+q.discountPercent+'% length discount</span><span>−'+rand(q.discountCents)+'</span></div>';
     if(q.cleaningCents) lines+='<div class="qrow"><span>Cleaning</span><span>'+rand(q.cleaningCents)+'</span></div>';
-    side.innerHTML=head+'<div class="qbox">'+lines+'<div class="qrow qtot"><span>Total</span><span>'+rand(q.totalCents)+'</span></div></div>'+
-      '<div class="todo">💳 Online payment is coming soon. For now this creates a booking request and a <b>test confirmation</b> (no charge).</div>'+
+    lines+='<div class="qrow" style="border-top:1px solid var(--line);margin-top:4px;padding-top:6px"><span>Rental subtotal</span><span>'+rand(q.rentalCents)+'</span></div>';
+    if(q.depositCents) lines+='<div class="qrow"><span>Refundable breakage deposit</span><span>'+rand(q.depositCents)+'</span></div>';
+    var depoNote = q.depositCents ? ('<div class="note" style="margin:8px 0">🔒 The '+rand(q.depositCents)+' breakage deposit is held and <b>refunded after checkout</b>, subject to no damage.</div>') : '';
+    side.innerHTML=head+'<div class="qbox">'+lines+'<div class="qrow qtot"><span>Payable now</span><span>'+rand(q.totalCents)+'</span></div></div>'+
+      depoNote+
+      '<div class="todo">💳 Online payment (and the deposit refund) is coming soon. For now this creates a booking request and a <b>test confirmation</b> (no charge).</div>'+
       '<div class="frm">'+
         '<input id="gName" placeholder="Your full name" />'+
         '<div class="two"><input id="gEmail" type="email" placeholder="Email" /><input id="gPhone" placeholder="Phone" /></div>'+

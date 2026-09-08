@@ -11,7 +11,7 @@ function eachNight(checkIn, checkOut) {
   for (let d = new Date(start); d.getTime() < end.getTime(); d.setUTCDate(d.getUTCDate() + 1)) nights.push(new Date(d));
   return nights;
 }
-function inRange(iso, start, end) { return start && end && iso >= start && iso <= end; }
+function isWeekend(date) { const dow = date.getUTCDay(); return dow === 5 || dow === 6; } // Fri, Sat
 
 // Base rate for a given night index (0 = first night, then every night thereafter).
 function baseRateFor(rc, nightIndex) {
@@ -21,19 +21,27 @@ function baseRateFor(rc, nightIndex) {
   return add != null ? add : (first != null ? first : 0);
 }
 
-// Highest applicable upward flex % for a night (weekend + any seasonal flex whose
-// period covers it). We take the MAX so surcharges never silently stack.
+// Nightly base for one night: a weekend rate (if set) overrides the standard
+// nightly on Fri/Sat. The first night bundles one clean either way.
+function nightBase(rc, i, date) {
+  const wk = rc.weekendNightCents;
+  const weekendRate = (isWeekend(date) && wk != null);
+  if (i === 0) return weekendRate ? (wk + (rc.cleaningCents || 0)) : baseRateFor(rc, 0);
+  return weekendRate ? wk : baseRateFor(rc, i);
+}
+
+// Seasonal flex periods match by month-day (recurring every year); Dec->Jan wraps.
+function flexCovers(dateISO, f) {
+  const d = dateISO.slice(5), a = (f.start || '').slice(5), b = (f.end || '').slice(5);
+  if (!a || !b) return false;
+  return a <= b ? (d >= a && d <= b) : (d >= a || d <= b);
+}
+// Highest applicable seasonal flex % for a night (MAX so surcharges never stack).
 function nightFlex(rc, date) {
   const iso = date.toISOString().slice(0, 10);
+  const flexes = Array.isArray(rc.flexes) ? rc.flexes : [];
   let max = 0;
-  const specials = Array.isArray(rc.specialDates) ? rc.specialDates : [];
-  for (const s of specials) {
-    if (!inRange(iso, s.start, s.end)) continue;
-    const p = s.flex === 'flex1' ? rc.flex1Percent : s.flex === 'flex2' ? rc.flex2Percent : s.flex === 'flex3' ? rc.flex3Percent : 0;
-    if ((p || 0) > max) max = p;
-  }
-  const dow = date.getUTCDay(); // 5 Fri, 6 Sat
-  if ((dow === 5 || dow === 6) && (rc.weekendFlexPercent || 0) > max) max = rc.weekendFlexPercent;
+  for (const f of flexes) { if (flexCovers(iso, f) && (Number(f.percent) || 0) > max) max = Number(f.percent) || 0; }
   return max;
 }
 
@@ -49,11 +57,11 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
 
   let accommodation = 0;
   const nightLines = nights.map((d, i) => {
-    const base = baseRateFor(rc, i); // first night vs every night thereafter
+    const base = nightBase(rc, i, d);
     const flex = nightFlex(rc, d);
     const cents = Math.round(base * (1 + flex / 100));
     accommodation += cents;
-    return { date: d.toISOString().slice(0, 10), baseCents: base, flexPercent: flex, cents };
+    return { date: d.toISOString().slice(0, 10), baseCents: base, flexPercent: flex, weekend: isWeekend(d), cents };
   });
 
   let discountPercent = 0;
@@ -68,14 +76,18 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
   const mattressCents = mattress ? (rc.mattressCents || 0) : 0;
   const breakageCents = rc.breakageDepositCents || 0;
 
-  const totalCents = accommodation - discountCents + cleaningCents + earlyCents + lateCents + mattressCents + breakageCents;
+  // Rental = what the stay actually costs. Deposit = refundable breakage hold,
+  // collected up front and returned after checkout. Total = payable now.
+  const rentalCents = accommodation - discountCents + cleaningCents + earlyCents + lateCents + mattressCents;
+  const depositCents = breakageCents;
+  const totalCents = rentalCents + depositCents;
   const avgNightlyCents = Math.round(accommodation / n);
 
   return {
     nights: n, avgNightlyCents,
     accommodationCents: accommodation, discountPercent, discountCents,
     cleaningCents, earlyCents, lateCents, mattressCents, breakageCents,
-    totalCents, nightLines,
+    rentalCents, depositCents, totalCents, nightLines,
   };
 }
 

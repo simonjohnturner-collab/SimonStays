@@ -138,19 +138,22 @@ model PricingGroup {
   // nightly rate: first night, then every night thereafter (cents)
   firstNightCents      Int?
   additionalNightCents Int?
+  weekendNightCents    Int? // optional Fri/Sat nightly rate — overrides the nightly rate on weekend nights when set
   weeklyDiscountPercent  Float @default(0) // 7+ nights
   monthlyDiscountPercent Float @default(0) // 28+ nights
-  // per-night upward flexes (%)
-  weekendFlexPercent Float @default(0) // Fri & Sat nights
-  flex1Percent       Float @default(0) // Seasonal upward Flex 1
-  flex2Percent       Float @default(0) // Seasonal upward Flex 2
-  flex3Percent       Float @default(0) // Seasonal upward Flex 3
+  // Up to 4 seasonal upward flexes, each its own period + %: [{start, end, percent}]
+  // Dates match by month-day (recurring annually); Dec->Jan wraps.
+  flexes Json @default("[]")
   // fees
   earlyCheckInCents Int @default(0)
   lateCheckOutCents Int @default(0)
   cleaningCents     Int @default(0) // per clean
   mattressCents     Int @default(0)
-  // each seasonal flex can apply to MULTIPLE periods: [{flex:'flex1'|'flex2'|'flex3', start, end}]
+  // --- dormant (superseded by `flexes`), kept to avoid data loss on migrate ---
+  weekendFlexPercent Float @default(0)
+  flex1Percent       Float @default(0)
+  flex2Percent       Float @default(0)
+  flex3Percent       Float @default(0)
   specialDates Json?
   bookings     Booking[]
   createdAt    DateTime @default(now())
@@ -290,6 +293,8 @@ model Booking {
   paid         Boolean       @default(false) // true only when fully paid
   paymentStatus String       @default("unpaid") // 'paid' | 'partial' | 'unpaid'
   amountOwingCents Int? // optional, for partial payments
+  depositCents  Int?    // refundable breakage deposit collected on the shopfront
+  depositStatus String? // null (none) | 'held' | 'refunded' | 'forfeited'
   cleaner      String?
   comments     String?
   accessCode   String? // smart-lock code for this stay

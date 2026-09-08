@@ -12,7 +12,8 @@ const cMonthly = (v) => Math.round((30.25 * randToCents(v.nAdd) + randToCents(v.
 // plus a unit→group assignment section. Units in a group share its prices.
 const ROWS = [
   { section: 'Nightly rate' },
-  { key: 'nAdd', label: 'Nightly rate', type: 'money' },
+  { key: 'nAdd', label: 'Nightly rate (per night)', type: 'money' },
+  { key: 'weekendNight', label: 'Weekend rate (Fri/Sat) — optional', type: 'money' },
   { key: 'cleaning', label: 'Cleaning per clean', type: 'money' },
   { key: 'firstNight', label: 'First night (nightly + clean)', type: 'calc', calc: cFirst },
   { section: 'Discounts, deposit & fees' },
@@ -20,57 +21,46 @@ const ROWS = [
   { key: 'weeklyPrice', label: '↳ Weekly price (7 nights)', type: 'calc', calc: cWeekly },
   { key: 'monthly', label: 'Monthly discount %', type: 'pct' },
   { key: 'monthlyPrice', label: '↳ Monthly price (~30.25 nights)', type: 'calc', calc: cMonthly },
-  { key: 'breakage', label: 'Breakage deposit', type: 'money' },
+  { key: 'breakage', label: 'Breakage deposit (refundable)', type: 'money' },
   { key: 'early', label: 'Early check-in', type: 'money' },
   { key: 'late', label: 'Late checkout', type: 'money' },
   { key: 'mattress', label: 'Extra mattress', type: 'money' },
-  { section: 'Upward flexes (%)' },
-  { key: 'weekend', label: 'Weekend flex %', type: 'pct' },
-  { key: 'flex1', label: 'Seasonal flex 1 %', type: 'pct' },
-  { key: 'flex2', label: 'Seasonal flex 2 %', type: 'pct' },
-  { key: 'flex3', label: 'Seasonal flex 3 %', type: 'pct' },
-  { section: 'Seasonal flex periods' },
-  { key: 'f1s1', label: 'Flex 1 · start', type: 'date' }, { key: 'f1e1', label: 'Flex 1 · end', type: 'date' },
-  { key: 'f1s2', label: 'Flex 1 · start (2)', type: 'date' }, { key: 'f1e2', label: 'Flex 1 · end (2)', type: 'date' },
-  { key: 'f2s1', label: 'Flex 2 · start', type: 'date' }, { key: 'f2e1', label: 'Flex 2 · end', type: 'date' },
-  { key: 'f2s2', label: 'Flex 2 · start (2)', type: 'date' }, { key: 'f2e2', label: 'Flex 2 · end (2)', type: 'date' },
-  { key: 'f3s1', label: 'Flex 3 · start', type: 'date' }, { key: 'f3e1', label: 'Flex 3 · end', type: 'date' },
-  { key: 'f3s2', label: 'Flex 3 · start (2)', type: 'date' }, { key: 'f3e2', label: 'Flex 3 · end (2)', type: 'date' },
+  { section: 'Seasonal flexes — % increase over a date range (recurs yearly)' },
+  { key: 'f1pct', label: 'Flex 1 · increase %', type: 'pct' }, { key: 'f1s', label: 'Flex 1 · start', type: 'date' }, { key: 'f1e', label: 'Flex 1 · end', type: 'date' },
+  { key: 'f2pct', label: 'Flex 2 · increase %', type: 'pct' }, { key: 'f2s', label: 'Flex 2 · start', type: 'date' }, { key: 'f2e', label: 'Flex 2 · end', type: 'date' },
+  { key: 'f3pct', label: 'Flex 3 · increase %', type: 'pct' }, { key: 'f3s', label: 'Flex 3 · start', type: 'date' }, { key: 'f3e', label: 'Flex 3 · end', type: 'date' },
+  { key: 'f4pct', label: 'Flex 4 · increase %', type: 'pct' }, { key: 'f4s', label: 'Flex 4 · start', type: 'date' }, { key: 'f4e', label: 'Flex 4 · end', type: 'date' },
 ];
 
 const r = (c) => (c == null ? '' : String(centsToRand(c)));
 
 function toValues(g) {
-  const specials = Array.isArray(g.specialDates) ? g.specialDates : [];
-  const per = { flex1: [], flex2: [], flex3: [] };
-  specials.forEach((s) => { if (per[s.flex]) per[s.flex].push(s); });
-  const p = (flex, i, k) => (per[flex][i] ? per[flex][i][k] || '' : '');
+  const fx = Array.isArray(g.flexes) ? g.flexes : [];
+  const f = (i, k) => (fx[i] ? (fx[i][k] ?? '') : '');
   return {
-    nAdd: r(g.additionalNightCents),
+    nAdd: r(g.additionalNightCents), weekendNight: r(g.weekendNightCents),
     weekly: g.weeklyDiscountPercent || '', monthly: g.monthlyDiscountPercent || '',
     breakage: r(g.breakageDepositCents), cleaning: r(g.cleaningCents), early: r(g.earlyCheckInCents), late: r(g.lateCheckOutCents), mattress: r(g.mattressCents),
-    weekend: g.weekendFlexPercent || '', flex1: g.flex1Percent || '', flex2: g.flex2Percent || '', flex3: g.flex3Percent || '',
-    f1s1: p('flex1', 0, 'start'), f1e1: p('flex1', 0, 'end'), f1s2: p('flex1', 1, 'start'), f1e2: p('flex1', 1, 'end'),
-    f2s1: p('flex2', 0, 'start'), f2e1: p('flex2', 0, 'end'), f2s2: p('flex2', 1, 'start'), f2e2: p('flex2', 1, 'end'),
-    f3s1: p('flex3', 0, 'start'), f3e1: p('flex3', 0, 'end'), f3s2: p('flex3', 1, 'start'), f3e2: p('flex3', 1, 'end'),
+    f1pct: f(0, 'percent'), f1s: f(0, 'start'), f1e: f(0, 'end'),
+    f2pct: f(1, 'percent'), f2s: f(1, 'start'), f2e: f(1, 'end'),
+    f3pct: f(2, 'percent'), f3s: f(2, 'start'), f3e: f(2, 'end'),
+    f4pct: f(3, 'percent'), f4s: f(3, 'start'), f4e: f(3, 'end'),
   };
 }
 
 function toPayload(name, v) {
-  const specialDates = [];
-  const addP = (flex, s, e) => { if (v[s] && v[e]) specialDates.push({ flex, start: v[s], end: v[e] }); };
-  addP('flex1', 'f1s1', 'f1e1'); addP('flex1', 'f1s2', 'f1e2');
-  addP('flex2', 'f2s1', 'f2e1'); addP('flex2', 'f2s2', 'f2e2');
-  addP('flex3', 'f3s1', 'f3e1'); addP('flex3', 'f3s2', 'f3e2');
+  const flexes = [];
+  const addF = (pct, s, e) => { if (num(pct) > 0 && v[s] && v[e]) flexes.push({ percent: num(pct), start: v[s], end: v[e] }); };
+  addF(v.f1pct, 'f1s', 'f1e'); addF(v.f2pct, 'f2s', 'f2e'); addF(v.f3pct, 'f3s', 'f3e'); addF(v.f4pct, 'f4s', 'f4e');
   return {
     name,
     additionalNightCents: randToCents(v.nAdd),
+    weekendNightCents: v.weekendNight === '' || v.weekendNight == null ? null : randToCents(v.weekendNight),
     firstNightCents: cFirst(v), // computed: nightly + one clean (bundled)
     weeklyDiscountPercent: num(v.weekly), monthlyDiscountPercent: num(v.monthly),
     breakageDepositCents: randToCents(v.breakage), cleaningCents: randToCents(v.cleaning),
     earlyCheckInCents: randToCents(v.early), lateCheckOutCents: randToCents(v.late), mattressCents: randToCents(v.mattress),
-    weekendFlexPercent: num(v.weekend), flex1Percent: num(v.flex1), flex2Percent: num(v.flex2), flex3Percent: num(v.flex3),
-    specialDates,
+    flexes,
   };
 }
 

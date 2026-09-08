@@ -225,7 +225,8 @@ router.post('/book', async (req, res, next) => {
     if (!q) return res.status(400).json({ error: 'invalid_dates' });
 
     const contact = [b.guestEmail, b.guestPhone].filter(Boolean).join(' · ');
-    const comments = `Website booking (awaiting payment) · Contact: ${contact} · Guests: ${b.guests || '—'} · Total R${(q.totalCents / 100).toFixed(2)}${b.message ? ` · Note: ${b.message}` : ''}`;
+    const depoTxt = q.depositCents ? ` · Refundable deposit R${(q.depositCents / 100).toFixed(2)}` : '';
+    const comments = `Website booking (awaiting payment) · Contact: ${contact} · Guests: ${b.guests || '—'} · Rental R${(q.rentalCents / 100).toFixed(2)}${depoTxt} · Payable R${(q.totalCents / 100).toFixed(2)}${b.message ? ` · Note: ${b.message}` : ''}`;
 
     const booking = await prisma.booking.create({
       data: {
@@ -233,6 +234,7 @@ router.post('/book', async (req, res, next) => {
         guestName: b.guestName,
         checkIn: dateOnly(iso(b.checkIn)), checkOut: dateOnly(iso(b.checkOut)),
         comments, paymentStatus: 'unpaid',
+        depositCents: q.depositCents || null, depositStatus: q.depositCents ? 'held' : null,
       },
     });
     const checkout = await payments.createCheckout(booking, q.totalCents);
