@@ -78,11 +78,20 @@ async function syncUnit(unitId) {
         });
         updated++;
       } else {
+        // A modified reservation can arrive under a NEW uid (its old record is
+        // then removed as stale). Carry over the cleaner (and a hand-typed guest
+        // name) from the booking it's replacing so a sync never drops them.
+        const prior = await prisma.booking.findFirst({
+          where: { unitId, checkIn: ev.start, checkOut: ev.end },
+          orderBy: { createdAt: 'desc' },
+        });
         await prisma.booking.create({
           data: {
             unitId, source, channelType: ch.type, status: 'confirmed',
-            guestName, checkIn: ev.start, checkOut: ev.end, paid: true, paymentStatus: 'paid',
+            guestName: prior && !isPlaceholder(prior.guestName) ? prior.guestName : guestName,
+            checkIn: ev.start, checkOut: ev.end, paid: true, paymentStatus: 'paid',
             externalUid: uid, resCode: code, comments: code ? `ResCode: ${code}` : null,
+            cleaner: prior ? prior.cleaner : null,
           },
         });
         added++;
