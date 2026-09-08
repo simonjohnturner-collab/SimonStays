@@ -643,3 +643,19 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .listing-prop-actions { display:flex; align-items:center; gap:6px; margin:2px 0 12px; }
 .listing-prop-actions .spacer { flex:1; }
 .units-label-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:6px; }
+
+/* --- Service providers --- */
+.sp-wrap { max-width:820px; margin:0 auto; padding:16px 18px 50px; }
+.sp-add { display:flex; gap:8px; margin:10px 0 16px; flex-wrap:wrap; }
+.sp-add input, .sp-add select { flex:1; min-width:120px; }
+.sp-add button { flex-shrink:0; }
+.sp-card { border:1px solid var(--line); border-radius:12px; background:#fff; padding:12px 14px; margin-bottom:12px; }
+.sp-top { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.sp-name { flex:2; min-width:140px; font-weight:600; }
+.sp-role { flex:1; min-width:120px; }
+.sp-phone { flex:1; min-width:130px; }
+.sp-notes { width:100%; margin-top:8px; }
+.sp-units { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:10px; }
+.sp-units-label { font-size:12px; color:var(--muted); font-weight:600; margin-right:2px; }
+.sp-unit { background:#eef1f4; color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:12px; }
+.sp-unit.on { background:var(--green); color:#fff; border-color:var(--green); }

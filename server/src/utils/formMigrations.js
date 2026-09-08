@@ -44,4 +44,23 @@ async function normaliseCleanForms() {
   return changed;
 }
 
-module.exports = { normaliseCleanForms };
+// Seed the ServiceProvider directory from each host's legacy cleaner-name list
+// (role = Cleaner), once — only when the host has no providers yet. Idempotent.
+async function seedServiceProviders() {
+  let hosts;
+  try { hosts = await prisma.host.findMany({ select: { id: true, cleaners: true } }); }
+  catch (e) { console.error('[providers] seed skipped:', e.message); return 0; }
+  let created = 0;
+  for (const h of hosts) {
+    const names = Array.isArray(h.cleaners) ? h.cleaners.filter((n) => typeof n === 'string' && n.trim()) : [];
+    if (!names.length) continue;
+    const count = await prisma.serviceProvider.count({ where: { hostId: h.id } });
+    if (count > 0) continue; // already has a directory — don't duplicate
+    await prisma.serviceProvider.createMany({ data: names.map((name) => ({ hostId: h.id, name: name.trim(), role: 'Cleaner' })) });
+    created += names.length;
+  }
+  if (created) console.log(`[providers] seeded ${created} cleaner(s) into the service-provider directory`);
+  return created;
+}
+
+module.exports = { normaliseCleanForms, seedServiceProviders };

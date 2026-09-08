@@ -62,6 +62,7 @@ app.use('/biller', require('./routes/biller'));
 app.use('/invoices', require('./routes/invoices'));
 app.use('/forms', require('./routes/forms'));
 app.use('/cleaners', require('./routes/cleaners'));
+app.use('/providers', require('./routes/providers'));
 app.use('/smartlocks', require('./routes/smartlocks'));
 app.use('/groups', require('./routes/groups'));
 app.use('/properties', require('./routes/properties'));
@@ -85,6 +86,7 @@ if (require.main === module) {
   // One-time, idempotent form clean-up: photos required only in room sections,
   // plus an optional "guest left behind" photo in the Guests section.
   require('./utils/formMigrations').normaliseCleanForms().catch((e) => console.error('[forms] migration failed', e.message));
+  require('./utils/formMigrations').seedServiceProviders().catch((e) => console.error('[providers] seed failed', e.message));
 
   const expr = process.env.SYNC_CRON || '*/30 * * * *';
   if (cron.validate(expr)) {

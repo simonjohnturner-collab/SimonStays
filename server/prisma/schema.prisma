@@ -34,6 +34,23 @@ model Host {
   bookings      Booking[]
   formTemplates   FormTemplate[]
   formSubmissions FormSubmission[]
+  serviceProviders ServiceProvider[]
+}
+
+// A service provider the host works with — cleaners, electricians, plumbers,
+// handymen, etc. (Cleaners here feed the checkout-cleaner dropdowns.)
+model ServiceProvider {
+  id        String   @id @default(uuid())
+  hostId    String
+  host      Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  name      String
+  role      String   @default("Cleaner") // Cleaner | Electrician | Plumber | Handyman | Other…
+  phone     String?
+  notes     String?
+  unitIds   Json     @default("[]") // ids of units this provider works in
+  createdAt DateTime @default(now())
+
+  @@index([hostId])
 }
 
 // The host's own "invoice from" details + bank info (one per host, editable).

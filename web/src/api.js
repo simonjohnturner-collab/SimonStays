@@ -105,9 +105,15 @@ export const api = {
   setLockBattery: (unitId, lockBattery) => req('PATCH', `/units/${unitId}`, { lockBattery }),
   setBookingCode: (bookingId, accessCode) => req('PATCH', `/bookings/${bookingId}`, { accessCode }),
 
-  // cleaner names (for dropdowns)
+  // cleaner names (for dropdowns) — derived from the service-provider directory
   listCleaners: () => req('GET', '/cleaners'),
   saveCleaners: (cleaners) => req('PUT', '/cleaners', { cleaners }),
+
+  // service providers (cleaners, electricians, plumbers, handymen…)
+  listProviders: () => req('GET', '/providers'),
+  createProvider: (data) => req('POST', '/providers', data),
+  updateProvider: (id, data) => req('PUT', `/providers/${id}`, data),
+  deleteProvider: (id) => req('DELETE', `/providers/${id}`),
 
   // forms (admin): design templates + review submissions
   listFormTemplates: () => req('GET', '/forms/templates'), // { damage, cleanForms }

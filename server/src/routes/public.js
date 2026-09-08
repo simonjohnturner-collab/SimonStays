@@ -300,14 +300,16 @@ router.get('/forms/units', async (req, res, next) => {
   try {
     const hostId = await publicHostId();
     if (!hostId) return res.json({ properties: [], cleaners: [] });
-    const [properties, host] = await Promise.all([
+    const [properties, providers, host] = await Promise.all([
       prisma.property.findMany({
         where: { hostId }, orderBy: { sortOrder: 'asc' },
         select: { id: true, name: true, units: { select: { id: true, name: true, bedrooms: true, bathrooms: true }, orderBy: { createdAt: 'asc' } } },
       }),
+      prisma.serviceProvider.findMany({ where: { hostId, role: 'Cleaner' }, orderBy: { name: 'asc' }, select: { name: true } }),
       prisma.host.findUnique({ where: { id: hostId }, select: { cleaners: true } }),
     ]);
-    res.json({ properties, cleaners: Array.isArray(host?.cleaners) ? host.cleaners : [] });
+    const cleaners = providers.length ? providers.map((p) => p.name) : (Array.isArray(host?.cleaners) ? host.cleaners : []);
+    res.json({ properties, cleaners });
   } catch (e) { next(e); }
 });
 

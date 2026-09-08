@@ -14,7 +14,7 @@ import ListingsView from './ListingsView.jsx';
 import BoardSearch from './BoardSearch.jsx';
 import FormsView from './FormsView.jsx';
 import NotificationsBell from './NotificationsBell.jsx';
-import CleanersModal from './CleanersModal.jsx';
+import ServiceProvidersView from './ServiceProvidersView.jsx';
 import SmartLockView from './SmartLockView.jsx';
 import AccountView from './AccountView.jsx';
 
@@ -37,7 +37,7 @@ export default function Main() {
   const [invoices, setInvoices] = useState(null); // { initialId } when open
   const [groups, setGroups] = useState([]);
   const [cleaners, setCleaners] = useState([]);
-  const [cleanersOpen, setCleanersOpen] = useState(false);
+  const [providersOpen, setProvidersOpen] = useState(false);
   const [pricingMatrix, setPricingMatrix] = useState(false);
   const [listings, setListings] = useState(false);
   const [forms, setForms] = useState(false);
@@ -183,6 +183,15 @@ export default function Main() {
   if (account) {
     return <AccountView onClose={() => setAccount(false)} />;
   }
+  if (providersOpen) {
+    return (
+      <ServiceProvidersView
+        onClose={() => setProvidersOpen(false)}
+        units={properties.flatMap((p) => p.units.map((u) => ({ id: u.id, label: `${p.name} · ${u.name}` })))}
+        onChanged={() => api.listCleaners().then((c) => setCleaners(c.cleaners || [])).catch(() => {})}
+      />
+    );
+  }
   if (monthUnit) {
     return (
       <UnitMonthView
@@ -283,16 +292,13 @@ export default function Main() {
           onOpenPricing={() => { setMenuOpen(false); setPricingMatrix(true); }}
           onOpenListings={() => { setMenuOpen(false); setListings(true); }}
           onOpenForms={() => { setMenuOpen(false); setForms(true); }}
-          onOpenCleaners={() => { setMenuOpen(false); setCleanersOpen(true); }}
+          onOpenCleaners={() => { setMenuOpen(false); setProvidersOpen(true); }}
           onOpenSmartLocks={() => { setMenuOpen(false); setSmartLocks(true); }}
           onOpenAccount={() => { setMenuOpen(false); setAccount(true); }}
           onReorderProperties={reorderProperties}
         />
       )}
 
-      {cleanersOpen && (
-        <CleanersModal cleaners={cleaners} onClose={() => setCleanersOpen(false)} onSaved={(list) => setCleaners(list)} />
-      )}
 
       {emailOpen && (
         <EmailModal

@@ -8,6 +8,10 @@ const router = express.Router();
 router.use(authHost);
 
 router.get('/', async (req, res) => {
+  // Cleaner names now come from the ServiceProvider directory (role = Cleaner);
+  // falls back to the legacy Host.cleaners list if none exist yet.
+  const providers = await prisma.serviceProvider.findMany({ where: { hostId: req.hostId, role: 'Cleaner' }, orderBy: { name: 'asc' }, select: { name: true } });
+  if (providers.length) return res.json({ cleaners: providers.map((p) => p.name) });
   const host = await prisma.host.findUnique({ where: { id: req.hostId }, select: { cleaners: true } });
   res.json({ cleaners: Array.isArray(host?.cleaners) ? host.cleaners : [] });
 });
