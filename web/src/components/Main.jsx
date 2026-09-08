@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth.jsx';
 import { api } from '../api.js';
-import { today, addDays, ymd } from '../dates.js';
+import { today, addDays, addMonths, ymd } from '../dates.js';
 import Board from './Board.jsx';
 import BookingModal from './BookingModal.jsx';
 import UnitPanel from './UnitPanel.jsx';
@@ -204,9 +204,11 @@ export default function Main() {
         <div className="brand">Simon<span>Stays</span></div>
         {hasUnits && <BoardSearch onJump={jumpToBooking} />}
         <div className="spacer" />
+        <button className="ghost" onClick={() => setStart(addMonths(start, -1))}>‹ month</button>
         <button className="ghost" onClick={() => setStart(addDays(start, -7))}>← week</button>
         <button className="ghost" onClick={() => setStart(addDays(today(), -3))}>Today</button>
         <button className="ghost" onClick={() => setStart(addDays(start, 7))}>week →</button>
+        <button className="ghost" onClick={() => setStart(addMonths(start, 1))}>month ›</button>
         <button className="ghost" onClick={syncAll} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync channels'}</button>
         <button className="ghost" onClick={() => setListings(true)}>🏠 Listings</button>
         <button className="ghost" onClick={() => setEmailOpen(true)}>✉ Guest name</button>

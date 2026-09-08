@@ -17,6 +17,13 @@ export function addDays(d, n) {
   return x;
 }
 
+/** Shift a date by n calendar months (keeps the day-of-month where possible). */
+export function addMonths(d, n) {
+  const x = new Date(d);
+  x.setUTCMonth(x.getUTCMonth() + n);
+  return x;
+}
+
 /** Array of Date objects (noon UTC) for a window. */
 export function range(start, count) {
   const out = [];
