@@ -149,7 +149,7 @@ export default function RateCardMatrix({ onClose }) {
                     {cols.map((c, ci) => (
                       <td key={c.id}>
                         <div className="pctcalc-cell">
-                          <input value={c.v[row.key]} onChange={(e) => setCell(ci, row.key, e.target.value)} />
+                          <span className="pct-in"><input value={c.v[row.key]} onChange={(e) => setCell(ci, row.key, e.target.value)} /><span className="pct-sign">%</span></span>
                           <span className="pctcalc-eq">= {fmtR(row.calc(c.v))}</span>
                         </div>
                       </td>

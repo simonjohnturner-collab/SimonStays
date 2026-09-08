@@ -687,5 +687,7 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 
 /* --- Pricing sheet: discount % + resulting price on one row --- */
 .pctcalc-cell { display:flex; align-items:center; gap:6px; }
-.pctcalc-cell input { width:56px; flex-shrink:0; }
-.pctcalc-eq { font-size:13px; color:var(--muted); white-space:nowrap; }
+.pct-in { position:relative; display:inline-flex; align-items:center; flex-shrink:0; }
+.pct-in input { width:52px; padding-right:18px; }
+.pct-sign { position:absolute; right:7px; color:var(--muted); font-size:13px; pointer-events:none; }
+.pctcalc-eq { font-size:12px; color:#2160c4; font-weight:700; white-space:nowrap; }
