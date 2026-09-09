@@ -49,6 +49,7 @@ export const api = {
   changeEmail: (currentPassword, newEmail) => req('PUT', '/account/email', { currentPassword, newEmail }),
   uploadAccountPhoto: (dataBase64, contentType) => req('POST', '/account/photo', { dataBase64, contentType }),
   deleteAccountPhoto: () => req('DELETE', '/account/photo'),
+  listPayments: () => req('GET', '/account/payments'),
 
   // properties + units
   listProperties: () => req('GET', '/properties'),

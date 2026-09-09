@@ -16,6 +16,7 @@ import FormsView from './FormsView.jsx';
 import NotificationsBell from './NotificationsBell.jsx';
 import ServiceProvidersView from './ServiceProvidersView.jsx';
 import GuestBookView from './GuestBookView.jsx';
+import PaymentHistoryView from './PaymentHistoryView.jsx';
 import SmartLockView from './SmartLockView.jsx';
 import AccountView from './AccountView.jsx';
 
@@ -40,6 +41,7 @@ export default function Main() {
   const [cleaners, setCleaners] = useState([]);
   const [providersOpen, setProvidersOpen] = useState(false);
   const [guestsOpen, setGuestsOpen] = useState(false);
+  const [paymentsOpen, setPaymentsOpen] = useState(false);
   const [pricingMatrix, setPricingMatrix] = useState(false);
   const [listings, setListings] = useState(false);
   const [forms, setForms] = useState(false);
@@ -197,6 +199,9 @@ export default function Main() {
   if (guestsOpen) {
     return <GuestBookView onClose={() => setGuestsOpen(false)} />;
   }
+  if (paymentsOpen) {
+    return <PaymentHistoryView onClose={() => setPaymentsOpen(false)} />;
+  }
   if (monthUnit) {
     return (
       <UnitMonthView
@@ -301,6 +306,7 @@ export default function Main() {
           onOpenGuests={() => { setMenuOpen(false); setGuestsOpen(true); }}
           onOpenSmartLocks={() => { setMenuOpen(false); setSmartLocks(true); }}
           onOpenAccount={() => { setMenuOpen(false); setAccount(true); }}
+          onOpenPayments={() => { setMenuOpen(false); setPaymentsOpen(true); }}
           onReorderProperties={reorderProperties}
         />
       )}

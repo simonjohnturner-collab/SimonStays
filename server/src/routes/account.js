@@ -29,6 +29,37 @@ router.get('/', async (req, res) => {
   res.json({ account: { ...publicAccount(h), photoId: await hostPhotoId(h.id) } });
 });
 
+// GET /account/payments — the host's paid bookings, each with a priced breakdown
+// (from the rate card), so they can see what they've been paid out.
+router.get('/payments', async (req, res) => {
+  const { quote } = require('../utils/pricing');
+  const { overridesFor } = require('../utils/nightPrices');
+  const iso = (d) => new Date(d).toISOString().slice(0, 10);
+  const bookings = await prisma.booking.findMany({
+    where: { hostId: req.hostId, OR: [{ paid: true }, { paymentStatus: 'paid' }], guestName: { not: 'Blocked' } },
+    include: { unit: { include: { property: true, pricingGroup: true } }, cleans: true },
+    orderBy: { checkIn: 'desc' },
+  });
+  const payments = [];
+  for (const b of bookings) {
+    if (!b.unit) continue;
+    let q = null;
+    if (b.unit.pricingGroup) {
+      const overrides = await overridesFor(b.unitId, iso(b.checkIn), iso(b.checkOut));
+      const prepaid = (b.cleans || []).filter((c) => c.paymentMethod !== 'direct').length;
+      q = quote(b.unit.pricingGroup, { checkIn: iso(b.checkIn), checkOut: iso(b.checkOut), mattress: b.extraMattress, earlyCheckIn: b.earlyCheckIn, lateCheckOut: b.lateCheckOut, cleans: 1 + prepaid, overrides });
+    }
+    payments.push({
+      id: b.id, property: b.unit.property.name, unit: b.unit.name, source: b.source, guestName: b.guestName || null,
+      checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
+      extras: { earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut, extraMattress: !!b.extraMattress },
+      quote: q,
+    });
+  }
+  const totalPaidOutCents = payments.reduce((s, p) => s + (p.quote ? p.quote.rentalCents : 0), 0);
+  res.json({ payments, totalPaidOutCents });
+});
+
 // POST /account/photo { dataBase64, contentType } — set the host's profile photo
 // (replaces any existing one). DELETE removes it.
 router.post('/photo', async (req, res) => {
