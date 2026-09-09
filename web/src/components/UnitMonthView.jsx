@@ -104,9 +104,9 @@ export default function UnitMonthView({ unit, propertyName, onClose, units = [],
 
       <div className="um-wrap">
         <div className="um-head">
-          <button className="ghost" onClick={() => setMonth(new Date(y, mo - 1, 1))}>‹ Prev</button>
-          <h3>{label}</h3>
-          <button className="ghost" onClick={() => setMonth(new Date(y, mo + 1, 1))}>Next ›</button>
+          <button className="um-nav" onClick={() => setMonth(new Date(y, mo - 1, 1))}>‹ Previous month</button>
+          <h3>{label} <button className="um-today" onClick={() => setMonth(firstOfMonth())}>Today</button></h3>
+          <button className="um-nav" onClick={() => setMonth(new Date(y, mo + 1, 1))}>Next month ›</button>
         </div>
 
         {sel.size > 0 && (

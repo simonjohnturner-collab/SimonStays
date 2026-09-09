@@ -691,3 +691,9 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .pct-in input { width:52px; padding-right:18px; }
 .pct-sign { position:absolute; right:7px; color:var(--muted); font-size:13px; pointer-events:none; }
 .pctcalc-eq { font-size:12px; color:#2160c4; font-weight:700; white-space:nowrap; }
+
+/* --- Month view: visible month navigation --- */
+.um-nav { background:var(--green); color:#fff; padding:8px 14px; }
+.um-nav:hover { background:var(--green-d); }
+.um-today { background:#eef1f4; color:var(--ink); font-size:12px; padding:3px 10px; margin-left:8px; vertical-align:middle; }
+.um-today:hover { background:#e2e6ea; }
