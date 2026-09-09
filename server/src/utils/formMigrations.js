@@ -1,15 +1,19 @@
 const prisma = require('../lib/prisma');
 
 // Sections whose photo uploads are mandatory — a checkout must document each of
-// these rooms. Photos in any OTHER section (Guests, purchases, breakage, general)
-// are optional so they never block a cleaner's submission.
-const ROOM_RE = /bathroom|bedroom|kitchen|patio|living|lounge|dining/i;
+// these rooms (bathroom, bedroom, kitchen, living/dining). Photos in any OTHER
+// section (Guests, patio, purchases, breakage, general) are optional so they
+// never block a cleaner's submission.
+const ROOM_RE = /bathroom|bedroom|kitchen|living|lounge|dining/i;
+const KITCHEN_RE = /kitchen/i;
+const KITCHEN_PHOTO_LABEL = 'Please upload photos of the kitchen — include the fridge, microwave and oven, and the cupboards showing the plates, glasses and mugs.';
 const GUEST_RE = /guest/i;
 const GUEST_PHOTO_ID = 'guest_left_photos';
 const guestPhotoField = () => ({ id: GUEST_PHOTO_ID, label: 'Photos of anything the guest left behind', type: 'photos', required: false });
 
 // Idempotently normalise every clean template:
 //   • photos are REQUIRED only inside room sections, optional everywhere else
+//   • the kitchen photo prompt names the specific items to photograph
 //   • the Guests section gains one optional "anything the guest left" photo field
 // Runs on startup; safe to run repeatedly (only writes when something changed).
 async function normaliseCleanForms() {
@@ -21,7 +25,7 @@ async function normaliseCleanForms() {
   for (const t of templates) {
     const fields = Array.isArray(t.fields) ? t.fields : [];
     const hasGuestPhoto = fields.some((f) => f && f.id === GUEST_PHOTO_ID);
-    let inRoom = false, inGuest = false, guestAdded = hasGuestPhoto, dirty = false;
+    let inRoom = false, inGuest = false, inKitchen = false, guestAdded = hasGuestPhoto, dirty = false;
     const out = [];
 
     for (const f of fields) {
@@ -29,10 +33,14 @@ async function normaliseCleanForms() {
         if (inGuest && !guestAdded) { out.push(guestPhotoField()); guestAdded = true; dirty = true; }
         inRoom = ROOM_RE.test(f.label || '');
         inGuest = GUEST_RE.test(f.label || '');
+        inKitchen = KITCHEN_RE.test(f.label || '');
         out.push(f);
         continue;
       }
-      if (f && f.type === 'photos' && !!f.required !== inRoom) { out.push({ ...f, required: inRoom }); dirty = true; continue; }
+      if (f && f.type === 'photos') {
+        const wantLabel = inKitchen ? KITCHEN_PHOTO_LABEL : f.label;
+        if (!!f.required !== inRoom || f.label !== wantLabel) { out.push({ ...f, required: inRoom, label: wantLabel }); dirty = true; continue; }
+      }
       out.push(f);
     }
     // Guests may be the last section in the form.
