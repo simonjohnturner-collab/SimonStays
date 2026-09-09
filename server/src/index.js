@@ -36,10 +36,12 @@ const reportHtml = fs.readFileSync(path.join(__dirname, 'pages/report.html'), 'u
 const cleanHtml = fs.readFileSync(path.join(__dirname, 'pages/clean.html'), 'utf8');
 app.get(['/report', '/report/damage'], (req, res) => {
   res.setHeader('Content-Security-Policy', FORMS_CSP);
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate'); // cleaners always get the latest form logic
   res.type('html').send(reportHtml);
 });
 app.get(['/clean', '/report/clean'], (req, res) => {
   res.setHeader('Content-Security-Policy', FORMS_CSP);
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
   res.type('html').send(cleanHtml);
 });
 

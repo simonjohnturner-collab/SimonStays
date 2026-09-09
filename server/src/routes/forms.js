@@ -83,7 +83,9 @@ router.get('/submissions', async (req, res) => {
   const where = { hostId: req.hostId };
   if (type) where.type = type;
   if (propertyId) where.propertyId = propertyId;
-  if (status) where.status = status;
+  // Hide "incomplete" submissions (created but never finalised — required photos
+  // didn't upload) unless explicitly requested.
+  if (status) where.status = status; else where.status = { not: 'incomplete' };
   if (q && q.trim()) {
     const term = q.trim();
     where.OR = [

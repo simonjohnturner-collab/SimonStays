@@ -393,10 +393,35 @@ router.post('/forms', async (req, res, next) => {
         propertyId, unitId,
         submitterName: b.submitterName || null, submitterContact: b.submitterContact || null,
         answers: b.answers && typeof b.answers === 'object' ? b.answers : {},
-        status: 'new',
+        // Clean reports start "incomplete" and are only promoted to "new" once the
+        // finalize step confirms the required room photos actually uploaded.
+        status: b.type === 'clean' ? 'incomplete' : 'new',
       },
     });
     res.status(201).json({ ok: true, id: submission.id });
+  } catch (e) { next(e); }
+});
+
+// POST /public/forms/:id/finalize — promote a clean submission to "new" only if
+// every REQUIRED photo field actually has a photo. Otherwise 400 with what's
+// missing, so a cleaner whose uploads failed can't accidentally submit blank.
+router.post('/forms/:id/finalize', async (req, res, next) => {
+  try {
+    const hostId = await publicHostId();
+    if (!hostId) return res.status(404).json({ error: 'not_available' });
+    const sub = await prisma.formSubmission.findFirst({
+      where: { id: req.params.id, hostId },
+      include: { photos: { select: { fieldId: true } } },
+    });
+    if (!sub) return res.status(404).json({ error: 'not_found' });
+    const tpl = sub.templateId ? await prisma.formTemplate.findFirst({ where: { id: sub.templateId, hostId } }) : null;
+    const reqPhotoFields = tpl && Array.isArray(tpl.fields) ? tpl.fields.filter((f) => f && f.type === 'photos' && f.required) : [];
+    const have = sub.photos.map((p) => p.fieldId || '');
+    const hasFor = (baseId) => have.some((fid) => fid === baseId || fid.startsWith(baseId + '__'));
+    const missing = reqPhotoFields.filter((f) => !hasFor(f.id)).map((f) => f.label);
+    if (missing.length) return res.status(400).json({ error: 'photos_required', message: 'Please add the required photos.', missing });
+    if (sub.status === 'incomplete') await prisma.formSubmission.update({ where: { id: sub.id }, data: { status: 'new' } });
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 

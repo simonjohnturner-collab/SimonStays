@@ -91,7 +91,7 @@
 
 <script>
   var PROPS = [], TEMPLATE = null, UNIT = null;
-  var answers = {}, photoFiles = {}, rendered = [];
+  var answers = {}, photoFiles = {}, rendered = [], SUBID = null;
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   // Read the original file bytes as a data URL — the reliable fallback that
@@ -200,6 +200,7 @@
   }
 
   function loadForm(unitId) {
+    SUBID = null; // new unit → new submission
     document.getElementById('fields').innerHTML = '<p class="section-intro">Loading the form for this unit…</p>';
     fetch('/public/forms/clean-for-unit/' + unitId).then(function (r) { return r.json(); }).then(function (d) {
       TEMPLATE = d.template; UNIT = d.unit;
@@ -248,22 +249,39 @@
     var btn = document.getElementById('submit'); btn.disabled = true; btn.textContent = 'Sending…';
     var body = { type: 'clean', unitId: unitId, submitterName: cleaner, templateId: TEMPLATE.id || null, answers: Object.assign({ date: document.getElementById('date').value }, answers) };
 
-    fetch('/public/forms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      .then(function (r) { return r.json(); })
-      .then(function (res) {
-        if (!res || !res.id) throw new Error('submit failed');
-        var failed = 0, jobs = [];
+    // Create the submission once; reuse it on retry so re-uploaded photos add to it.
+    var ensure = SUBID ? Promise.resolve(SUBID)
+      : fetch('/public/forms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+          .then(function (r) { return r.json(); })
+          .then(function (res) { if (!res || !res.id) throw new Error('submit failed'); SUBID = res.id; return SUBID; });
+
+    ensure.then(function (id) {
+        var jobs = [];
         Object.keys(photoFiles).forEach(function (fid) { (photoFiles[fid] || []).forEach(function (file) {
+          if (file._uploaded) return; // already sent on a previous attempt
           jobs.push(prep(file, 1600, 0.82).then(function (p) {
-            if (!p || !p.dataBase64) { failed++; return; }
-            return fetch('/public/forms/' + res.id + '/photos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            if (!p || !p.dataBase64) return;
+            return fetch('/public/forms/' + id + '/photos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ fieldId: fid, dataBase64: p.dataBase64, contentType: p.contentType, filename: file.name }) })
-              .then(function (r) { if (!r.ok) failed++; }, function () { failed++; }); })); }); });
-        return Promise.all(jobs).then(function () { return failed; });
+              .then(function (r) { if (r.ok) file._uploaded = true; }, function () {}); })); }); });
+        return Promise.all(jobs).then(function () { return id; });
       })
-      .then(function (failed) {
-        if (failed) alert(failed + ' photo(s) could not be uploaded, but your report was saved. Please try again from Safari or Chrome (not an in‑app browser).');
-        document.getElementById('form').classList.add('hidden'); document.getElementById('done').classList.remove('hidden'); window.scrollTo(0, 0); })
+      .then(function (id) {
+        // Finalize: the server confirms the required room photos actually arrived.
+        return fetch('/public/forms/' + id + '/finalize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+          .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); });
+      })
+      .then(function (res) {
+        if (!res.ok) {
+          var miss = (res.d && res.d.missing) || [];
+          showErr(miss.length
+            ? ('These photos are required and didn’t upload — please add them and submit again: ' + miss.join(', '))
+            : ((res.d && res.d.message) || 'Please add the required photos and submit again.'));
+          btn.disabled = false; btn.textContent = 'Submit clean report';
+          return;
+        }
+        document.getElementById('form').classList.add('hidden'); document.getElementById('done').classList.remove('hidden'); window.scrollTo(0, 0);
+      })
       .catch(function () { showErr('Sorry, something went wrong. Please try again.'); btn.disabled = false; btn.textContent = 'Submit clean report'; });
   };
 </script>
