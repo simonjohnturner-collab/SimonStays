@@ -29,35 +29,44 @@ router.get('/', async (req, res) => {
   res.json({ account: { ...publicAccount(h), photoId: await hostPhotoId(h.id) } });
 });
 
-// GET /account/payments — the host's paid bookings, each with a priced breakdown
-// (from the rate card), so they can see what they've been paid out.
+// SimonStays takes a 7.5% agency fee off each payout.
+const AGENCY_FEE_PERCENT = 7.5;
+
+// GET /account/payments — bookings SimonStays collected for this host (website
+// bookings, paid), each with a priced breakdown and the 7.5% agency-fee
+// deduction, so the host sees the net amount paid out to them.
 router.get('/payments', async (req, res) => {
   const { quote } = require('../utils/pricing');
   const { overridesFor } = require('../utils/nightPrices');
   const iso = (d) => new Date(d).toISOString().slice(0, 10);
   const bookings = await prisma.booking.findMany({
-    where: { hostId: req.hostId, OR: [{ paid: true }, { paymentStatus: 'paid' }], guestName: { not: 'Blocked' } },
+    where: { hostId: req.hostId, source: 'website', OR: [{ paid: true }, { paymentStatus: 'paid' }] },
     include: { unit: { include: { property: true, pricingGroup: true } }, cleans: true },
     orderBy: { checkIn: 'desc' },
   });
   const payments = [];
   for (const b of bookings) {
     if (!b.unit) continue;
-    let q = null;
+    let q = null, grossCents = 0, agencyFeeCents = 0, netPayoutCents = 0;
     if (b.unit.pricingGroup) {
       const overrides = await overridesFor(b.unitId, iso(b.checkIn), iso(b.checkOut));
       const prepaid = (b.cleans || []).filter((c) => c.paymentMethod !== 'direct').length;
       q = quote(b.unit.pricingGroup, { checkIn: iso(b.checkIn), checkOut: iso(b.checkOut), mattress: b.extraMattress, earlyCheckIn: b.earlyCheckIn, lateCheckOut: b.lateCheckOut, cleans: 1 + prepaid, overrides });
+      grossCents = q.rentalCents;
+      agencyFeeCents = Math.round(grossCents * AGENCY_FEE_PERCENT / 100);
+      netPayoutCents = grossCents - agencyFeeCents;
     }
     payments.push({
       id: b.id, property: b.unit.property.name, unit: b.unit.name, source: b.source, guestName: b.guestName || null,
       checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
       extras: { earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut, extraMattress: !!b.extraMattress },
-      quote: q,
+      quote: q, grossCents, agencyFeeCents, netPayoutCents,
     });
   }
-  const totalPaidOutCents = payments.reduce((s, p) => s + (p.quote ? p.quote.rentalCents : 0), 0);
-  res.json({ payments, totalPaidOutCents });
+  const totalGrossCents = payments.reduce((s, p) => s + p.grossCents, 0);
+  const totalFeeCents = payments.reduce((s, p) => s + p.agencyFeeCents, 0);
+  const totalPaidOutCents = payments.reduce((s, p) => s + p.netPayoutCents, 0);
+  res.json({ payments, totalGrossCents, totalFeeCents, totalPaidOutCents, agencyFeePercent: AGENCY_FEE_PERCENT });
 });
 
 // POST /account/photo { dataBase64, contentType } — set the host's profile photo

@@ -715,3 +715,5 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .ph-row { display:flex; justify-content:space-between; padding:3px 0; font-size:14px; }
 .ph-rowtot { font-weight:800; border-top:1px solid var(--line); margin-top:4px; padding-top:8px; }
 .ph-depo { color:var(--muted); font-size:12px; }
+
+.ph-fee { color:#b06a00; }
