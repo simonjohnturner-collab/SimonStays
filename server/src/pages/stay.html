@@ -110,6 +110,15 @@
   .addon{ display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer; font-size:14px; }
   .addon input{ width:auto; }
   .note.small{ font-size:12px; line-height:1.4; }
+  .cta-btn{ width:100%; margin-top:12px; padding:12px; font-size:15px; }
+  .co-back{ background:#eef1f4; color:var(--ink); padding:6px 12px; }
+  .co-back:hover{ background:#e2e6ea; }
+  .co-hero{ width:100%; aspect-ratio:16/9; background:#e9edf1 center/cover no-repeat; border-radius:12px; }
+  .pay-opts{ display:flex; flex-direction:column; gap:6px; margin:6px 0; }
+  .pay-opt{ display:flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:10px; padding:10px 12px; cursor:pointer; font-size:14px; }
+  .pay-opt:hover{ border-color:#cdd3da; }
+  .pay-opt input{ width:auto; }
+  .eft-box{ background:#eef6f0; border:1px solid #cfe6d6; border-radius:10px; padding:12px 14px; font-size:14px; line-height:1.6; margin:6px 0; }
   .msg{ padding:9px 12px; border-radius:8px; margin:8px 0; font-size:14px; }
   .msg.err{ background:#fdecec; color:#c0392b; }
   .msg.ok{ background:#eafaf0; color:var(--green-d); }
@@ -403,74 +412,119 @@
     var q=STATE.quote;
     var head='<div class="note" style="margin-bottom:8px"><b>'+STATE.ciSel+'</b> → <b>'+STATE.coSel+'</b></div>';
     if(!q){ side.innerHTML=head+'<div class="msg err">'+esc(STATE.quoteErr||'Pricing…')+'</div>'; return; }
+    var lines=breakdownLines(q);
+    var depoNote = q.depositCents ? ('<div class="note" style="margin:8px 0">🔒 The '+rand(q.depositCents)+' breakage deposit is held and <b>refunded after checkout</b>, subject to no damage.</div>') : '';
+    var earlyLbl = (q.earlyFeeCents||0)>0 ? ('(+'+rand(q.earlyFeeCents)+')') : '(no extra charge)';
+    var lateLbl = (q.lateFeeCents||0)>0 ? ('(+'+rand(q.lateFeeCents)+')') : '(no extra charge)';
+    var addons='<div class="addons">'+
+      '<label class="addon"><input type="checkbox" id="optEarly"'+(STATE.early?' checked':'')+'> Early check-in <span class="muted">'+earlyLbl+'</span></label>'+
+      '<label class="addon"><input type="checkbox" id="optLate"'+(STATE.late?' checked':'')+'> Late checkout <span class="muted">'+lateLbl+'</span></label>'+
+      '<div class="note small" style="margin-top:4px">Early check-in and late checkout are only possible depending on the guests arriving or departing that day. Where confirmed, <b>late checkout is by 13:30</b>.</div>'+
+      '</div>';
+    side.innerHTML=head+'<div class="qbox">'+lines+'<div class="qrow qtot"><span>Total</span><span>'+rand(q.totalCents)+'</span></div></div>'+
+      addons+depoNote+
+      '<button id="contBtn" class="cta-btn">Continue to payment →</button>';
+    var oe=$('#optEarly'); if(oe) oe.onchange=function(){ STATE.early=oe.checked; getQuote(); };
+    var ol=$('#optLate'); if(ol) ol.onchange=function(){ STATE.late=ol.checked; getQuote(); };
+    $('#contBtn').onclick=openCheckout;
+  }
+
+  // Shared price breakdown (used on the calendar side and the checkout screen).
+  function breakdownLines(q){
     var lines='<div class="qrow"><span>'+q.nights+' night'+(q.nights>1?'s':'')+' @ '+rand(q.avgNightlyCents)+'</span><span>'+rand(q.accommodationCents)+'</span></div>';
     if(q.discountCents) lines+='<div class="qrow"><span>'+q.discountPercent+'% length discount</span><span>−'+rand(q.discountCents)+'</span></div>';
-    if(q.cleaningCents) lines+='<div class="qrow"><span>Cleaning</span><span>'+rand(q.cleaningCents)+'</span></div>';
+    if(q.cleaningCents) lines+='<div class="qrow"><span>Cleaning fee</span><span>'+rand(q.cleaningCents)+'</span></div>';
     if(q.earlyCents) lines+='<div class="qrow"><span>Early check-in</span><span>'+rand(q.earlyCents)+'</span></div>';
     if(q.lateCents) lines+='<div class="qrow"><span>Late checkout</span><span>'+rand(q.lateCents)+'</span></div>';
     lines+='<div class="qrow" style="border-top:1px solid var(--line);margin-top:4px;padding-top:6px"><span>Rental subtotal</span><span>'+rand(q.rentalCents)+'</span></div>';
     if(q.depositCents) lines+='<div class="qrow"><span>Refundable breakage deposit</span><span>'+rand(q.depositCents)+'</span></div>';
-    var depoNote = q.depositCents ? ('<div class="note" style="margin:8px 0">🔒 The '+rand(q.depositCents)+' breakage deposit is held and <b>refunded after checkout</b>, subject to no damage.</div>') : '';
-    // Optional add-ons — always offered; a fee shows when the host has set one.
-    var addons='';
-    {
-      var earlyLbl = (q.earlyFeeCents||0)>0 ? ('(+'+rand(q.earlyFeeCents)+')') : '(no extra charge)';
-      var lateLbl = (q.lateFeeCents||0)>0 ? ('(+'+rand(q.lateFeeCents)+')') : '(no extra charge)';
-      addons='<div class="addons">'+
-        '<label class="addon"><input type="checkbox" id="optEarly"'+(STATE.early?' checked':'')+'> Early check-in <span class="muted">'+earlyLbl+'</span></label>'+
-        '<label class="addon"><input type="checkbox" id="optLate"'+(STATE.late?' checked':'')+'> Late checkout <span class="muted">'+lateLbl+'</span></label>'+
-        '<div class="note small" style="margin-top:4px">Early check-in and late checkout are only possible depending on the guests arriving or departing that day. Where confirmed, <b>late checkout is by 13:30</b>.</div>'+
-        '</div>';
-    }
-    side.innerHTML=head+'<div class="qbox">'+lines+'<div class="qrow qtot"><span>Payable now</span><span>'+rand(q.totalCents)+'</span></div></div>'+
-      addons+
-      depoNote+
-      '<div class="todo">💳 Online payment (and the deposit refund) is coming soon. For now this creates a booking request and a <b>test confirmation</b> (no charge).</div>'+
-      '<div class="frm">'+
-        '<input id="gName" placeholder="Your full name" />'+
-        '<div class="two"><input id="gEmail" type="email" placeholder="Email" /><input id="gPhone" placeholder="Phone" /></div>'+
-        '<input id="gGuests" type="number" min="1" placeholder="Number of guests" />'+
-        '<input id="gMsg" placeholder="Anything we should know? (optional)" />'+
-        '<div id="bmsg"></div>'+
-        '<button id="reqBtn">Request booking · '+rand(q.totalCents)+'</button>'+
-      '</div>';
-    if($('#g').value) $('#gGuests').value=$('#g').value;
-    $('#reqBtn').onclick=requestBooking;
-    var oe=$('#optEarly'); if(oe) oe.onchange=function(){ STATE.early=oe.checked; getQuote(); };
-    var ol=$('#optLate'); if(ol) ol.onchange=function(){ STATE.late=ol.checked; getQuote(); };
+    return lines;
   }
 
-  async function requestBooking(){
-    var name=$('#gName').value.trim(), email=$('#gEmail').value.trim(), phone=$('#gPhone').value.trim();
-    var bm=$('#bmsg');
-    if(!name){ bm.innerHTML='<div class="msg err">Please enter your name.</div>'; return; }
-    if(!email && !phone){ bm.innerHTML='<div class="msg err">Please give an email or phone number.</div>'; return; }
-    var btn=$('#reqBtn'); btn.disabled=true; btn.textContent='Booking…'; bm.innerHTML='';
+  // ---- Checkout screen: cover photo, full breakdown, details, payment options ----
+  function openCheckout(){
+    var p=STATE.prop, u=STATE.unit, q=STATE.quote; if(!q) return;
+    var host=$('#detail');
+    var cover=(u.photos&&u.photos.length)?u.photos[0].id:((p.photos&&p.photos.length)?p.photos[0].id:null);
+    var ci=u.checkInTime||'15:00', co=u.checkOutTime||'10:00', half=Math.round(q.totalCents/2);
+    var overlay=el('div','overlay');
+    overlay.innerHTML='<div class="sheet"><div class="sheet-head"><button class="co-back">‹ Back</button><h2>Confirm &amp; pay</h2><button class="x">&times;</button></div>'+
+      '<div class="sheet-body">'+
+        (cover?'<div class="co-hero" style="background-image:url('+API+'/photos/'+cover+')"></div>':'')+
+        '<h3 style="margin:10px 0 2px">'+esc(p.name)+' · Unit '+esc(u.name)+'</h3>'+
+        '<div class="note">📅 <b>'+STATE.ciSel+'</b> → <b>'+STATE.coSel+'</b> · check-in from '+ci+', checkout by '+co+'</div>'+
+        '<div class="qbox" style="margin-top:10px">'+breakdownLines(q)+'<div class="qrow qtot"><span>Total</span><span>'+rand(q.totalCents)+'</span></div></div>'+
+        (q.depositCents?('<div class="note" style="margin:8px 0">🔒 The '+rand(q.depositCents)+' breakage deposit is refunded after checkout, subject to no damage.</div>'):'')+
+        '<h3 class="sec">Your details</h3>'+
+        '<div class="frm"><input id="gName" placeholder="Full name" /><div class="two"><input id="gEmail" type="email" placeholder="Email" /><input id="gPhone" placeholder="Phone" /></div><input id="gGuests" type="number" min="1" placeholder="Number of guests" /><input id="gMsg" placeholder="Anything we should know? (optional)" /></div>'+
+        '<h3 class="sec">How would you like to pay?</h3>'+
+        '<div class="pay-opts">'+
+          '<label class="pay-opt"><input type="radio" name="pm" value="card" checked> 💳 Card (online)</label>'+
+          '<label class="pay-opt"><input type="radio" name="pm" value="eft"> 🏦 EFT / bank transfer</label>'+
+          '<label class="pay-opt"><input type="radio" name="pm" value="cash"> 💵 Cash</label>'+
+        '</div>'+
+        '<div class="pay-opts">'+
+          '<label class="pay-opt"><input type="radio" name="pp" value="full" checked> Pay in full now — '+rand(q.totalCents)+'</label>'+
+          '<label class="pay-opt"><input type="radio" name="pp" value="split"> Pay 50% now ('+rand(half)+'), 50% three days before check-in</label>'+
+        '</div>'+
+        '<div id="eftBox" class="eft-box" hidden></div>'+
+        '<div id="cmsg"></div>'+
+        '<div class="todo">💳 Online card payment is being finalised — for now this places a booking request and gives a test confirmation.</div>'+
+        '<button id="confirmBtn" class="cta-btn">Confirm booking</button>'+
+      '</div></div>';
+    host.innerHTML=''; host.appendChild(overlay);
+    overlay.querySelector('.co-back').onclick=function(){ renderDetail(); };
+    overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
+    var eftBox=overlay.querySelector('#eftBox');
+    function updEft(){ var m=overlay.querySelector('input[name=pm]:checked').value;
+      if(m==='eft'){ eftBox.hidden=false; eftBox.innerHTML=(HOST&&HOST.eft)?('<b>EFT / bank transfer details</b><br>'+[HOST.eft.accountName&&('Account name: '+esc(HOST.eft.accountName)),HOST.eft.bankName&&('Bank: '+esc(HOST.eft.bankName)),HOST.eft.accountNumber&&('Account no.: '+esc(HOST.eft.accountNumber)),HOST.eft.branch&&('Branch: '+esc(HOST.eft.branch)),HOST.eft.reference&&('Reference: '+esc(HOST.eft.reference))].filter(Boolean).join('<br>')+'<br><span class="muted small">Use your name as the reference and send proof of payment — your booking is confirmed once it’s received.</span>'):'<span class="muted small">We’ll send you the EFT details after you book.</span>'; }
+      else { eftBox.hidden=true; } }
+    overlay.querySelectorAll('input[name=pm]').forEach(function(r){ r.onchange=updEft; }); updEft();
+    if($('#g').value) overlay.querySelector('#gGuests').value=$('#g').value;
+    overlay.querySelector('#confirmBtn').onclick=function(){ confirmBooking(overlay); };
+  }
+
+  async function confirmBooking(overlay){
+    var name=overlay.querySelector('#gName').value.trim(), email=overlay.querySelector('#gEmail').value.trim(), phone=overlay.querySelector('#gPhone').value.trim();
+    var cm=overlay.querySelector('#cmsg');
+    if(!name){ cm.innerHTML='<div class="msg err">Please enter your name.</div>'; return; }
+    if(!email && !phone){ cm.innerHTML='<div class="msg err">Please give an email or phone number.</div>'; return; }
+    var method=overlay.querySelector('input[name=pm]:checked').value;
+    var plan=overlay.querySelector('input[name=pp]:checked').value;
+    var btn=overlay.querySelector('#confirmBtn'); btn.disabled=true; btn.textContent='Booking…'; cm.innerHTML=''; STATE.guestName=name;
     try{
-      var body={ unitId:STATE.unit.id, checkIn:STATE.ciSel, checkOut:STATE.coSel, guestName:name, guestEmail:email, guestPhone:phone, guests:$('#gGuests').value||undefined, message:$('#gMsg').value||undefined, earlyCheckIn:!!STATE.early, lateCheckOut:!!STATE.late };
+      var body={ unitId:STATE.unit.id, checkIn:STATE.ciSel, checkOut:STATE.coSel, guestName:name, guestEmail:email, guestPhone:phone, guests:overlay.querySelector('#gGuests').value||undefined, message:overlay.querySelector('#gMsg').value||undefined, earlyCheckIn:!!STATE.early, lateCheckOut:!!STATE.late, paymentMethod:method, paymentPlan:plan };
       var r=await fetch(API+'/public/book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       var d=await r.json();
-      if(!r.ok){ bm.innerHTML='<div class="msg err">'+esc(d.message||'Could not create the booking.')+'</div>'; btn.disabled=false; btn.textContent='Request booking'; return; }
-      // Payment step. TODO: when a vendor is live, d.payment.mode==='redirect' → window.location=d.payment.url.
-      if(d.payment && d.payment.mode==='redirect'){ window.location=d.payment.url; return; }
-      btn.textContent='Confirming…';
-      var pr=await fetch(API+'/public/book/'+d.bookingId+'/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-      var pd=await pr.json();
-      if(!pr.ok){ bm.innerHTML='<div class="msg err">'+esc(pd.message||'Could not confirm.')+'</div>'; btn.disabled=false; btn.textContent='Request booking'; return; }
-      showDone(pd);
-    }catch(e){ bm.innerHTML='<div class="msg err">Something went wrong. Please try again.</div>'; btn.disabled=false; btn.textContent='Request booking'; }
+      if(!r.ok){ cm.innerHTML='<div class="msg err">'+esc(d.message||'Could not create the booking.')+'</div>'; btn.disabled=false; btn.textContent='Confirm booking'; return; }
+      if(method==='card' && d.payment && d.payment.mode==='redirect'){ window.location=d.payment.url; return; }
+      if(method==='card'){
+        btn.textContent='Confirming…';
+        var pr=await fetch(API+'/public/book/'+d.bookingId+'/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+        var pd=await pr.json();
+        if(!pr.ok){ cm.innerHTML='<div class="msg err">'+esc(pd.message||'Could not confirm.')+'</div>'; btn.disabled=false; btn.textContent='Confirm booking'; return; }
+        showDone(pd, method, plan);
+      } else {
+        showDone({ property:STATE.prop.name, unit:STATE.unit.name, booking:{ id:d.bookingId, checkIn:STATE.ciSel, checkOut:STATE.coSel } }, method, plan);
+      }
+    }catch(e){ cm.innerHTML='<div class="msg err">Something went wrong. Please try again.</div>'; btn.disabled=false; btn.textContent='Confirm booking'; }
   }
 
-  function showDone(pd){
+  function showDone(pd, method, plan){
     var host=$('#detail');
-    var overlay=el('div','overlay'); overlay.onclick=function(e){ if(e.target===overlay){ host.innerHTML=''; load(); } };
-    overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>Booking confirmed</h2><button class="x">&times;</button></div>'+
+    var mNote;
+    if(method==='eft'){ mNote='Please pay by <b>EFT</b> using your name as the reference'+((HOST&&HOST.eft&&HOST.eft.accountNumber)?(' to account '+esc(HOST.eft.accountNumber)):'')+', then send us proof of payment. Your booking is confirmed once it’s received.'; }
+    else if(method==='cash'){ mNote='You’ve chosen to pay by <b>cash</b> — we’ll be in touch to arrange it. Your booking is confirmed once payment is arranged.'; }
+    else { mNote='This is a <b>test confirmation</b> — online card payment is being finalised, so no charge was taken.'; }
+    if(plan==='split') mNote+=' You chose to pay 50% now and 50% three days before check-in.';
+    var overlay=el('div','overlay');
+    overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>Booking placed</h2><button class="x">&times;</button></div>'+
       '<div class="sheet-body"><div class="done"><div class="big">✅</div>'+
-      '<h3>You’re booked, '+esc(($('#gName')&&$('#gName').value)||'')+'!</h3>'+
+      '<h3>Thanks'+(STATE.guestName?(', '+esc(STATE.guestName)):'')+'!</h3>'+
       '<p class="note">'+esc(pd.property)+' · Unit '+esc(pd.unit)+'<br>'+esc(pd.booking.checkIn)+' → '+esc(pd.booking.checkOut)+'</p>'+
-      '<div class="todo" style="text-align:left">This was a <b>test confirmation</b> (no payment taken yet). Online payment will be added next — once it’s live, the calendar is only blocked after a successful charge.</div>'+
+      '<div class="todo" style="text-align:left">'+mNote+'</div>'+
       '<p class="note">Reference: '+esc(pd.booking.id)+'</p>'+
-      '<button id="doneBtn">Done</button></div></div></div>';
+      '<button id="doneBtn" class="cta-btn">Done</button></div></div></div>';
     host.innerHTML=''; host.appendChild(overlay);
     overlay.querySelector('.x').onclick=overlay.querySelector('#doneBtn').onclick=function(){ host.innerHTML=''; load(); };
   }

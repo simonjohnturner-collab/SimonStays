@@ -31,14 +31,22 @@ function fromNightlyCents(rc) {
 
 const unitInclude = { pricingGroup: true, photos: { orderBy: { sort: 'asc' } } };
 
-// GET /public/host — who hosts this shopfront ("Hosted by …") + profile photo.
+// GET /public/host — who hosts this shopfront ("Hosted by …") + profile photo,
+// and the host's EFT bank details (from the invoice biller profile) for guests
+// who choose to pay by EFT at checkout.
 router.get('/host', async (req, res, next) => {
   try {
     const hostId = await publicHostId();
     if (!hostId) return res.json({ host: null });
     const h = await prisma.host.findUnique({ where: { id: hostId }, select: { name: true } });
     const photo = await prisma.photo.findFirst({ where: { hostId }, orderBy: { createdAt: 'desc' }, select: { id: true } });
-    res.json({ host: { name: (h && h.name) || null, photoId: photo ? photo.id : null } });
+    const biller = await prisma.billerProfile.findUnique({ where: { hostId }, select: { companyName: true, bankName: true, accountNumber: true, branch: true, paymentInstruction: true } });
+    const eft = biller && (biller.bankName || biller.accountNumber) ? {
+      accountName: biller.companyName || (h && h.name) || null,
+      bankName: biller.bankName || null, accountNumber: biller.accountNumber || null,
+      branch: biller.branch || null, reference: biller.paymentInstruction || null,
+    } : null;
+    res.json({ host: { name: (h && h.name) || null, photoId: photo ? photo.id : null, eft } });
   } catch (e) { next(e); }
 });
 
@@ -239,14 +247,20 @@ router.post('/book', async (req, res, next) => {
 
     const contact = [b.guestEmail, b.guestPhone].filter(Boolean).join(' · ');
     const depoTxt = q.depositCents ? ` · Refundable deposit R${(q.depositCents / 100).toFixed(2)}` : '';
-    const comments = `Website booking (awaiting payment) · Contact: ${contact} · Guests: ${b.guests || '—'} · Rental R${(q.rentalCents / 100).toFixed(2)}${depoTxt} · Payable R${(q.totalCents / 100).toFixed(2)}${b.message ? ` · Note: ${b.message}` : ''}`;
+    // Payment choice from the checkout screen.
+    const METHODS = { card: 'Card', eft: 'EFT', cash: 'Cash' };
+    const method = METHODS[b.paymentMethod] || 'Card';
+    const split = b.paymentPlan === 'split';
+    const owingCents = split ? Math.round(q.totalCents / 2) : null; // 50% due 3 days before check-in
+    const payTxt = ` · Pay: ${method}${split ? ' · 50/50 split (50% now, 50% 3 days before check-in)' : ''}`;
+    const comments = `Website booking (awaiting payment) · Contact: ${contact} · Guests: ${b.guests || '—'} · Rental R${(q.rentalCents / 100).toFixed(2)}${depoTxt} · Payable R${(q.totalCents / 100).toFixed(2)}${payTxt}${b.message ? ` · Note: ${b.message}` : ''}`;
 
     const booking = await prisma.booking.create({
       data: {
         unitId: unit.id, hostId: unit.property.hostId, source: 'website', status: 'pending',
         guestName: b.guestName,
         checkIn: dateOnly(iso(b.checkIn)), checkOut: dateOnly(iso(b.checkOut)),
-        comments, paymentStatus: 'unpaid',
+        comments, paymentStatus: split ? 'partial' : 'unpaid', amountOwingCents: owingCents,
         depositCents: q.depositCents || null, depositStatus: q.depositCents ? 'held' : null,
         earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut,
       },
