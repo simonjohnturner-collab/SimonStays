@@ -321,7 +321,6 @@ export default function ListingsView({ onClose }) {
                 <section key={p.id} className="listing-card">
                   <div className="listing-head">
                     <input className="listing-name" placeholder="Property name" value={p.name} onChange={(e) => editProp(p.id, { name: e.target.value })} />
-                    <input className="listing-addr" placeholder="Property address" value={p.address || ''} onChange={(e) => editProp(p.id, { address: e.target.value })} />
                     <button className="ghost save" onClick={() => saveProp(p)}>💾 Save</button>
                   </div>
                   <div className="listing-prop-actions">
