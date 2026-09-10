@@ -52,6 +52,13 @@ function refreshTokens({ clientId, clientSecret, refreshToken }) {
   return tokenRequest({ grant_type: 'refresh_token', client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken });
 }
 
+// Client-credentials grant — the simple flow RemoteLock recommends for a single
+// account: Application ID + Secret only, no browser redirect. Token lasts ~2h
+// and has no refresh token, so we just fetch a new one when it expires.
+function clientCredentialsToken({ clientId, clientSecret }) {
+  return tokenRequest({ grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret });
+}
+
 // Persist a fresh token bundle onto the provider row.
 async function storeTokens(providerId, tok) {
   const expiry = tok.expires_in ? new Date(Date.now() + (Number(tok.expires_in) - 60) * 1000) : null;
@@ -67,13 +74,13 @@ async function storeTokens(providerId, tok) {
   });
 }
 
-// Return a valid access token for this provider, refreshing if expired.
+// Return a valid access token for this provider, minting a fresh one via the
+// client-credentials grant when the cached one is missing or expired.
 async function validAccessToken(provider) {
-  if (!provider || !provider.accessToken) throw new Error('not_connected');
-  const fresh = !provider.tokenExpiry || new Date(provider.tokenExpiry).getTime() > Date.now();
+  if (!provider || !provider.clientId || !provider.clientSecret) throw new Error('not_connected');
+  const fresh = provider.accessToken && provider.tokenExpiry && new Date(provider.tokenExpiry).getTime() > Date.now();
   if (fresh) return provider.accessToken;
-  if (!provider.refreshToken) throw new Error('token_expired_no_refresh');
-  const tok = await refreshTokens({ clientId: provider.clientId, clientSecret: provider.clientSecret, refreshToken: provider.refreshToken });
+  const tok = await clientCredentialsToken({ clientId: provider.clientId, clientSecret: provider.clientSecret });
   const updated = await storeTokens(provider.id, tok);
   return updated.accessToken;
 }
@@ -120,6 +127,6 @@ function normaliseDevice(d) {
 }
 
 module.exports = {
-  redirectUri, authorizeUrl, exchangeCode, refreshTokens, storeTokens,
+  redirectUri, authorizeUrl, exchangeCode, refreshTokens, clientCredentialsToken, storeTokens,
   validAccessToken, apiGet, listDevices, normaliseDevice, API_BASE, AUTH_BASE,
 };

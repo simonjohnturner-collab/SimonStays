@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, apiBaseUrl } from '../api.js';
+import { api } from '../api.js';
 
 const iso = (d) => (d || '').slice(0, 10);
 const battClass = (b) => (b == null ? 'unknown' : b < 20 ? 'low' : b < 50 ? 'mid' : 'ok');
@@ -49,16 +49,16 @@ export default function SmartLockView({ onClose }) {
   const editBatt = (uId, val) => setUnits((us) => us.map((u) => (u.id === uId ? { ...u, lockBattery: val === '' ? null : Number(val) } : u)));
   const persistBatt = (uId, val) => api.setLockBattery(uId, val === '' ? null : Number(val)).then(() => setMsgTemp('Saved.')).catch((e) => setMsg(e.message));
 
-  // Save the entered credentials (if any) then start the OAuth flow. One button
-  // so the host never has to save-then-connect as two steps.
+  // Connect via client-credentials: send the Application ID + Secret, the server
+  // mints a token immediately — no redirect, no spinning page.
   async function saveAndConnect() {
+    if (!cid.trim() && !hasCreds) { setMsg('Enter your RemoteLock Application ID and Secret first.'); return; }
+    if (cid.trim() && !csecret.trim()) { setMsg('Enter the Secret too.'); return; }
     setBusy(true);
     try {
-      if (cid.trim()) await api.saveLockProvider({ clientId: cid.trim(), clientSecret: csecret.trim() });
-      else if (!hasCreds) { setMsg('Enter your RemoteLock Client ID and Secret first.'); setBusy(false); return; }
-      const { url } = await api.startLockConnect();
-      window.location.href = url;
-    } catch (e) { setMsg(e.message); setBusy(false); }
+      await api.connectLock({ clientId: cid.trim(), clientSecret: csecret.trim() });
+      setCid(''); setCsecret(''); await load(); setMsgTemp('RemoteLock connected ✅');
+    } catch (e) { setMsg(e.message); } finally { setBusy(false); }
   }
   async function disconnect() {
     if (!window.confirm('Disconnect RemoteLock? Units stay linked but live data stops updating.')) return;
@@ -109,13 +109,13 @@ export default function SmartLockView({ onClose }) {
           {!connected && (
             <div className="sl-prov-body">
               <p className="muted small">
-                Register an API application in your RemoteLock developer portal, then paste its
-                <b> Client ID</b> and <b>Client Secret</b> here. Use this redirect / callback URL when registering the app:
+                First email <b>sales@remotelock.com</b> to enable API access on your account. Then, in the RemoteLock
+                developer portal, create an <b>OAuth Application</b> — it gives you an <b>Application ID</b> and a
+                <b> Secret</b>. Paste those below (not your email / login) and click Connect. No redirect needed.
               </p>
-              <code className="sl-callback">{`${apiBaseUrl().replace(/\/$/, '')}/smartlocks/callback`}</code>
               <div className="sl-cred-row">
-                <input placeholder="RemoteLock Client ID" value={cid} onChange={(e) => setCid(e.target.value)} />
-                <input placeholder="RemoteLock Client Secret" type="password" value={csecret} onChange={(e) => setCsecret(e.target.value)} />
+                <input placeholder="RemoteLock Application ID" value={cid} onChange={(e) => setCid(e.target.value)} />
+                <input placeholder="RemoteLock Secret" type="password" value={csecret} onChange={(e) => setCsecret(e.target.value)} />
               </div>
               <div className="sl-connect-row">
                 <button onClick={saveAndConnect} disabled={busy}>🔗 Connect with RemoteLock</button>

@@ -4,7 +4,7 @@
 const express = require('express');
 const prisma = require('../lib/prisma');
 const { authHost } = require('../middleware/auth');
-const { signShort, verify } = require('../lib/jwt');
+const { verify } = require('../lib/jwt');
 const RL = require('../utils/remotelock');
 
 const router = express.Router();
@@ -99,13 +99,32 @@ router.delete('/provider', async (req, res) => {
   res.json({ ok: true });
 });
 
-// Begin the OAuth flow — returns the RemoteLock authorize URL to send the browser to.
-router.get('/connect', async (req, res) => {
-  const provider = await prisma.lockProvider.findUnique({ where: { hostId: req.hostId } });
-  if (!provider || !provider.clientId) return res.status(400).json({ error: 'no_credentials' });
-  const state = signShort({ hostId: req.hostId, k: 'rl-oauth' });
-  const url = RL.authorizeUrl({ clientId: provider.clientId, redirect: RL.redirectUri(req), state });
-  res.json({ url });
+// Connect via the client-credentials grant: save credentials (if supplied),
+// mint an access token straight away, and confirm it works — no browser
+// redirect needed. Body may include { clientId, clientSecret }.
+router.post('/connect', async (req, res) => {
+  const clientId = (req.body?.clientId || '').trim();
+  const clientSecret = (req.body?.clientSecret || '').trim();
+  let provider = await prisma.lockProvider.findUnique({ where: { hostId: req.hostId } });
+  if (clientId || !provider) {
+    const data = { vendor: 'remotelock', lastError: null };
+    if (clientId) data.clientId = clientId;
+    if (clientSecret) data.clientSecret = clientSecret;
+    provider = await prisma.lockProvider.upsert({
+      where: { hostId: req.hostId },
+      update: data,
+      create: { hostId: req.hostId, clientId, clientSecret, vendor: 'remotelock' },
+    });
+  }
+  if (!provider.clientId || !provider.clientSecret) return res.status(400).json({ error: 'need_id_and_secret', message: 'Enter both the RemoteLock Application ID and Secret.' });
+  try {
+    const tok = await RL.clientCredentialsToken({ clientId: provider.clientId, clientSecret: provider.clientSecret });
+    await RL.storeTokens(provider.id, tok);
+    res.json({ ok: true, connected: true });
+  } catch (e) {
+    await prisma.lockProvider.update({ where: { id: provider.id }, data: { lastError: e.message } }).catch(() => {});
+    res.status(502).json({ error: 'connect_failed', message: e.message });
+  }
 });
 
 // ---- Live devices ----

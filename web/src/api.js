@@ -113,7 +113,7 @@ export const api = {
   // RemoteLock provider connection
   saveLockProvider: (data) => req('POST', '/smartlocks/provider', data),
   disconnectLockProvider: () => req('DELETE', '/smartlocks/provider'),
-  startLockConnect: () => req('GET', '/smartlocks/connect'),
+  connectLock: (data) => req('POST', '/smartlocks/connect', data),
   getLockDevices: () => req('GET', '/smartlocks/devices'),
   linkLockDevice: (unitId, deviceId, deviceName) => req('POST', `/smartlocks/units/${unitId}/link`, { deviceId, deviceName }),
   syncLocks: () => req('POST', '/smartlocks/sync'),
