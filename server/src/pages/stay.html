@@ -119,6 +119,9 @@
   .pay-opt:hover{ border-color:#cdd3da; }
   .pay-opt input{ width:auto; }
   .eft-box{ background:#eef6f0; border:1px solid #cfe6d6; border-radius:10px; padding:12px 14px; font-size:14px; line-height:1.6; margin:6px 0; }
+  .ref-badge{ display:inline-block; background:#eef6f0; border:1px dashed #a9d4b8; border-radius:10px; padding:8px 16px; margin:6px 0; font-size:14px; color:var(--green-d); }
+  .ref-badge b{ font-size:20px; letter-spacing:.5px; }
+  .frm textarea{ font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; width:100%; min-height:60px; background:#fff; }
   .msg{ padding:9px 12px; border-radius:8px; margin:8px 0; font-size:14px; }
   .msg.err{ background:#fdecec; color:#c0392b; }
   .msg.ok{ background:#eafaf0; color:var(--green-d); }
@@ -460,8 +463,7 @@
         '<h3 class="sec">How would you like to pay?</h3>'+
         '<div class="pay-opts">'+
           '<label class="pay-opt"><input type="radio" name="pm" value="card" checked> 💳 Card (online)</label>'+
-          '<label class="pay-opt"><input type="radio" name="pm" value="eft"> 🏦 EFT / bank transfer</label>'+
-          '<label class="pay-opt"><input type="radio" name="pm" value="cash"> 💵 Cash</label>'+
+          '<label class="pay-opt"><input type="radio" name="pm" value="eft"> 🏦 EFT bank transfer or deposit</label>'+
         '</div>'+
         '<div class="pay-opts">'+
           '<label class="pay-opt"><input type="radio" name="pp" value="full" checked> Pay in full now — '+rand(q.totalCents)+'</label>'+
@@ -477,7 +479,7 @@
     overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
     var eftBox=overlay.querySelector('#eftBox');
     function updEft(){ var m=overlay.querySelector('input[name=pm]:checked').value;
-      if(m==='eft'){ eftBox.hidden=false; eftBox.innerHTML=(HOST&&HOST.eft)?('<b>EFT / bank transfer details</b><br>'+[HOST.eft.accountName&&('Account name: '+esc(HOST.eft.accountName)),HOST.eft.bankName&&('Bank: '+esc(HOST.eft.bankName)),HOST.eft.accountNumber&&('Account no.: '+esc(HOST.eft.accountNumber)),HOST.eft.branch&&('Branch: '+esc(HOST.eft.branch)),HOST.eft.reference&&('Reference: '+esc(HOST.eft.reference))].filter(Boolean).join('<br>')+'<br><span class="muted small">Use your name as the reference and send proof of payment — your booking is confirmed once it’s received.</span>'):'<span class="muted small">We’ll send you the EFT details after you book.</span>'; }
+      if(m==='eft'){ eftBox.hidden=false; eftBox.innerHTML=(HOST&&HOST.eft)?('<b>EFT / bank transfer or deposit</b><br>'+[HOST.eft.accountName&&('Account name: '+esc(HOST.eft.accountName)),HOST.eft.bankName&&('Bank: '+esc(HOST.eft.bankName)),HOST.eft.accountNumber&&('Account no.: '+esc(HOST.eft.accountNumber)),HOST.eft.branch&&('Branch: '+esc(HOST.eft.branch))].filter(Boolean).join('<br>')+'<br><span class="muted small">Use your <b>booking reference</b> (shown once you confirm) as the payment reference, and send proof of payment — your booking is confirmed once it’s received.</span>'):'<span class="muted small">We’ll send you the EFT details after you book.</span>'; }
       else { eftBox.hidden=true; } }
     overlay.querySelectorAll('input[name=pm]').forEach(function(r){ r.onchange=updEft; }); updEft();
     if($('#g').value) overlay.querySelector('#gGuests').value=$('#g').value;
@@ -491,42 +493,80 @@
     if(!email && !phone){ cm.innerHTML='<div class="msg err">Please give an email or phone number.</div>'; return; }
     var method=overlay.querySelector('input[name=pm]:checked').value;
     var plan=overlay.querySelector('input[name=pp]:checked').value;
-    var btn=overlay.querySelector('#confirmBtn'); btn.disabled=true; btn.textContent='Booking…'; cm.innerHTML=''; STATE.guestName=name;
+    var btn=overlay.querySelector('#confirmBtn'); btn.disabled=true; btn.textContent='Booking…'; cm.innerHTML='';
+    STATE.guest={ name:name, email:email, phone:phone, guests:overlay.querySelector('#gGuests').value||'', message:overlay.querySelector('#gMsg').value||'' };
+    STATE.method=method; STATE.plan=plan;
     try{
-      var body={ unitId:STATE.unit.id, checkIn:STATE.ciSel, checkOut:STATE.coSel, guestName:name, guestEmail:email, guestPhone:phone, guests:overlay.querySelector('#gGuests').value||undefined, message:overlay.querySelector('#gMsg').value||undefined, earlyCheckIn:!!STATE.early, lateCheckOut:!!STATE.late, paymentMethod:method, paymentPlan:plan };
+      var body={ unitId:STATE.unit.id, checkIn:STATE.ciSel, checkOut:STATE.coSel, guestName:name, guestEmail:email, guestPhone:phone, guests:STATE.guest.guests||undefined, message:STATE.guest.message||undefined, earlyCheckIn:!!STATE.early, lateCheckOut:!!STATE.late, paymentMethod:method, paymentPlan:plan };
       var r=await fetch(API+'/public/book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       var d=await r.json();
       if(!r.ok){ cm.innerHTML='<div class="msg err">'+esc(d.message||'Could not create the booking.')+'</div>'; btn.disabled=false; btn.textContent='Confirm booking'; return; }
+      STATE.ref=d.ref||null;
       if(method==='card' && d.payment && d.payment.mode==='redirect'){ window.location=d.payment.url; return; }
       if(method==='card'){
         btn.textContent='Confirming…';
         var pr=await fetch(API+'/public/book/'+d.bookingId+'/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
         var pd=await pr.json();
         if(!pr.ok){ cm.innerHTML='<div class="msg err">'+esc(pd.message||'Could not confirm.')+'</div>'; btn.disabled=false; btn.textContent='Confirm booking'; return; }
-        showDone(pd, method, plan);
+        showDone({ property:d.property, unit:d.unit, booking:{ id:d.bookingId, checkIn:STATE.ciSel, checkOut:STATE.coSel } });
       } else {
-        showDone({ property:STATE.prop.name, unit:STATE.unit.name, booking:{ id:d.bookingId, checkIn:STATE.ciSel, checkOut:STATE.coSel } }, method, plan);
+        showDone({ property:STATE.prop.name, unit:STATE.unit.name, booking:{ id:d.bookingId, checkIn:STATE.ciSel, checkOut:STATE.coSel } });
       }
     }catch(e){ cm.innerHTML='<div class="msg err">Something went wrong. Please try again.</div>'; btn.disabled=false; btn.textContent='Confirm booking'; }
   }
 
-  function showDone(pd, method, plan){
-    var host=$('#detail');
+  function showDone(pd){
+    var host=$('#detail'), method=STATE.method, plan=STATE.plan, ref=STATE.ref||('SS'+String(pd.booking.id).slice(0,6).toUpperCase()), g=STATE.guest||{};
+    STATE.done=pd;
     var mNote;
-    if(method==='eft'){ mNote='Please pay by <b>EFT</b> using your name as the reference'+((HOST&&HOST.eft&&HOST.eft.accountNumber)?(' to account '+esc(HOST.eft.accountNumber)):'')+', then send us proof of payment. Your booking is confirmed once it’s received.'; }
-    else if(method==='cash'){ mNote='You’ve chosen to pay by <b>cash</b> — we’ll be in touch to arrange it. Your booking is confirmed once payment is arranged.'; }
+    if(method==='eft'){ mNote='Please pay by <b>EFT / bank transfer or deposit</b> using your booking reference <b>'+esc(ref)+'</b> as the payment reference, then send us proof of payment. Your booking is confirmed once it’s received.'; }
     else { mNote='This is a <b>test confirmation</b> — online card payment is being finalised, so no charge was taken.'; }
     if(plan==='split') mNote+=' You chose to pay 50% now and 50% three days before check-in.';
+    var eftHtml = (method==='eft' && HOST && HOST.eft) ? ('<div class="eft-box" style="text-align:left">'+[HOST.eft.accountName&&('Account name: '+esc(HOST.eft.accountName)),HOST.eft.bankName&&('Bank: '+esc(HOST.eft.bankName)),HOST.eft.accountNumber&&('Account no.: '+esc(HOST.eft.accountNumber)),HOST.eft.branch&&('Branch: '+esc(HOST.eft.branch)),('<b>Reference: '+esc(ref)+'</b>')].filter(Boolean).join('<br>')+'</div>') : '';
     var overlay=el('div','overlay');
     overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>Booking placed</h2><button class="x">&times;</button></div>'+
       '<div class="sheet-body"><div class="done"><div class="big">✅</div>'+
-      '<h3>Thanks'+(STATE.guestName?(', '+esc(STATE.guestName)):'')+'!</h3>'+
+      '<h3>Thanks'+(g.name?(', '+esc(g.name)):'')+'!</h3>'+
+      '<div class="ref-badge">Booking reference<br><b>'+esc(ref)+'</b></div>'+
       '<p class="note">'+esc(pd.property)+' · Unit '+esc(pd.unit)+'<br>'+esc(pd.booking.checkIn)+' → '+esc(pd.booking.checkOut)+'</p>'+
       '<div class="todo" style="text-align:left">'+mNote+'</div>'+
-      '<p class="note">Reference: '+esc(pd.booking.id)+'</p>'+
-      '<button id="doneBtn" class="cta-btn">Done</button></div></div></div>';
+      eftHtml+
+      '<div class="frm" style="text-align:left;margin-top:10px"><label class="muted small">Billing name &amp; address for the invoice (optional)</label><textarea id="billTo" placeholder="e.g. Company name, VAT no., postal address"></textarea></div>'+
+      '<div style="display:flex;gap:8px;margin-top:12px"><button id="invBtn" class="ghost" style="flex:1;background:#eef1f4;color:var(--ink)">🧾 Download invoice</button><button id="doneBtn" class="cta-btn" style="flex:1;margin:0">Done</button></div>'+
+      '</div></div></div>';
     host.innerHTML=''; host.appendChild(overlay);
     overlay.querySelector('.x').onclick=overlay.querySelector('#doneBtn').onclick=function(){ host.innerHTML=''; load(); };
+    overlay.querySelector('#invBtn').onclick=function(){ openInvoice(pd, ref, overlay.querySelector('#billTo').value||''); };
+  }
+
+  // A printable invoice in a new window: breakdown + guest details + reference.
+  function openInvoice(pd, ref, billTo){
+    var q=STATE.quote, g=STATE.guest||{}, p=STATE.prop, u=STATE.unit;
+    var hostName=(HOST&&HOST.name)||'SimonStays', eft=(HOST&&HOST.eft)||null;
+    var rows='';
+    rows+='<tr><td>'+q.nights+' night'+(q.nights>1?'s':'')+' @ '+rand(q.avgNightlyCents)+'</td><td>'+rand(q.accommodationCents)+'</td></tr>';
+    if(q.discountCents) rows+='<tr><td>'+q.discountPercent+'% length discount</td><td>−'+rand(q.discountCents)+'</td></tr>';
+    if(q.cleaningCents) rows+='<tr><td>Cleaning fee</td><td>'+rand(q.cleaningCents)+'</td></tr>';
+    if(q.earlyCents) rows+='<tr><td>Early check-in</td><td>'+rand(q.earlyCents)+'</td></tr>';
+    if(q.lateCents) rows+='<tr><td>Late checkout</td><td>'+rand(q.lateCents)+'</td></tr>';
+    rows+='<tr class="sub"><td>Rental subtotal</td><td>'+rand(q.rentalCents)+'</td></tr>';
+    if(q.depositCents) rows+='<tr><td>Refundable breakage deposit</td><td>'+rand(q.depositCents)+'</td></tr>';
+    rows+='<tr class="tot"><td>Total</td><td>'+rand(q.totalCents)+'</td></tr>';
+    if(STATE.plan==='split') rows+='<tr><td>50% due now</td><td>'+rand(Math.round(q.totalCents/2))+'</td></tr><tr><td>50% due 3 days before check-in</td><td>'+rand(Math.round(q.totalCents/2))+'</td></tr>';
+    var payLine = STATE.method==='eft' && eft ? ('Pay by EFT to '+esc(eft.bankName||'')+' · Acct '+esc(eft.accountNumber||'')+(eft.branch?(' · Branch '+esc(eft.branch)):'')+' · <b>Reference '+esc(ref)+'</b>') : 'Paid by card (online).';
+    var html='<!doctype html><html><head><meta charset="utf-8"><title>Invoice '+esc(ref)+'</title>'+
+      '<style>body{font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#1f2430;max-width:640px;margin:24px auto;padding:0 18px}h1{color:#1a7a3a;margin:0}.muted{color:#6b7280}table{width:100%;border-collapse:collapse;margin:14px 0}td{padding:6px 0;border-bottom:1px solid #eee}td:last-child{text-align:right;white-space:nowrap}tr.sub td{border-top:1px solid #ccc;font-weight:600}tr.tot td{font-weight:800;font-size:17px;border-bottom:0}.box{background:#f6f7f9;border-radius:10px;padding:12px 14px;margin:10px 0}.row{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}@media print{.noprint{display:none}}</style></head><body>'+
+      '<div class="row"><div><h1>Simon<span style="color:#1f2430">Stays</span></h1><div class="muted">Booking invoice</div></div><div style="text-align:right"><div><b>'+esc(ref)+'</b></div><div class="muted">'+new Date().toLocaleDateString('en-ZA')+'</div></div></div>'+
+      '<div class="box"><b>From:</b> '+esc(hostName)+(eft&&eft.accountName?(' ('+esc(eft.accountName)+')'):'')+'<br><b>To:</b> '+esc(g.name||'')+(g.email?(' · '+esc(g.email)):'')+(g.phone?(' · '+esc(g.phone)):'')+(billTo?('<br>'+esc(billTo).replace(/\n/g,'<br>')):'')+'</div>'+
+      '<div class="box"><b>'+esc(p.name)+' · Unit '+esc(u.name)+'</b><br>Check-in '+esc(STATE.ciSel)+' → Check-out '+esc(STATE.coSel)+' · '+(g.guests?(esc(g.guests)+' guest(s)'):'')+'</div>'+
+      '<table>'+rows+'</table>'+
+      '<div class="box">'+payLine+'</div>'+
+      '<p class="muted" style="font-size:12px">The breakage deposit is refundable after checkout, subject to no damage. Thank you for booking with SimonStays.</p>'+
+      '<button class="noprint" onclick="window.print()" style="padding:10px 16px;border:0;border-radius:8px;background:#1a7a3a;color:#fff;cursor:pointer">Print / Save as PDF</button>'+
+      '</body></html>';
+    var w=window.open('','_blank');
+    if(w){ w.document.write(html); w.document.close(); }
+    else { alert('Please allow pop-ups to download your invoice.'); }
   }
 
   load();
