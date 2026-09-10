@@ -397,14 +397,16 @@
     lines+='<div class="qrow" style="border-top:1px solid var(--line);margin-top:4px;padding-top:6px"><span>Rental subtotal</span><span>'+rand(q.rentalCents)+'</span></div>';
     if(q.depositCents) lines+='<div class="qrow"><span>Refundable breakage deposit</span><span>'+rand(q.depositCents)+'</span></div>';
     var depoNote = q.depositCents ? ('<div class="note" style="margin:8px 0">🔒 The '+rand(q.depositCents)+' breakage deposit is held and <b>refunded after checkout</b>, subject to no damage.</div>') : '';
-    // Optional add-ons — only offered when a fee is configured on the rate card.
+    // Optional add-ons — always offered; a fee shows when the host has set one.
     var addons='';
-    if((q.earlyFeeCents||0)>0 || (q.lateFeeCents||0)>0){
-      addons='<div class="addons">';
-      if((q.earlyFeeCents||0)>0) addons+='<label class="addon"><input type="checkbox" id="optEarly"'+(STATE.early?' checked':'')+'> Early check-in <span class="muted">(+'+rand(q.earlyFeeCents)+')</span></label>';
-      if((q.lateFeeCents||0)>0) addons+='<label class="addon"><input type="checkbox" id="optLate"'+(STATE.late?' checked':'')+'> Late checkout <span class="muted">(+'+rand(q.lateFeeCents)+')</span></label>';
-      addons+='<div class="note small" style="margin-top:4px">Early check-in &amp; late checkout are only possible if no guests are arriving or leaving that day. Late checkout allows checkout by <b>14:00</b>, provided cleaning can still start by 13:00.</div>';
-      addons+='</div>';
+    {
+      var earlyLbl = (q.earlyFeeCents||0)>0 ? ('(+'+rand(q.earlyFeeCents)+')') : '(no extra charge)';
+      var lateLbl = (q.lateFeeCents||0)>0 ? ('(+'+rand(q.lateFeeCents)+')') : '(no extra charge)';
+      addons='<div class="addons">'+
+        '<label class="addon"><input type="checkbox" id="optEarly"'+(STATE.early?' checked':'')+'> Early check-in <span class="muted">'+earlyLbl+'</span></label>'+
+        '<label class="addon"><input type="checkbox" id="optLate"'+(STATE.late?' checked':'')+'> Late checkout <span class="muted">'+lateLbl+'</span></label>'+
+        '<div class="note small" style="margin-top:4px">Early check-in and late checkout are only possible depending on the guests arriving or departing that day. Where confirmed, <b>late checkout is by 13:30</b>.</div>'+
+        '</div>';
     }
     side.innerHTML=head+'<div class="qbox">'+lines+'<div class="qrow qtot"><span>Payable now</span><span>'+rand(q.totalCents)+'</span></div></div>'+
       addons+
