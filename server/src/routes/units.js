@@ -13,8 +13,13 @@ router.post('/', async (req, res) => {
   if (!propertyId || !name) return res.status(400).json({ error: 'propertyId_and_name_required' });
   const property = await prisma.property.findUnique({ where: { id: propertyId } });
   if (!property || property.hostId !== req.hostId) return res.status(403).json({ error: 'forbidden' });
+  // Give every new listing its own pricing column so it's ready to price
+  // immediately (host can reassign/merge groups later). Named property · unit.
+  const group = await prisma.pricingGroup.create({
+    data: { hostId: req.hostId, name: `${property.name} · ${name}` },
+  });
   const unit = await prisma.unit.create({
-    data: { propertyId, name, capacity: capacity != null ? Number(capacity) : null },
+    data: { propertyId, name, capacity: capacity != null ? Number(capacity) : null, pricingGroupId: group.id },
   });
   res.status(201).json({ unit });
 });
