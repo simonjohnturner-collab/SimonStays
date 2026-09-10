@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { apiBaseUrl } from '../api.js';
 
 // Hamburger menu with sub-screens: main → property / booking. Invoicing opens
 // the invoices workspace directly.
@@ -57,6 +58,7 @@ export default function ManageDrawer({
             <button className="wide menu-item" onClick={onOpenInvoices}>🧾 Invoicing</button>
             <button className="wide menu-item" onClick={onOpenAccount}>👤 Account</button>
             <button className="wide menu-item" onClick={onOpenPayments}>💰 Payment history</button>
+            <a className="wide menu-item" href={`${apiBaseUrl().replace(/\/$/, '')}/stay`} target="_blank" rel="noreferrer">🛍️ View booking shopfront ↗</a>
           </div>
         )}
 
