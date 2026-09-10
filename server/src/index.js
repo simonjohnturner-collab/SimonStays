@@ -51,7 +51,9 @@ const STAY_CSP = "default-src 'self'; img-src 'self' data: https://*.tile.openst
   "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " +
   "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " +
   "font-src 'self' data:; connect-src 'self'";
-const stayHtml = fs.readFileSync(path.join(__dirname, 'pages/stay.html'), 'utf8');
+// Where the admin app lives, for the shopfront's "Become a host" link.
+const ADMIN_URL = (process.env.ADMIN_URL || 'https://simonstays.onrender.com').replace(/\/$/, '');
+const stayHtml = fs.readFileSync(path.join(__dirname, 'pages/stay.html'), 'utf8').replace(/__ADMIN_URL__/g, ADMIN_URL);
 app.get(['/', '/stay', '/book'], (req, res) => {
   res.setHeader('Content-Security-Policy', STAY_CSP);
   res.type('html').send(stayHtml);

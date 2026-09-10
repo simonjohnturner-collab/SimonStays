@@ -3,7 +3,8 @@ import { useAuth } from '../auth.jsx';
 
 export default function Login() {
   const { login, register } = useAuth();
-  const [mode, setMode] = useState('login');
+  // A "Become a host" link from the shopfront lands here with ?signup — start on register.
+  const [mode, setMode] = useState(() => (/[?&]signup\b/.test(window.location.search) ? 'register' : 'login'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
