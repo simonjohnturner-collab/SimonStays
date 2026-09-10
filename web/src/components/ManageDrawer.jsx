@@ -8,6 +8,7 @@ export default function ManageDrawer({
   onAddProperty, onRenameProperty, onDeleteProperty,
   onAddUnit, onDeleteUnit, onOpenUnit, onOpenPricing,
   onAddBooking, onAddFloating, onEditBooking, onOpenInvoices, onOpenListings, onOpenForms, onOpenCleaners, onOpenGuests, onOpenSmartLocks, onOpenAccount, onOpenPayments,
+  isAdmin, onOpenAdmin,
   onReorderProperties,
   groups = [], onAssignGroup, onCreateGroup,
 }) {
@@ -59,6 +60,7 @@ export default function ManageDrawer({
             <button className="wide menu-item" onClick={onOpenAccount}>👤 Account</button>
             <button className="wide menu-item" onClick={onOpenPayments}>💰 Payment history</button>
             <a className="wide menu-item" href={`${apiBaseUrl().replace(/\/$/, '')}/stay`} target="_blank" rel="noreferrer">🛍️ View booking shopfront ↗</a>
+            {isAdmin && <button className="wide menu-item menu-admin" onClick={onOpenAdmin}>🛡️ Admin · all users</button>}
           </div>
         )}
 

@@ -45,6 +45,10 @@ export const api = {
   login: (email, password) => req('POST', '/auth/login', { email, password }),
   me: () => req('GET', '/auth/me'),
 
+  // super-admin: list all hosts + sign in as one
+  adminListHosts: () => req('GET', '/admin/hosts'),
+  adminImpersonate: (hostId) => req('POST', `/admin/impersonate/${hostId}`),
+
   // account: payout details + credential management
   getAccount: () => req('GET', '/account'),
   saveAccount: (data) => req('PUT', '/account/profile', data),

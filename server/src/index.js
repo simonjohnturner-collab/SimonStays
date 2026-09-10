@@ -60,6 +60,7 @@ app.get(['/', '/stay', '/book'], (req, res) => {
 });
 
 app.use('/auth', require('./routes/auth'));
+app.use('/admin', require('./routes/admin'));
 app.use('/account', require('./routes/account'));
 app.use('/email', require('./routes/email'));
 app.use('/biller', require('./routes/biller'));

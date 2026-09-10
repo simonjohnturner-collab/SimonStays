@@ -41,4 +41,17 @@ async function requireOwnedProperty(req, res, next) {
   next();
 }
 
-module.exports = { authHost, requireOwnedUnit, requireOwnedProperty };
+// The SimonStays super-admin: the one account allowed to list all hosts and
+// sign in as them. Configurable via ADMIN_EMAIL; defaults to Simon's account.
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'simonjohnturner@outlook.com').toLowerCase();
+function isAdminEmail(email) { return !!email && String(email).toLowerCase() === ADMIN_EMAIL; }
+
+/** Require the authenticated host to be the super-admin. Use after authHost. */
+async function requireAdmin(req, res, next) {
+  const host = await prisma.host.findUnique({ where: { id: req.hostId } });
+  if (!host || !isAdminEmail(host.email)) return res.status(403).json({ error: 'forbidden' });
+  req.adminHost = host;
+  next();
+}
+
+module.exports = { authHost, requireOwnedUnit, requireOwnedProperty, requireAdmin, isAdminEmail, ADMIN_EMAIL };

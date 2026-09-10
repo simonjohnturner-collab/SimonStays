@@ -19,11 +19,12 @@ import GuestBookView from './GuestBookView.jsx';
 import PaymentHistoryView from './PaymentHistoryView.jsx';
 import SmartLockView from './SmartLockView.jsx';
 import AccountView from './AccountView.jsx';
+import AdminView from './AdminView.jsx';
 
 const WINDOW_DAYS = 35;
 
 export default function Main() {
-  const { host, logout } = useAuth();
+  const { host, logout, impersonating, stopImpersonating } = useAuth();
   const [properties, setProperties] = useState([]);
   const [bookingsByUnit, setBookingsByUnit] = useState({});
   const [floatingBookings, setFloatingBookings] = useState([]);
@@ -47,6 +48,7 @@ export default function Main() {
   const [forms, setForms] = useState(false);
   const [smartLocks, setSmartLocks] = useState(false);
   const [account, setAccount] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
   const [formsInitialId, setFormsInitialId] = useState(null); // open Forms straight to this submission
   const [focus, setFocus] = useState(null); // { unitId, bookingId, key } — jump target
   function openFormsSubmission(id) { setFormsInitialId(id || null); setForms(true); }
@@ -169,26 +171,43 @@ export default function Main() {
 
   const hasUnits = properties.some((p) => p.units.length);
 
+  // Wrap every screen with the impersonation banner so the admin always has a
+  // one-click way back to their own account while signed in as another host.
+  const withChrome = (el) => (
+    <>
+      {impersonating && (
+        <div className="imp-banner">
+          <span>👁 Viewing as <b>{host?.name || host?.email}</b> — you are signed in as this host.</span>
+          <button onClick={stopImpersonating}>↩ Return to my admin account</button>
+        </div>
+      )}
+      {el}
+    </>
+  );
+
+  if (adminOpen) {
+    return withChrome(<AdminView onClose={() => setAdminOpen(false)} />);
+  }
   if (invoices) {
-    return <InvoicesView initialInvoiceId={invoices.initialId} onClose={() => setInvoices(null)} />;
+    return withChrome(<InvoicesView initialInvoiceId={invoices.initialId} onClose={() => setInvoices(null)} />);
   }
   if (pricingMatrix) {
-    return <RateCardMatrix onClose={() => setPricingMatrix(false)} />;
+    return withChrome(<RateCardMatrix onClose={() => setPricingMatrix(false)} />);
   }
   if (listings) {
-    return <ListingsView onClose={() => setListings(false)} />;
+    return withChrome(<ListingsView onClose={() => setListings(false)} />);
   }
   if (forms) {
-    return <FormsView onClose={() => { setForms(false); setFormsInitialId(null); }} properties={properties} initialSubmissionId={formsInitialId} />;
+    return withChrome(<FormsView onClose={() => { setForms(false); setFormsInitialId(null); }} properties={properties} initialSubmissionId={formsInitialId} />);
   }
   if (smartLocks) {
-    return <SmartLockView onClose={() => setSmartLocks(false)} />;
+    return withChrome(<SmartLockView onClose={() => setSmartLocks(false)} />);
   }
   if (account) {
-    return <AccountView onClose={() => setAccount(false)} />;
+    return withChrome(<AccountView onClose={() => setAccount(false)} />);
   }
   if (providersOpen) {
-    return (
+    return withChrome(
       <ServiceProvidersView
         onClose={() => setProvidersOpen(false)}
         properties={properties.map((p) => ({ id: p.id, name: p.name }))}
@@ -197,13 +216,13 @@ export default function Main() {
     );
   }
   if (guestsOpen) {
-    return <GuestBookView onClose={() => setGuestsOpen(false)} />;
+    return withChrome(<GuestBookView onClose={() => setGuestsOpen(false)} />);
   }
   if (paymentsOpen) {
-    return <PaymentHistoryView onClose={() => setPaymentsOpen(false)} />;
+    return withChrome(<PaymentHistoryView onClose={() => setPaymentsOpen(false)} />);
   }
   if (monthUnit) {
-    return (
+    return withChrome(
       <UnitMonthView
         unit={monthUnit.unit}
         propertyName={monthUnit.propertyName}
@@ -216,7 +235,7 @@ export default function Main() {
     );
   }
 
-  return (
+  return withChrome(
     <div className="app">
       <header className="topbar">
         <button className="ghost hamburger" title="Manage properties" onClick={() => setMenuOpen(true)}>☰</button>
@@ -307,6 +326,8 @@ export default function Main() {
           onOpenSmartLocks={() => { setMenuOpen(false); setSmartLocks(true); }}
           onOpenAccount={() => { setMenuOpen(false); setAccount(true); }}
           onOpenPayments={() => { setMenuOpen(false); setPaymentsOpen(true); }}
+          isAdmin={host?.isAdmin && !impersonating}
+          onOpenAdmin={() => { setMenuOpen(false); setAdminOpen(true); }}
           onReorderProperties={reorderProperties}
         />
       )}

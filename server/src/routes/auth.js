@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const prisma = require('../lib/prisma');
 const { sign } = require('../lib/jwt');
-const { authHost } = require('../middleware/auth');
+const { authHost, isAdminEmail } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -40,6 +40,6 @@ router.get('/me', authHost, async (req, res) => {
   res.json({ host: publicHost(host) });
 });
 
-function publicHost(h) { return { id: h.id, email: h.email, name: h.name, createdAt: h.createdAt }; }
+function publicHost(h) { return { id: h.id, email: h.email, name: h.name, createdAt: h.createdAt, isAdmin: isAdminEmail(h.email) }; }
 
 module.exports = router;
