@@ -50,6 +50,28 @@ router.get('/host', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /public/geocode?q= — turn a place name into lat/lng (OpenStreetMap
+// Nominatim), proxied server-side because the shopfront's CSP (connect-src
+// 'self') blocks calling Nominatim directly. Used for "within X km" search.
+const geocodeCache = new Map(); // q(lower) -> { result, at }
+router.get('/geocode', async (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (!q) return res.json({ result: null });
+  const key = q.toLowerCase();
+  const hit = geocodeCache.get(key);
+  if (hit && Date.now() - hit.at < 24 * 3600 * 1000) return res.json({ result: hit.result });
+  try {
+    const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q);
+    const r = await fetch(url, { headers: { 'User-Agent': 'SimonStays/1.0 (booking site geocode)', Accept: 'application/json' } });
+    const a = await r.json();
+    const result = (Array.isArray(a) && a[0])
+      ? { lat: parseFloat(a[0].lat), lng: parseFloat(a[0].lon), label: a[0].display_name }
+      : null;
+    geocodeCache.set(key, { result, at: Date.now() });
+    res.json({ result });
+  } catch (e) { res.json({ result: null }); }
+});
+
 // GET /public/properties?checkIn=&checkOut=&guests= — browse list.
 // With dates, only properties with a free unit for that stay are returned, and
 // stayFromCents is the cheapest available total for those dates.
