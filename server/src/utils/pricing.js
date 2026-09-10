@@ -74,13 +74,15 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
   const n = nights.length;
   if (n <= 0) return null;
 
+  // Accommodation is pure nightly (weekend rate on Fri/Sat, or a manual override);
+  // cleaning is a SEPARATE line item below — no longer bundled into the first night.
   let accommodation = 0;
-  const nightLines = nights.map((d, i) => {
+  const nightLines = nights.map((d) => {
     const dISO = d.toISOString().slice(0, 10);
     const ov = overrides && overrides[dISO] != null ? overrides[dISO] : null;
     let base, flex, cents;
     if (ov != null) { base = ov; flex = 0; cents = ov; } // manual override = exact base, no flex
-    else { base = stayNightBase(rc, i, d); flex = nightFlex(rc, d); cents = Math.round(base * (1 + flex / 100)); }
+    else { base = nightlyRate(rc, d); flex = nightFlex(rc, d); cents = Math.round(base * (1 + flex / 100)); }
     accommodation += cents;
     return { date: dISO, baseCents: base, flexPercent: flex, weekend: isWeekend(d), overridden: ov != null, cents };
   });
@@ -90,11 +92,9 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
   else if (n >= 7) discountPercent = rc.weeklyDiscountPercent || 0;
   const discountCents = Math.round(accommodation * discountPercent / 100);
 
-  // The first night bundles one (checkout) clean, so normally only EXTRA cleans
-  // are charged. But if the first night was price-overridden, its bundled clean
-  // is gone, so charge the checkout clean too.
-  const firstOverridden = overrides && overrides[nights[0].toISOString().slice(0, 10)] != null;
-  const cleaningCents = (rc.cleaningCents || 0) * (firstOverridden ? Math.max(0, cleans) : Math.max(0, cleans - 1));
+  // Cleaning is charged explicitly as its own line — the checkout clean plus any
+  // mid-stay cleans. It's a flat fee (not length-discounted).
+  const cleaningCents = (rc.cleaningCents || 0) * Math.max(1, cleans);
   const earlyCents = earlyCheckIn ? (rc.earlyCheckInCents || 0) : 0;
   const lateCents = lateCheckOut ? (rc.lateCheckOutCents || 0) : 0;
   const mattressCents = mattress ? (rc.mattressCents || 0) : 0;
