@@ -49,16 +49,16 @@ export default function SmartLockView({ onClose }) {
   const editBatt = (uId, val) => setUnits((us) => us.map((u) => (u.id === uId ? { ...u, lockBattery: val === '' ? null : Number(val) } : u)));
   const persistBatt = (uId, val) => api.setLockBattery(uId, val === '' ? null : Number(val)).then(() => setMsgTemp('Saved.')).catch((e) => setMsg(e.message));
 
-  async function saveCreds() {
-    if (!cid.trim()) { setMsg('Enter your RemoteLock Client ID.'); return; }
+  // Save the entered credentials (if any) then start the OAuth flow. One button
+  // so the host never has to save-then-connect as two steps.
+  async function saveAndConnect() {
     setBusy(true);
-    try { await api.saveLockProvider({ clientId: cid.trim(), clientSecret: csecret.trim() }); setCsecret(''); await load(); setMsgTemp('Credentials saved.'); }
-    catch (e) { setMsg(e.message); } finally { setBusy(false); }
-  }
-  async function connect() {
-    setBusy(true);
-    try { const { url } = await api.startLockConnect(); window.location.href = url; }
-    catch (e) { setMsg(e.message); setBusy(false); }
+    try {
+      if (cid.trim()) await api.saveLockProvider({ clientId: cid.trim(), clientSecret: csecret.trim() });
+      else if (!hasCreds) { setMsg('Enter your RemoteLock Client ID and Secret first.'); setBusy(false); return; }
+      const { url } = await api.startLockConnect();
+      window.location.href = url;
+    } catch (e) { setMsg(e.message); setBusy(false); }
   }
   async function disconnect() {
     if (!window.confirm('Disconnect RemoteLock? Units stay linked but live data stops updating.')) return;
@@ -116,14 +116,12 @@ export default function SmartLockView({ onClose }) {
               <div className="sl-cred-row">
                 <input placeholder="RemoteLock Client ID" value={cid} onChange={(e) => setCid(e.target.value)} />
                 <input placeholder="RemoteLock Client Secret" type="password" value={csecret} onChange={(e) => setCsecret(e.target.value)} />
-                <button className="ghost" onClick={saveCreds} disabled={busy}>Save</button>
               </div>
-              {hasCreds && (
-                <div className="sl-connect-row">
-                  <button onClick={connect} disabled={busy}>🔗 Connect with RemoteLock</button>
-                  <span className="muted small">Opens RemoteLock to authorise, then returns here.</span>
-                </div>
-              )}
+              <div className="sl-connect-row">
+                <button onClick={saveAndConnect} disabled={busy}>🔗 Connect with RemoteLock</button>
+                <span className="muted small">Saves your credentials, opens RemoteLock to authorise, then returns here.</span>
+              </div>
+              {hasCreds && <div className="muted small" style={{ marginTop: 6 }}>✓ Credentials already saved — re-enter them above only if they’ve changed.</div>}
               {provider?.lastError && <div className="sl-err small">Last error: {provider.lastError}</div>}
             </div>
           )}
