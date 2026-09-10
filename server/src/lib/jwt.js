@@ -11,4 +11,9 @@ function verify(token) {
   return jwt.verify(token, SECRET); // throws on invalid/expired
 }
 
-module.exports = { sign, verify };
+// A short-lived signed token for carrying state through OAuth redirects.
+function signShort(payload, expiresIn = '15m') {
+  return jwt.sign(payload, SECRET, { expiresIn });
+}
+
+module.exports = { sign, verify, signShort };

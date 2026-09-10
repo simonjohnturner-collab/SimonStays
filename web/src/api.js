@@ -10,6 +10,9 @@ export function setToken(t) {
 }
 export function getToken() { return token; }
 
+// The API server's base URL (where OAuth callbacks etc. live).
+export function apiBaseUrl() { return BASE; }
+
 // Public URL for a stored photo's bytes (usable directly in <img src>).
 export function photoUrl(id) { return `${BASE}/photos/${id}`; }
 
@@ -107,6 +110,13 @@ export const api = {
   getSmartLocks: () => req('GET', '/smartlocks'),
   setLockBattery: (unitId, lockBattery) => req('PATCH', `/units/${unitId}`, { lockBattery }),
   setBookingCode: (bookingId, accessCode) => req('PATCH', `/bookings/${bookingId}`, { accessCode }),
+  // RemoteLock provider connection
+  saveLockProvider: (data) => req('POST', '/smartlocks/provider', data),
+  disconnectLockProvider: () => req('DELETE', '/smartlocks/provider'),
+  startLockConnect: () => req('GET', '/smartlocks/connect'),
+  getLockDevices: () => req('GET', '/smartlocks/devices'),
+  linkLockDevice: (unitId, deviceId, deviceName) => req('POST', `/smartlocks/units/${unitId}/link`, { deviceId, deviceName }),
+  syncLocks: () => req('POST', '/smartlocks/sync'),
 
   // cleaner names (for dropdowns) — derived from the service-provider directory
   listCleaners: () => req('GET', '/cleaners'),

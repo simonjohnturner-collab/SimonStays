@@ -37,6 +37,26 @@ model Host {
   serviceProviders ServiceProvider[]
   guests           Guest[]
   photos           Photo[]           @relation("HostPhotos")
+  lockProvider     LockProvider?
+}
+
+// A host's connection to a smart-lock cloud provider (RemoteLock). Holds the
+// OAuth credentials + tokens so we can pull live device data (battery, status,
+// access codes) into the SmartLock dashboard.
+model LockProvider {
+  id           String    @id @default(uuid())
+  hostId       String    @unique
+  host         Host      @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  vendor       String    @default("remotelock")
+  clientId     String?
+  clientSecret String?
+  accessToken  String?
+  refreshToken String?
+  tokenExpiry  DateTime?
+  connectedAt  DateTime?
+  lastSyncAt   DateTime?
+  lastError    String?
+  createdAt    DateTime  @default(now())
 }
 
 // A service provider the host works with — cleaners, electricians, plumbers,
@@ -219,6 +239,11 @@ model Unit {
   accessMethod String? // how guests get in: Lockbox | Smart lock | Remote garage door control
   smartLockUrl String? // link to the smart lock (to configure check-in/out later)
   lockBattery  Int?    // smart-lock battery % (from provider, or set manually)
+  // ---- smart-lock provider (RemoteLock) link ----
+  lockDeviceId   String?   // the provider's device id this unit is linked to
+  lockDeviceName String?   // provider's name for the device (for matching)
+  lockData       Json?     // last full attributes returned by the provider
+  lockSyncedAt   DateTime? // when lockData was last refreshed from the provider
   backupPower  String?
   backupWater  String?
   parkingBays  Int?
