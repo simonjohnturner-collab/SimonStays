@@ -117,6 +117,11 @@
   .addon input{ width:auto; }
   .note.small{ font-size:12px; line-height:1.4; }
   .cta-btn{ width:100%; margin-top:12px; padding:12px; font-size:15px; }
+  .cta-btn:disabled{ opacity:.5; cursor:not-allowed; }
+  .desc.policy{ white-space:pre-line; background:#f7f8fa; border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .desc.policy.small{ font-size:13px; }
+  .tnc{ display:flex; align-items:flex-start; gap:9px; font-size:13px; line-height:1.5; margin:10px 0 2px; cursor:pointer; }
+  .tnc input{ width:auto; margin-top:2px; flex:0 0 auto; }
   .co-back{ background:#eef1f4; color:var(--ink); padding:6px 12px; }
   .co-back:hover{ background:#e2e6ea; }
   .co-hero{ width:100%; aspect-ratio:16/9; background:#e9edf1 center/cover no-repeat; border-radius:12px; }
@@ -356,6 +361,7 @@
       (u.description?('<div class="desc">'+esc(u.description)+'</div>'):'')+
       amenHtml+
       complexBlock+
+      (p.cancellationPolicy?('<h3 class="sec">Cancellation policy</h3><div class="desc policy">'+esc(p.cancellationPolicy)+'</div>'):'')+
       '<div class="book-panel" id="bookPanel"></div>'+
       '</div></div>';
     host.innerHTML=''; host.appendChild(overlay);
@@ -513,9 +519,12 @@
           '<label class="pay-opt"><input type="radio" name="pp" value="split"> Pay 50% now ('+rand(half)+'), 50% three days before check-in</label>'+
         '</div>'+
         '<div id="eftBox" class="eft-box" hidden></div>'+
+        '<h3 class="sec">Terms &amp; conditions</h3>'+
+        (p.cancellationPolicy?('<div class="desc policy small"><b>Cancellation policy:</b> '+esc(p.cancellationPolicy)+'</div>'):'')+
+        '<label class="tnc"><input type="checkbox" id="agree"> <span>I confirm that <b>SimonStays accepts no responsibility whatsoever</b> for anything that happens at the property. I have read, reviewed and understood the <b>cancellation policy</b> above, and I accept that <b>no refunds</b> will be granted outside of that policy.</span></label>'+
         '<div id="cmsg"></div>'+
         '<div class="todo">💳 Online card payment is being finalised — for now this places a booking request and gives a test confirmation.</div>'+
-        '<button id="confirmBtn" class="cta-btn">Confirm booking</button>'+
+        '<button id="confirmBtn" class="cta-btn" disabled>Confirm booking</button>'+
       '</div></div>';
     host.innerHTML=''; host.appendChild(overlay);
     overlay.querySelector('.co-back').onclick=function(){ renderDetail(); };
@@ -525,6 +534,8 @@
       if(m==='eft'){ eftBox.hidden=false; eftBox.innerHTML=(HOST&&HOST.eft)?('<b>EFT / bank transfer or deposit</b><br>'+[HOST.eft.accountName&&('Account name: '+esc(HOST.eft.accountName)),HOST.eft.bankName&&('Bank: '+esc(HOST.eft.bankName)),HOST.eft.accountNumber&&('Account no.: '+esc(HOST.eft.accountNumber)),HOST.eft.branch&&('Branch: '+esc(HOST.eft.branch))].filter(Boolean).join('<br>')+'<br><span class="muted small">Use your <b>booking reference</b> (shown once you confirm) as the payment reference, and send proof of payment — your booking is confirmed once it’s received.</span>'):'<span class="muted small">We’ll send you the EFT details after you book.</span>'; }
       else { eftBox.hidden=true; } }
     overlay.querySelectorAll('input[name=pm]').forEach(function(r){ r.onchange=updEft; }); updEft();
+    // The guest must accept the T&Cs before the booking can be confirmed/paid.
+    overlay.querySelector('#agree').onchange=function(e){ overlay.querySelector('#confirmBtn').disabled=!e.target.checked; };
     if($('#g').value) overlay.querySelector('#gGuests').value=$('#g').value;
     overlay.querySelector('#confirmBtn').onclick=function(){ confirmBooking(overlay); };
   }
@@ -534,6 +545,7 @@
     var cm=overlay.querySelector('#cmsg');
     if(!name){ cm.innerHTML='<div class="msg err">Please enter your name.</div>'; return; }
     if(!email && !phone){ cm.innerHTML='<div class="msg err">Please give an email or phone number.</div>'; return; }
+    if(!overlay.querySelector('#agree').checked){ cm.innerHTML='<div class="msg err">Please accept the terms and conditions to continue.</div>'; return; }
     var method=overlay.querySelector('input[name=pm]:checked').value;
     var plan=overlay.querySelector('input[name=pp]:checked').value;
     var btn=overlay.querySelector('#confirmBtn'); btn.disabled=true; btn.textContent='Booking…'; cm.innerHTML='';

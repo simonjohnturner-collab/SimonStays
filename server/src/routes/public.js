@@ -9,6 +9,7 @@ const { dateOnly } = require('../utils/ical');
 const { quote } = require('../utils/pricing');
 const payments = require('../utils/payments');
 const locks = require('../utils/locks');
+const { DEFAULT_CANCELLATION_POLICY } = require('../utils/policy');
 
 const router = express.Router();
 
@@ -140,6 +141,7 @@ router.get('/properties/:id', async (req, res, next) => {
       property: {
         id: p.id, name: p.name, address: p.address || null, description: p.description || null,
         latitude: p.latitude ?? null, longitude: p.longitude ?? null,
+        cancellationPolicy: p.cancellationPolicy || DEFAULT_CANCELLATION_POLICY,
         photos: p.photos.map((ph) => ({ id: ph.id })),
         units: p.units.map((u) => ({
           id: u.id, name: u.name, capacity: u.capacity, description: u.description || null,

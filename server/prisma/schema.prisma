@@ -176,6 +176,7 @@ model Property {
   backupWater  String? // e.g. "Yes — 2500L tank"
   parkingBays  Int?    // number of bays
   parkingNotes String? // where they are
+  cancellationPolicy String? // shown on the shopfront; falls back to the standard policy
   sortOrder   Int      @default(0) // manual order on the board (lower = higher up)
   createdAt   DateTime @default(now())
   units       Unit[]

@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, photoUrl } from '../api.js';
 
+// Must match server/src/utils/policy.js (shown on the shopfront when a property
+// hasn't set its own). Pre-filled here so hosts can tweak per listing.
+const DEFAULT_CANCELLATION_POLICY =
+  'You may cancel within 1 hour of booking, or at any time while your check-in date is 30 days or more away, for a full refund. '
+  + 'If your check-in date is between 30 and 14 days away, you are eligible for a 50% refund. '
+  + 'If you cancel within 14 days of your check-in date, the booking is non-refundable (any refund is at the property owner’s discretion).';
+
 // A click-to-drop-a-pin map (Leaflet, loaded from CDN in index.html). You can
 // type an address to zoom the map there first, then click to drop the pin.
 // Reports the picked lat/lng back to the parent.
@@ -155,6 +162,7 @@ export default function ListingsView({ onClose }) {
     await api.saveProperty(p.id, {
       name: p.name, address: p.address || '', description: p.description || '',
       latitude: p.latitude ?? null, longitude: p.longitude ?? null,
+      cancellationPolicy: p.cancellationPolicy ?? '',
     });
     if (!quiet) flash('Saved.');
   }
@@ -348,6 +356,16 @@ export default function ListingsView({ onClose }) {
                         : <span className="muted small">No pin dropped yet — click the map above.</span>}
                     </div>
                     <button className="ghost save" style={{ marginTop: 10 }} onClick={() => saveProp(p)}>💾 Save location</button>
+                  </div>
+
+                  <div className="attr-section">
+                    <div className="attr-head">Cancellation policy <span className="muted small">— shown to guests on the shopfront</span></div>
+                    <textarea className="listing-desc" rows={4}
+                      value={p.cancellationPolicy != null ? p.cancellationPolicy : DEFAULT_CANCELLATION_POLICY}
+                      onChange={(e) => editProp(p.id, { cancellationPolicy: e.target.value })} onBlur={() => autoSaveProp(p)} />
+                    <div className="map-coords">
+                      <button className="mini" onClick={() => editProp(p.id, { cancellationPolicy: DEFAULT_CANCELLATION_POLICY })}>Reset to standard policy</button>
+                    </div>
                   </div>
 
                   <div className="units-label-row">
