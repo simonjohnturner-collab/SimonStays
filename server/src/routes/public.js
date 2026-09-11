@@ -10,6 +10,33 @@ const { quote } = require('../utils/pricing');
 const payments = require('../utils/payments');
 const locks = require('../utils/locks');
 const { DEFAULT_CANCELLATION_POLICY } = require('../utils/policy');
+const { sendMail } = require('../utils/mailer');
+const { invoiceHtml } = require('../utils/invoiceHtml');
+
+// The host's EFT details for the invoice (same shape as /public/host).
+async function eftFor(hostId) {
+  const h = await prisma.host.findUnique({ where: { id: hostId }, select: { name: true } });
+  const biller = await prisma.billerProfile.findUnique({ where: { hostId }, select: { companyName: true, bankName: true, accountNumber: true, branch: true } });
+  if (!biller || !(biller.bankName || biller.accountNumber)) return null;
+  return {
+    accountName: biller.companyName || (h && h.name) || null,
+    bankName: biller.bankName || null, accountNumber: biller.accountNumber || null, branch: biller.branch || null,
+  };
+}
+
+// Build + send the guest's invoice email. Non-blocking; swallows its own errors.
+async function emailInvoice(data) {
+  const eft = data.method === 'EFT' ? await eftFor(data.hostId) : null;
+  const html = invoiceHtml({ ...data, eft });
+  const ok = await sendMail({
+    to: data.to,
+    subject: `Your SimonStays booking invoice · ${data.ref}`,
+    html,
+    text: `Thank you for booking ${data.propertyName} · Unit ${data.unitName} (${data.checkIn} to ${data.checkOut}). Your booking reference is ${data.ref}. Total: R${((data.quote.totalCents || 0) / 100).toFixed(2)}.`,
+  });
+  if (!ok) console.warn(`[invoice email] not sent for ${data.ref} (mailer disabled or failed)`);
+  return ok;
+}
 
 const router = express.Router();
 
@@ -281,10 +308,11 @@ router.post('/book', async (req, res, next) => {
     const payTxt = ` · Pay: ${method}${split ? ' · 50/50 split (50% now, 50% 3 days before check-in)' : ''}`;
     const comments = `Website booking ${ref} (awaiting payment) · Contact: ${contact} · Guests: ${b.guests || '—'} · Rental R${(q.rentalCents / 100).toFixed(2)}${depoTxt} · Payable R${(q.totalCents / 100).toFixed(2)}${payTxt}${b.message ? ` · Note: ${b.message}` : ''}`;
 
+    const billing = (b.billing || b.billingDetails || '').trim() || null;
     const booking = await prisma.booking.create({
       data: {
         unitId: unit.id, hostId: unit.property.hostId, source: 'website', status: 'pending',
-        guestName: b.guestName, ref,
+        guestName: b.guestName, ref, billingDetails: billing,
         checkIn: dateOnly(iso(b.checkIn)), checkOut: dateOnly(iso(b.checkOut)),
         comments, paymentStatus: split ? 'partial' : 'unpaid', amountOwingCents: owingCents,
         depositCents: q.depositCents || null, depositStatus: q.depositCents ? 'held' : null,
@@ -292,6 +320,17 @@ router.post('/book', async (req, res, next) => {
       },
     });
     const checkout = await payments.createCheckout(booking, q.totalCents);
+
+    // Email the guest their invoice (fire-and-forget — never block the booking).
+    if (b.guestEmail) {
+      emailInvoice({
+        hostId, to: b.guestEmail, ref,
+        propertyName: unit.property.name, unitName: unit.name,
+        checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut),
+        guestName: b.guestName, guestEmail: b.guestEmail, guestPhone: b.guestPhone,
+        billing, quote: q, method, split, owingCents,
+      }).catch((e) => console.error('[invoice email] failed:', e.message));
+    }
     res.status(201).json({
       bookingId: booking.id, ref, amountCents: q.totalCents, quote: q,
       property: unit.property.name, unit: unit.name,

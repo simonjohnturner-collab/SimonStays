@@ -263,7 +263,7 @@
   function drawMap(list){
     if(!MAP){
       MAP=L.map('map').setView([-26.15,28.04],11);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(MAP);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',attribution:'© OpenStreetMap © CARTO'}).addTo(MAP);
     }
     if(LAYER) MAP.removeLayer(LAYER);
     LAYER=L.layerGroup().addTo(MAP);
@@ -370,7 +370,7 @@
     if(hasLoc){
       try{
         DMAP=L.map('detailMap',{scrollWheelZoom:false}).setView([p.latitude,p.longitude],15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(DMAP);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',attribution:'© OpenStreetMap © CARTO'}).addTo(DMAP);
         L.marker([p.latitude,p.longitude]).addTo(DMAP);
         setTimeout(function(){ DMAP.invalidateSize(); },150);
       }catch(e){}
@@ -508,7 +508,7 @@
         '<div class="qbox" style="margin-top:10px">'+breakdownLines(q)+'<div class="qrow qtot"><span>Total</span><span>'+rand(q.totalCents)+'</span></div></div>'+
         (q.depositCents?('<div class="note" style="margin:8px 0">🔒 The '+rand(q.depositCents)+' breakage deposit is refunded after checkout, subject to no damage.</div>'):'')+
         '<h3 class="sec">Your details</h3>'+
-        '<div class="frm"><input id="gName" placeholder="Full name" /><div class="two"><input id="gEmail" type="email" placeholder="Email" /><input id="gPhone" placeholder="Phone" /></div><input id="gGuests" type="number" min="1" placeholder="Number of guests" /><input id="gMsg" placeholder="Anything we should know? (optional)" /></div>'+
+        '<div class="frm"><input id="gName" placeholder="Full name" /><div class="two"><input id="gEmail" type="email" placeholder="Email — we’ll send your invoice here" /><input id="gPhone" placeholder="Phone" /></div><input id="gGuests" type="number" min="1" placeholder="Number of guests" /><textarea id="gBiz" placeholder="Business / billing details for your invoice (optional) — company name, VAT no., address"></textarea><input id="gMsg" placeholder="Anything we should know? (optional)" /></div>'+
         '<h3 class="sec">How would you like to pay?</h3>'+
         '<div class="pay-opts">'+
           '<label class="pay-opt"><input type="radio" name="pm" value="card" checked> 💳 Card (online)</label>'+
@@ -549,10 +549,11 @@
     var method=overlay.querySelector('input[name=pm]:checked').value;
     var plan=overlay.querySelector('input[name=pp]:checked').value;
     var btn=overlay.querySelector('#confirmBtn'); btn.disabled=true; btn.textContent='Booking…'; cm.innerHTML='';
-    STATE.guest={ name:name, email:email, phone:phone, guests:overlay.querySelector('#gGuests').value||'', message:overlay.querySelector('#gMsg').value||'' };
+    var biz=(overlay.querySelector('#gBiz').value||'').trim();
+    STATE.guest={ name:name, email:email, phone:phone, guests:overlay.querySelector('#gGuests').value||'', message:overlay.querySelector('#gMsg').value||'', billing:biz };
     STATE.method=method; STATE.plan=plan;
     try{
-      var body={ unitId:STATE.unit.id, checkIn:STATE.ciSel, checkOut:STATE.coSel, guestName:name, guestEmail:email, guestPhone:phone, guests:STATE.guest.guests||undefined, message:STATE.guest.message||undefined, earlyCheckIn:!!STATE.early, lateCheckOut:!!STATE.late, paymentMethod:method, paymentPlan:plan };
+      var body={ unitId:STATE.unit.id, checkIn:STATE.ciSel, checkOut:STATE.coSel, guestName:name, guestEmail:email, guestPhone:phone, guests:STATE.guest.guests||undefined, message:STATE.guest.message||undefined, billing:biz||undefined, earlyCheckIn:!!STATE.early, lateCheckOut:!!STATE.late, paymentMethod:method, paymentPlan:plan };
       var r=await fetch(API+'/public/book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       var d=await r.json();
       if(!r.ok){ cm.innerHTML='<div class="msg err">'+esc(d.message||'Could not create the booking.')+'</div>'; btn.disabled=false; btn.textContent='Confirm booking'; return; }
@@ -584,9 +585,10 @@
       '<h3>Thanks'+(g.name?(', '+esc(g.name)):'')+'!</h3>'+
       '<div class="ref-badge">Booking reference<br><b>'+esc(ref)+'</b></div>'+
       '<p class="note">'+esc(pd.property)+' · Unit '+esc(pd.unit)+'<br>'+esc(pd.booking.checkIn)+' → '+esc(pd.booking.checkOut)+'</p>'+
+      (g.email?('<p class="note">📧 An invoice has been emailed to <b>'+esc(g.email)+'</b>.</p>'):'')+
       '<div class="todo" style="text-align:left">'+mNote+'</div>'+
       eftHtml+
-      '<div class="frm" style="text-align:left;margin-top:10px"><label class="muted small">Billing name &amp; address for the invoice (optional)</label><textarea id="billTo" placeholder="e.g. Company name, VAT no., postal address"></textarea></div>'+
+      '<div class="frm" style="text-align:left;margin-top:10px"><label class="muted small">Need to change the billing details on your invoice? Edit &amp; re-download below.</label><textarea id="billTo" placeholder="e.g. Company name, VAT no., postal address">'+esc(g.billing||'')+'</textarea></div>'+
       '<div style="display:flex;gap:8px;margin-top:12px"><button id="invBtn" class="ghost" style="flex:1;background:#eef1f4;color:var(--ink)">🧾 Download invoice</button><button id="doneBtn" class="cta-btn" style="flex:1;margin:0">Done</button></div>'+
       '</div></div></div>';
     host.innerHTML=''; host.appendChild(overlay);

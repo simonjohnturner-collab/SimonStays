@@ -377,6 +377,7 @@ model Booking {
   paymentStatus String       @default("unpaid") // 'paid' | 'partial' | 'unpaid'
   amountOwingCents Int? // optional, for partial payments
   ref           String? // human-friendly booking reference (website bookings), used as the EFT payment reference
+  billingDetails String? // optional business/billing details the guest entered for their invoice
   depositCents  Int?    // refundable breakage deposit collected on the shopfront
   depositStatus String? // null (none) | 'held' | 'refunded' | 'forfeited'
   cleaner      String?

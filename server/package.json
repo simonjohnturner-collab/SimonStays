@@ -30,6 +30,7 @@
     "mailparser": "^3.9.17",
     "node-cron": "^3.0.3",
     "node-ical": "^0.20.1",
+    "nodemailer": "^6.10.1",
     "prisma": "^5.22.0"
   },
   "devDependencies": {
