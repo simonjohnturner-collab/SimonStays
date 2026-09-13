@@ -26,7 +26,7 @@ function MapPicker({ lat, lng, onPick }) {
     const has = lat != null && lng != null;
     const map = L.map(ref.current).setView(has ? [lat, lng] : [-26.2041, 28.0473], has ? 15 : 10);
     mapRef.current = map;
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd', attribution: '© OpenStreetMap © CARTO' }).addTo(map);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles © Esri' }).addTo(map);
     if (has) markerRef.current = dot(lat, lng).addTo(map);
     map.on('click', (e) => {
       const la = Number(e.latlng.lat.toFixed(6)), ln = Number(e.latlng.lng.toFixed(6));

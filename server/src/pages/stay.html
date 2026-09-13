@@ -118,6 +118,7 @@
   .note.small{ font-size:12px; line-height:1.4; }
   .cta-btn{ width:100%; margin-top:12px; padding:12px; font-size:15px; }
   .cta-btn:disabled{ opacity:.5; cursor:not-allowed; }
+  .pin-ic{ background:transparent; border:0; filter:drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
   .desc.policy{ white-space:pre-line; background:#f7f8fa; border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
   .desc.policy.small{ font-size:13px; }
   .tnc{ display:flex; align-items:flex-start; gap:9px; font-size:13px; line-height:1.5; margin:10px 0 2px; cursor:pointer; }
@@ -260,10 +261,15 @@
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];}); }
 
   // ---- Map ----
+  // A clean teardrop pin drawn inline (no external image → no broken markers,
+  // no CSP issues). Anchored at the tip so it points exactly at the location.
+  function pinIcon(){ return L.divIcon({ className:'pin-ic', iconSize:[32,44], iconAnchor:[16,44], popupAnchor:[0,-40],
+    html:'<svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg"><path d="M16 1C8 1 1.5 7.5 1.5 15.5 1.5 27 14.6 41.5 15.3 42.3c.4.4 1 .4 1.4 0C17.4 41.5 30.5 27 30.5 15.5 30.5 7.5 24 1 16 1z" fill="#2e7d5b" stroke="#fff" stroke-width="2"/><circle cx="16" cy="15.5" r="5.5" fill="#fff"/></svg>' }); }
+
   function drawMap(list){
     if(!MAP){
       MAP=L.map('map').setView([-26.15,28.04],11);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',attribution:'© OpenStreetMap © CARTO'}).addTo(MAP);
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'}).addTo(MAP);
     }
     if(LAYER) MAP.removeLayer(LAYER);
     LAYER=L.layerGroup().addTo(MAP);
@@ -277,7 +283,7 @@
       // Nudge overlapping pins (multiple units at one complex) so all are clickable.
       var k=u.latitude+','+u.longitude; var n=seen[k]=(seen[k]||0)+1;
       var lat=u.latitude+(n-1)*0.00012, lng=u.longitude+(n-1)*0.00012;
-      var m=L.marker([lat,lng]).addTo(LAYER);
+      var m=L.marker([lat,lng],{icon:pinIcon()}).addTo(LAYER);
       var pl=u.stayFromCents>0?rand(u.stayFromCents):(u.fromNightlyCents>0?('from '+rand(u.fromNightlyCents)+'/night'):'Contact us to book');
       m.bindPopup('<b>'+unitTitle(u)+'</b><br>'+esc(u.address||'')+'<br>'+pl+'<br><a href="#" data-i="'+i+'" class="mpop">View & book →</a>');
       pts.push([lat,lng]);
@@ -370,8 +376,8 @@
     if(hasLoc){
       try{
         DMAP=L.map('detailMap',{scrollWheelZoom:false}).setView([p.latitude,p.longitude],15);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',attribution:'© OpenStreetMap © CARTO'}).addTo(DMAP);
-        L.marker([p.latitude,p.longitude]).addTo(DMAP);
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'}).addTo(DMAP);
+        L.marker([p.latitude,p.longitude],{icon:pinIcon()}).addTo(DMAP);
         setTimeout(function(){ DMAP.invalidateSize(); },150);
       }catch(e){}
     }

@@ -46,8 +46,8 @@ app.get(['/clean', '/report/clean'], (req, res) => {
 });
 
 // Public booking site (shopfront). Self-contained page; talks to /public API
-// same-origin. Needs Leaflet (cdnjs) + Carto basemap tiles for the map view.
-const STAY_CSP = "default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; " +
+// same-origin. Needs Leaflet (cdnjs) + Esri basemap tiles for the map view.
+const STAY_CSP = "default-src 'self'; img-src 'self' data: https://server.arcgisonline.com https://*.arcgisonline.com; " +
   "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " +
   "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " +
   "font-src 'self' data:; connect-src 'self'";
