@@ -40,6 +40,15 @@
   .search .fld.d input{ width:150px; }
   .search .fld.g input{ width:80px; }
   .search .fld.r select{ width:140px; }
+  /* Phone: tidy 2-up rows — Where to? full width, dates side by side,
+     guests + distance side by side, Search full width. */
+  @media(max-width:640px){
+    .search{ min-width:0; }
+    .search .fld{ flex:1 1 calc(50% - 4px); min-width:0; }
+    .search .fld.q, .search .fld.sb{ flex-basis:100%; }
+    .search .fld.d input, .search .fld.g input, .search .fld.r select{ width:100%; }
+    .search .fld.sb button{ width:100%; }
+  }
   .wrap{ max-width:1120px; margin:0 auto; padding:16px 18px 60px; }
   .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 0 14px; flex-wrap:wrap; }
   .count{ color:var(--muted); font-size:14px; }
@@ -161,7 +170,7 @@
       <div class="fld d"><label>Check-out</label><input id="co" type="date" /></div>
       <div class="fld g"><label>Guests</label><input id="g" type="number" min="1" placeholder="2" /></div>
       <div class="fld r"><label>Distance</label><select id="radius"><option value="1">Within 1 km</option><option value="5">Within 5 km</option><option value="10">Within 10 km</option><option value="25" selected>Within 25 km</option><option value="50">Within 50 km</option><option value="200">Within 200 km</option></select></div>
-      <div class="fld"><label>&nbsp;</label><button id="searchBtn">Search</button></div>
+      <div class="fld sb"><label>&nbsp;</label><button id="searchBtn">Search</button></div>
     </div>
   </div>
   <div class="toolbar">
