@@ -56,6 +56,7 @@ const ADMIN_URL = (process.env.ADMIN_URL || 'https://simonstays.onrender.com').r
 const stayHtml = fs.readFileSync(path.join(__dirname, 'pages/stay.html'), 'utf8').replace(/__ADMIN_URL__/g, ADMIN_URL);
 app.get(['/', '/stay', '/book'], (req, res) => {
   res.setHeader('Content-Security-Policy', STAY_CSP);
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate'); // always serve the latest shopfront (map tiles, checkout, etc.)
   res.type('html').send(stayHtml);
 });
 
