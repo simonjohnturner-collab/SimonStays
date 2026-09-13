@@ -52,7 +52,10 @@ const STAY_CSP = "default-src 'self'; img-src 'self' data: https://server.arcgis
   "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " +
   "font-src 'self' data:; connect-src 'self'";
 // Where the admin app lives, for the shopfront's "Become a host" link.
-const ADMIN_URL = (process.env.ADMIN_URL || 'https://simonstays.onrender.com').replace(/\/$/, '');
+// Always an absolute https URL — a bare host (e.g. "app.example.com") would be
+// treated as a relative path in the shopfront links and break the button.
+const RAW_ADMIN = (process.env.ADMIN_URL || 'https://simonstays.onrender.com').trim().replace(/\/$/, '');
+const ADMIN_URL = /^https?:\/\//i.test(RAW_ADMIN) ? RAW_ADMIN : ('https://' + RAW_ADMIN);
 const stayHtml = fs.readFileSync(path.join(__dirname, 'pages/stay.html'), 'utf8').replace(/__ADMIN_URL__/g, ADMIN_URL);
 app.get(['/', '/stay', '/book'], (req, res) => {
   res.setHeader('Content-Security-Policy', STAY_CSP);
