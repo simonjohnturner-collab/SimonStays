@@ -34,7 +34,14 @@ async function pollOnce() {
   try {
     const lock = await client.getMailboxLock(c.folder);
     try {
-      const uids = await client.search({ seen: false }, { uid: true });
+      // Look back over recent messages regardless of read/unread. Previously we
+      // only fetched UNSEEN mail, so if a host opened the Airbnb email in Zoho
+      // before the poll ran, it was marked seen and skipped — the name never
+      // landed. applyGuestNames only fills placeholder names (never clobbers a
+      // hand-typed one) and the lookup upsert is idempotent, so reprocessing a
+      // recent window is safe.
+      const since = new Date(Date.now() - 21 * 864e5);
+      const uids = await client.search({ since }, { uid: true });
       for (const uid of uids || []) {
         try {
           const msg = await client.fetchOne(uid, { source: true }, { uid: true });
