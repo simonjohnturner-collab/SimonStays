@@ -109,19 +109,22 @@ if (require.main === module) {
     console.log(`Channel sync scheduled: ${expr}`);
   }
 
-  // Scheduled mail polling is OPT-IN (ENABLE_MAIL_CRON=true) so it never runs on
-  // local dev by default — otherwise a dev box would consume the shared Zoho
-  // mailbox before the live site sees the emails. On live, guest-name polling is
-  // driven by the Sync button instead (POST /email/poll), which is reliable on a
-  // free instance that sleeps. Set ENABLE_MAIL_CRON=true only for an always-on host.
+  // Guest-name mail polling. Auto-enabled on Render (which sets RENDER=true) so
+  // names fill in hands-free; also honours an explicit ENABLE_MAIL_CRON=true. It
+  // stays OFF on local dev by default so a dev box doesn't consume the shared
+  // Zoho mailbox. The poller looks back over recent mail and is idempotent, so
+  // more than one environment polling is harmless. Requires the ZOHO_IMAP_* creds.
   const mailPoller = require('./utils/mailPoller');
   const pollExpr = process.env.ZOHO_POLL_CRON || '*/5 * * * *';
-  if (process.env.ENABLE_MAIL_CRON === 'true' && mailPoller.enabled() && cron.validate(pollExpr)) {
+  const wantMailCron = process.env.ENABLE_MAIL_CRON === 'true' || !!process.env.RENDER;
+  if (wantMailCron && mailPoller.enabled() && cron.validate(pollExpr)) {
     cron.schedule(pollExpr, async () => {
       try { const s = await mailPoller.pollOnce(); if (s.processed) console.log('[mail]', JSON.stringify(s)); }
       catch (e) { console.error('[mail] failed', e.message); }
     });
     console.log(`Zoho mail poll scheduled: ${pollExpr} (${mailPoller.config().folder})`);
+  } else if (wantMailCron && !mailPoller.enabled()) {
+    console.warn('[mailPoller] NOT scheduled — ZOHO_IMAP_USER / ZOHO_IMAP_PASSWORD are not set, so guest-name polling is disabled. Set them in this service\'s Environment.');
   }
 }
 
