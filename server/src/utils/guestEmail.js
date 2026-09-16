@@ -8,7 +8,12 @@ function parseAirbnbEmail({ subject = '', body = '' } = {}) {
   const raw = `${subject}\n${body}`.replace(/\r/g, '');
   const flat = raw.replace(/\s+/g, ' ').trim();
 
-  const resCode = (flat.match(/\b(H[A-Z0-9]{9})\b/) || [])[1] || null;
+  // Prefer the code anchored in a reservation URL (most reliable — avoids
+  // stray HM-like ids in tracking links); fall back to a bare code anywhere.
+  const resCode =
+    (flat.match(/reservations?\/(?:details\/)?(H[A-Z0-9]{9})\b/i) || [])[1]
+    || (flat.match(/\b(H[A-Z0-9]{9})\b/) || [])[1]
+    || null;
   const phoneLast4 = (flat.match(/Last 4 Digits\)?\s*:?\s*(\d{4})/i) || [])[1] || null;
   const guestName = extractGuestName(subject) || extractGuestName(flat) || null;
 
