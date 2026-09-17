@@ -169,6 +169,12 @@ export default function Main() {
     setFocus({ unitId: r.unitId, bookingId: r.id, key: Date.now() });
   }
 
+  // Reposition the board so the chosen date sits near the left (a few days lead-in).
+  function jumpToDate(iso) {
+    if (!iso) return;
+    setStart(addDays(new Date(iso + 'T12:00:00'), -3));
+  }
+
   const hasUnits = properties.some((p) => p.units.length);
 
   // Wrap every screen with the impersonation banner so the admin always has a
@@ -240,7 +246,7 @@ export default function Main() {
       <header className="topbar">
         <button className="ghost hamburger" title="Manage properties" onClick={() => setMenuOpen(true)}>☰</button>
         <div className="brand">Simon<span>Stays</span></div>
-        {hasUnits && <BoardSearch onJump={jumpToBooking} />}
+        {hasUnits && <BoardSearch onJump={jumpToBooking} onJumpDate={jumpToDate} />}
         <div className="spacer" />
         <button className="ghost" onClick={() => setStart(addMonths(start, -1))}>‹ month</button>
         <button className="ghost" onClick={() => setStart(addDays(start, -7))}>← week</button>

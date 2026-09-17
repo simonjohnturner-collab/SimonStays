@@ -393,10 +393,11 @@ td.cell.stay.has-today { box-shadow: inset 0 0 0 2px #9fc5e8, inset 0 4px 0 #e0a
 .photo-add input { display: none; }
 
 /* Jump-to-reservation search in the top bar */
-.board-search { position: relative; width: 300px; max-width: 34vw; }
-.board-search > input { width: 100%; padding: 7px 10px; font-size: 13px; border: 1px solid rgba(255,255,255,.35); border-radius: 8px; background: rgba(255,255,255,.16); color: #fff; }
+.board-search { position: relative; width: 380px; max-width: 44vw; display: flex; gap: 6px; align-items: center; }
+.board-search > input { flex: 1; min-width: 0; padding: 7px 10px; font-size: 13px; border: 1px solid rgba(255,255,255,.35); border-radius: 8px; background: rgba(255,255,255,.16); color: #fff; }
 .board-search > input::placeholder { color: rgba(255,255,255,.82); }
 .board-search > input:focus { outline: none; background: #fff; color: var(--ink); border-color: #fff; }
+.board-search .bs-date { flex: 0 0 auto; width: 132px; background: rgba(255,255,255,.92); color: var(--ink); border-color: rgba(255,255,255,.5); }
 .board-search-results { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.18); z-index: 30; max-height: 340px; overflow: auto; padding: 4px; }
 .bsr-empty { padding: 10px 12px; font-size: 13px; color: var(--muted); }
 .bsr-item { display: block; width: 100%; text-align: left; background: transparent; color: var(--ink); border: 0; border-radius: 7px; padding: 8px 10px; }

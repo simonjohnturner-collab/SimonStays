@@ -3,7 +3,7 @@ import { api } from '../api.js';
 
 // Jump-to-reservation search: type a guest name or Airbnb confirmation code and
 // pick a result to reposition the board on that booking.
-export default function BoardSearch({ onJump }) {
+export default function BoardSearch({ onJump, onJumpDate }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
@@ -37,8 +37,15 @@ export default function BoardSearch({ onJump }) {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onFocus={() => results.length && setOpen(true)}
-        placeholder="🔎 Jump to reservation — guest or Airbnb code"
-        aria-label="Jump to a reservation by guest name or Airbnb confirmation code"
+        placeholder="🔎 Jump to reservation — booking ref or guest name"
+        aria-label="Jump to a reservation by booking reference or guest name"
+      />
+      <input
+        type="date"
+        className="bs-date"
+        onChange={(e) => e.target.value && onJumpDate && onJumpDate(e.target.value)}
+        title="Jump the board to a specific date"
+        aria-label="Jump to a specific date"
       />
       {open && (
         <div className="board-search-results">
