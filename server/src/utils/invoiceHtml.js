@@ -86,9 +86,8 @@ function invoiceHtml(data) {
     ${data.cancellationPolicy ? `<h3 style="margin:20px 0 4px;font-size:14px">Booking rules &amp; cancellation policy</h3>
     <div style="font-size:13px;line-height:1.6;color:#374151;background:#f7f8fa;border:1px solid #e3e3e3;border-radius:8px;padding:10px 12px;white-space:pre-line">${esc(data.cancellationPolicy)}</div>` : ''}
 
-    <div style="margin-top:18px;padding:12px 14px;background:#f6f4ff;border:1px solid #e5deff;border-radius:10px;font-size:13px;line-height:1.6">
-      <b>Manage your stay online.</b> Create a SimonStays guest account (or sign in) with this email to view your upcoming bookings and message your host directly.<br>
-      <a href="https://simonstays.co.za" style="color:#5b21b6;font-weight:600">Visit simonstays.co.za →</a>
+    <div style="margin-top:18px;padding:12px 14px;background:#f6f7f9;border:1px solid #e3e3e3;border-radius:10px;font-size:13px;line-height:1.6">
+      <b>Questions about your stay?</b> Just reply to this email or reach us on the contact details below — we're happy to help.
     </div>
 
     <div style="margin-top:20px;color:#6b7280;font-size:12px;line-height:1.6;border-top:1px solid #eee;padding-top:12px">
