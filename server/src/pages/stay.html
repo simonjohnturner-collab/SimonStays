@@ -354,6 +354,7 @@
     if(u.checkInTime)amen.push('Check-in '+u.checkInTime); if(u.checkOutTime)amen.push('Check-out '+u.checkOutTime);
     if(u.wifi)amen.push('Wi-Fi'); if(u.backupPower)amen.push('Backup power'); if(u.backupWater)amen.push('Backup water');
     if(u.security)amen.push('Security'); if(u.parking)amen.push('Parking'); if(u.access)amen.push(u.access);
+    if(u.minNights)amen.push(u.minNights+'-night minimum');
     var amenHtml=amen.length?('<div class="amen">'+amen.map(function(a){return '<span class="a">'+esc(a)+'</span>';}).join('')+'</div>'):'';
     var hasLoc=(p.latitude!=null&&p.longitude!=null);
     // "About the complex" — property description + property photos (unless already the hero)
@@ -479,6 +480,11 @@
     var q=STATE.quote;
     var head='<div class="note" style="margin-bottom:8px"><b>'+STATE.ciSel+'</b> → <b>'+STATE.coSel+'</b></div>';
     if(!q){ side.innerHTML=head+'<div class="msg err">'+esc(STATE.quoteErr||'Pricing…')+'</div>'; return; }
+    var minN=(STATE.unit&&STATE.unit.minNights)||0;
+    if(minN && q.nights < minN){
+      side.innerHTML=head+'<div class="msg err">This home has a <b>'+minN+'-night minimum</b> stay. Please choose at least '+minN+' nights.</div>';
+      return;
+    }
     var lines=breakdownLines(q);
     var depoNote = q.depositCents ? ('<div class="note" style="margin:8px 0">🔒 The '+rand(q.depositCents)+' breakage deposit is held and <b>refunded after checkout</b>, subject to no damage.</div>') : '';
     var earlyLbl = (q.earlyFeeCents||0)>0 ? ('(+'+rand(q.earlyFeeCents)+')') : '(no extra charge)';

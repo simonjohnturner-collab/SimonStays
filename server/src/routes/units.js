@@ -44,6 +44,7 @@ router.patch('/:id', requireOwnedUnit, async (req, res) => {
   ['checkInTime', 'checkOutTime', 'security', 'access', 'accessMethod', 'smartLockUrl', 'backupPower', 'backupWater', 'parkingNotes']
     .forEach((k) => { if (k in b) data[k] = b[k] === '' ? null : b[k]; });
   if ('parkingBays' in b) data.parkingBays = (b.parkingBays === '' || b.parkingBays == null) ? null : Number(b.parkingBays);
+  if ('minNights' in b) data.minNights = (b.minNights === '' || b.minNights == null) ? null : Math.max(0, Number(b.minNights));
   if ('lockBattery' in b) data.lockBattery = (b.lockBattery === '' || b.lockBattery == null) ? null : Number(b.lockBattery);
   if ('pricingGroupId' in b) {
     if (b.pricingGroupId) {

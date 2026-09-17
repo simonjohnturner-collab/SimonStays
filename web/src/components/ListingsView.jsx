@@ -170,6 +170,7 @@ export default function ListingsView({ onClose }) {
     setMsg('');
     await api.saveUnit(u.id, {
       name: u.name, capacity: u.capacity, description: u.description || '',
+      minNights: u.minNights ?? null,
       bedrooms: u.bedrooms ?? null, bathrooms: u.bathrooms ?? null,
       wifiName: u.wifiName || '', wifiPassword: u.wifiPassword || '',
       checkInTime: u.checkInTime || '', checkOutTime: u.checkOutTime || '',
@@ -384,6 +385,9 @@ export default function ListingsView({ onClose }) {
                         </label>
                         <label className="cap">Baths
                           <input type="number" min="0" value={u.bathrooms ?? ''} onChange={(e) => editUnit(p.id, u.id, { bathrooms: e.target.value === '' ? null : Number(e.target.value) })} />
+                        </label>
+                        <label className="cap" title="Minimum nights per booking — guests can’t book fewer. Leave blank for no minimum.">Min nights
+                          <input type="number" min="0" placeholder="—" value={u.minNights ?? ''} onChange={(e) => editUnit(p.id, u.id, { minNights: e.target.value === '' ? null : Number(e.target.value) })} />
                         </label>
                         <button className="ghost save" onClick={() => saveUnit(u)}>💾 Save</button>
                         <button className="mini danger" title="Delete unit" onClick={() => removeUnit(u)}>🗑</button>

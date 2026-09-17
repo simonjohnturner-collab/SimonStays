@@ -228,6 +228,7 @@ model Unit {
   property     Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   name         String
   capacity     Int?
+  minNights    Int? // minimum nights per booking (null / 0 = no minimum)
   bedrooms     Int? // for form logic: repeat per-bedroom questions
   bathrooms    Int? // for form logic: repeat per-bathroom questions
   wifiName     String? // per-unit Wi-Fi network name

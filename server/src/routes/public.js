@@ -182,6 +182,7 @@ router.get('/properties/:id', async (req, res, next) => {
           photos: u.photos.map((ph) => ({ id: ph.id })),
           fromNightlyCents: fromNightlyCents(u.pricingGroup),
           hasPricing: !!u.pricingGroupId,
+          minNights: u.minNights || 0,
         })),
       },
     });
@@ -232,6 +233,7 @@ router.get('/units', async (req, res, next) => {
         capacity: u.capacity, bedrooms: u.bedrooms ?? null, bathrooms: u.bathrooms ?? null,
         coverPhotoId: cover ? cover.id : null,
         fromNightlyCents: fromNightlyCents(u.pricingGroup), hasPricing: !!u.pricingGroupId,
+        minNights: u.minNights || 0,
         stayFromCents,
       });
     }
@@ -268,7 +270,7 @@ router.post('/quote', async (req, res, next) => {
     const overrides = await require('../utils/nightPrices').overridesFor(unit.id, iso(checkIn), iso(checkOut));
     const q = quote(unit.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1, overrides, earlyCheckIn: !!earlyCheckIn, lateCheckOut: !!lateCheckOut });
     if (!q) return res.status(400).json({ error: 'invalid_dates' });
-    res.json({ quote: q });
+    res.json({ quote: q, minNights: unit.minNights || 0 });
   } catch (e) { next(e); }
 });
 
@@ -295,6 +297,10 @@ router.post('/book', async (req, res, next) => {
     const bookOverrides = await require('../utils/nightPrices').overridesFor(unit.id, iso(b.checkIn), iso(b.checkOut));
     const q = quote(unit.pricingGroup, { checkIn: iso(b.checkIn), checkOut: iso(b.checkOut), cleans: 1, overrides: bookOverrides, earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut });
     if (!q) return res.status(400).json({ error: 'invalid_dates' });
+    // Enforce the unit's minimum-night stay (server-side guard).
+    if (unit.minNights && q.nights < unit.minNights) {
+      return res.status(400).json({ error: 'min_nights', minNights: unit.minNights, message: `This home has a ${unit.minNights}-night minimum stay — please choose ${unit.minNights} nights or more.` });
+    }
 
     const contact = [b.guestEmail, b.guestPhone].filter(Boolean).join(' · ');
     const depoTxt = q.depositCents ? ` · Refundable deposit R${(q.depositCents / 100).toFixed(2)}` : '';
