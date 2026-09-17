@@ -96,7 +96,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   }
 
   async function remove() {
-    if (!window.confirm('Delete this booking?')) return;
+    if (!window.confirm('Cancel this booking?')) return;
     setBusy(true);
     try { await api.deleteBooking(booking.id); onSaved(); }
     catch (e) { setMsg({ text: e.message, kind: 'err' }); setBusy(false); }
@@ -229,7 +229,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
         )}
 
         <div className="modal-actions">
-          {editing && <button className="danger ghost" disabled={busy} onClick={remove}>Delete</button>}
+          {editing && <button className="danger ghost" disabled={busy} onClick={remove}>Cancel booking</button>}
           {editing && booking.unitId && booking.source === 'manual' && (
             <button className="secondary" disabled={busy} onClick={makeFloating}>↩ Make floating</button>
           )}
