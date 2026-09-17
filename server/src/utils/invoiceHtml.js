@@ -53,14 +53,21 @@ function invoiceHtml(data) {
   <div style="background:#fff;border:1px solid #e3e3e3;border-radius:14px;padding:24px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
       <div><div style="font-size:22px;font-weight:800;color:#2e7d5b">Simon<span style="color:#1f2430">Stays</span></div>
-        <div style="color:#6b7280;font-size:13px">Booking invoice</div></div>
+        <div style="color:#6b7280;font-size:13px">Booking confirmation &amp; invoice</div></div>
       <div style="text-align:right"><div style="font-weight:700">${esc(data.ref)}</div>
         <div style="color:#6b7280;font-size:13px">${new Date().toLocaleDateString('en-ZA')}</div></div>
     </div>
 
-    <div style="margin-top:18px;font-size:14px;line-height:1.6">
+    <div style="margin-top:16px;padding:12px 14px;background:#eef6f0;border:1px solid #cfe6d6;border-radius:10px;font-size:14px;line-height:1.6">
+      <div style="font-weight:700;color:#1f7a44">✅ Your booking is confirmed</div>
+      Thank you${data.guestName ? ', ' + esc(String(data.guestName).split(' ')[0]) : ''}! We look forward to hosting you.
+    </div>
+
+    <div style="margin-top:16px;font-size:14px;line-height:1.7">
       <div><b>${esc(data.propertyName)}</b> &middot; Unit ${esc(data.unitName)}</div>
-      <div style="color:#374151">Check-in <b>${esc(data.checkIn)}</b> &rarr; Check-out <b>${esc(data.checkOut)}</b></div>
+      <div style="color:#374151">📅 <b>Check-in:</b> ${esc(data.checkIn)} from <b>${esc(data.checkInTime || '15:00')}</b></div>
+      <div style="color:#374151">📅 <b>Check-out:</b> ${esc(data.checkOut)} by <b>${esc(data.checkOutTime || '10:00')}</b></div>
+      <div style="color:#374151">🔖 <b>Booking reference:</b> ${esc(data.ref)}</div>
     </div>
 
     <h3 style="margin:18px 0 4px;font-size:14px">Billed to</h3>
@@ -75,6 +82,14 @@ function invoiceHtml(data) {
 
     <div style="margin-top:14px;color:#374151;font-size:13px">${payLine}${data.split ? ' &middot; 50/50 split' : ''}</div>
     ${eftBlock}
+
+    ${data.cancellationPolicy ? `<h3 style="margin:20px 0 4px;font-size:14px">Booking rules &amp; cancellation policy</h3>
+    <div style="font-size:13px;line-height:1.6;color:#374151;background:#f7f8fa;border:1px solid #e3e3e3;border-radius:8px;padding:10px 12px;white-space:pre-line">${esc(data.cancellationPolicy)}</div>` : ''}
+
+    <div style="margin-top:18px;padding:12px 14px;background:#f6f4ff;border:1px solid #e5deff;border-radius:10px;font-size:13px;line-height:1.6">
+      <b>Manage your stay online.</b> Create a SimonStays guest account (or sign in) with this email to view your upcoming bookings and message your host directly.<br>
+      <a href="https://simonstays.co.za" style="color:#5b21b6;font-weight:600">Visit simonstays.co.za →</a>
+    </div>
 
     <div style="margin-top:20px;color:#6b7280;font-size:12px;line-height:1.6;border-top:1px solid #eee;padding-top:12px">
       SimonStays is a trading name owned, controlled and managed by Catwalk Investments (registration number 1999/010697/07).<br>

@@ -30,9 +30,9 @@ async function emailInvoice(data) {
   const html = invoiceHtml({ ...data, eft });
   const ok = await sendMail({
     to: data.to,
-    subject: `Your SimonStays booking invoice · ${data.ref}`,
+    subject: `Your SimonStays booking is confirmed · ${data.ref}`,
     html,
-    text: `Thank you for booking ${data.propertyName} · Unit ${data.unitName} (${data.checkIn} to ${data.checkOut}). Your booking reference is ${data.ref}. Total: R${((data.quote.totalCents || 0) / 100).toFixed(2)}.`,
+    text: `Thank you for booking ${data.propertyName} · Unit ${data.unitName}. Check-in ${data.checkIn} (from ${data.checkInTime || '15:00'}) → Check-out ${data.checkOut} (by ${data.checkOutTime || '10:00'}). Booking reference ${data.ref}. Total: R${((data.quote.totalCents || 0) / 100).toFixed(2)}.`,
   });
   if (!ok) console.warn(`[invoice email] not sent for ${data.ref} (mailer disabled or failed)`);
   return ok;
@@ -333,6 +333,8 @@ router.post('/book', async (req, res, next) => {
         hostId, to: b.guestEmail, ref,
         propertyName: unit.property.name, unitName: unit.name,
         checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut),
+        checkInTime: unit.checkInTime || '15:00', checkOutTime: unit.checkOutTime || '10:00',
+        cancellationPolicy: unit.property.cancellationPolicy || DEFAULT_CANCELLATION_POLICY,
         guestName: b.guestName, guestEmail: b.guestEmail, guestPhone: b.guestPhone,
         billing, quote: q, method, split, owingCents,
       }).catch((e) => console.error('[invoice email] failed:', e.message));
