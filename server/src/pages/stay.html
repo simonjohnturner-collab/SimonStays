@@ -482,7 +482,7 @@
     if(!q){ side.innerHTML=head+'<div class="msg err">'+esc(STATE.quoteErr||'Pricing…')+'</div>'; return; }
     var minN=(STATE.unit&&STATE.unit.minNights)||0;
     if(minN && q.nights < minN){
-      side.innerHTML=head+'<div class="msg err">This home has a <b>'+minN+'-night minimum</b> stay. Please choose at least '+minN+' nights.</div>';
+      side.innerHTML=head+'<div class="msg err">⚠️ This property has a <b>minimum stay of '+minN+' nights</b>. Your selection is '+q.nights+' night'+(q.nights>1?'s':'')+' — please change your dates to book '+minN+' nights or more to continue.</div>';
       return;
     }
     var lines=breakdownLines(q);
