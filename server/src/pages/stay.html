@@ -543,6 +543,7 @@
         '<h3 class="sec">Terms &amp; conditions</h3>'+
         (p.cancellationPolicy?('<div class="desc policy small"><b>Cancellation policy:</b> '+esc(p.cancellationPolicy)+'</div>'):'')+
         '<label class="tnc"><input type="checkbox" id="agree"> <span>I confirm that <b>SimonStays accepts no responsibility whatsoever</b> for anything that happens at the property. I have read, reviewed and understood the <b>cancellation policy</b> above, and I accept that <b>no refunds</b> will be granted outside of that policy.</span></label>'+
+        '<label class="tnc"><input type="checkbox" id="agreeTnc"> <span>I have read and accept the <a href="/terms" target="_blank" rel="noreferrer"><b>Terms &amp; Conditions</b> ↗</a>.</span></label>'+
         '<div id="cmsg"></div>'+
         '<div class="todo">💳 Online card payment is being finalised — for now this places a booking request and gives a test confirmation.</div>'+
         '<button id="confirmBtn" class="cta-btn" disabled>Confirm booking</button>'+
@@ -556,7 +557,9 @@
       else { eftBox.hidden=true; } }
     overlay.querySelectorAll('input[name=pm]').forEach(function(r){ r.onchange=updEft; }); updEft();
     // The guest must accept the T&Cs before the booking can be confirmed/paid.
-    overlay.querySelector('#agree').onchange=function(e){ overlay.querySelector('#confirmBtn').disabled=!e.target.checked; };
+    // Both boxes (property terms + site T&Cs) must be ticked to enable Confirm.
+    var syncAgree=function(){ overlay.querySelector('#confirmBtn').disabled=!(overlay.querySelector('#agree').checked && overlay.querySelector('#agreeTnc').checked); };
+    overlay.querySelector('#agree').onchange=syncAgree; overlay.querySelector('#agreeTnc').onchange=syncAgree;
     if($('#g').value) overlay.querySelector('#gGuests').value=$('#g').value;
     overlay.querySelector('#confirmBtn').onclick=function(){ confirmBooking(overlay); };
   }
@@ -566,7 +569,7 @@
     var cm=overlay.querySelector('#cmsg');
     if(!name){ cm.innerHTML='<div class="msg err">Please enter your name.</div>'; return; }
     if(!email && !phone){ cm.innerHTML='<div class="msg err">Please give an email or phone number.</div>'; return; }
-    if(!overlay.querySelector('#agree').checked){ cm.innerHTML='<div class="msg err">Please accept the terms and conditions to continue.</div>'; return; }
+    if(!overlay.querySelector('#agree').checked || !overlay.querySelector('#agreeTnc').checked){ cm.innerHTML='<div class="msg err">Please tick both boxes to accept the cancellation policy and the Terms &amp; Conditions.</div>'; return; }
     var method=overlay.querySelector('input[name=pm]:checked').value;
     var plan=overlay.querySelector('input[name=pp]:checked').value;
     var btn=overlay.querySelector('#confirmBtn'); btn.disabled=true; btn.textContent='Booking…'; cm.innerHTML='';
@@ -574,7 +577,7 @@
     STATE.guest={ name:name, email:email, phone:phone, guests:overlay.querySelector('#gGuests').value||'', message:overlay.querySelector('#gMsg').value||'', billing:biz };
     STATE.method=method; STATE.plan=plan;
     try{
-      var body={ unitId:STATE.unit.id, checkIn:STATE.ciSel, checkOut:STATE.coSel, guestName:name, guestEmail:email, guestPhone:phone, guests:STATE.guest.guests||undefined, message:STATE.guest.message||undefined, billing:biz||undefined, earlyCheckIn:!!STATE.early, lateCheckOut:!!STATE.late, paymentMethod:method, paymentPlan:plan };
+      var body={ unitId:STATE.unit.id, checkIn:STATE.ciSel, checkOut:STATE.coSel, guestName:name, guestEmail:email, guestPhone:phone, guests:STATE.guest.guests||undefined, message:STATE.guest.message||undefined, billing:biz||undefined, earlyCheckIn:!!STATE.early, lateCheckOut:!!STATE.late, paymentMethod:method, paymentPlan:plan, acceptedTerms:true };
       var r=await fetch(API+'/public/book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       var d=await r.json();
       if(!r.ok){ cm.innerHTML='<div class="msg err">'+esc(d.message||'Could not create the booking.')+'</div>'; btn.disabled=false; btn.textContent='Confirm booking'; return; }

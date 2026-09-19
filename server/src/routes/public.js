@@ -319,6 +319,7 @@ router.post('/book', async (req, res, next) => {
       data: {
         unitId: unit.id, hostId: unit.property.hostId, source: 'website', status: 'pending',
         guestName: b.guestName, ref, billingDetails: billing,
+        termsAcceptedAt: b.acceptedTerms ? new Date() : null,
         checkIn: dateOnly(iso(b.checkIn)), checkOut: dateOnly(iso(b.checkOut)),
         comments, paymentStatus: split ? 'partial' : 'unpaid', amountOwingCents: owingCents,
         depositCents: q.depositCents || null, depositStatus: q.depositCents ? 'held' : null,

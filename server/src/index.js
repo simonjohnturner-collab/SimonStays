@@ -57,6 +57,15 @@ const STAY_CSP = "default-src 'self'; img-src 'self' data: https://server.arcgis
 const RAW_ADMIN = (process.env.ADMIN_URL || 'https://simonstays.onrender.com').trim().replace(/\/$/, '');
 const ADMIN_URL = /^https?:\/\//i.test(RAW_ADMIN) ? RAW_ADMIN : ('https://' + RAW_ADMIN);
 const stayHtml = fs.readFileSync(path.join(__dirname, 'pages/stay.html'), 'utf8').replace(/__ADMIN_URL__/g, ADMIN_URL);
+// Terms & Conditions — a plain self-contained page (no external resources).
+const TERMS_CSP = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'";
+const termsHtml = fs.readFileSync(path.join(__dirname, 'pages/terms.html'), 'utf8');
+app.get(['/terms', '/terms.html', '/terms-and-conditions'], (req, res) => {
+  res.setHeader('Content-Security-Policy', TERMS_CSP);
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  res.type('html').send(termsHtml);
+});
+
 app.get(['/', '/stay', '/book'], (req, res) => {
   res.setHeader('Content-Security-Policy', STAY_CSP);
   res.setHeader('Cache-Control', 'no-cache, must-revalidate'); // always serve the latest shopfront (map tiles, checkout, etc.)
