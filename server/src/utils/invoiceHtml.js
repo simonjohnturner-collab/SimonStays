@@ -21,10 +21,13 @@ function invoiceHtml(data) {
   if (q.lateCents) lines.push(row('Late checkout', rand(q.lateCents)));
   lines.push(row('Rental subtotal', rand(q.rentalCents), { top: true }));
   if (q.depositCents) lines.push(row('Refundable breakage deposit', rand(q.depositCents)));
-  lines.push(row('Total payable', rand(q.totalCents), { strong: true, top: true }));
-  if (data.split && data.owingCents) {
-    lines.push(row('Pay now (50%)', rand(q.totalCents - data.owingCents)));
-    lines.push(row('Due 3 days before check-in (50%)', rand(data.owingCents)));
+  if (data.adminFeeCents) lines.push(row('50/50 split admin fee', rand(data.adminFeeCents)));
+  const payable = (q.totalCents || 0) + (data.adminFeeCents || 0);
+  lines.push(row('Total payable', rand(payable), { strong: true, top: true }));
+  if (data.split) {
+    const now = Math.round(payable / 2);
+    lines.push(row('Pay now (50%)', rand(now)));
+    lines.push(row('Due at least 3 days before check-in (50%)', rand(payable - now)));
   }
 
   const payLine = data.method === 'EFT'

@@ -519,7 +519,10 @@
     var p=STATE.prop, u=STATE.unit, q=STATE.quote; if(!q) return;
     var host=$('#detail');
     var cover=(u.photos&&u.photos.length)?u.photos[0].id:((p.photos&&p.photos.length)?p.photos[0].id:null);
-    var ci=u.checkInTime||'15:00', co=u.checkOutTime||'10:00', half=Math.round(q.totalCents/2);
+    var ci=u.checkInTime||'15:00', co=u.checkOutTime||'10:00';
+    var SPLIT_FEE=25000; // R250 admin fee for the 50/50 split option
+    var daysToCI=Math.round((new Date(STATE.ciSel+'T12:00:00') - new Date())/864e5);
+    var canSplit=daysToCI>=3; // split only makes sense when check-in is 3+ days away
     var overlay=el('div','overlay');
     overlay.innerHTML='<div class="sheet"><div class="sheet-head"><button class="co-back">‹ Back</button><h2>Confirm &amp; pay</h2><button class="x">&times;</button></div>'+
       '<div class="sheet-body">'+
@@ -535,10 +538,12 @@
           '<label class="pay-opt"><input type="radio" name="pm" value="card" checked> 💳 Card (online)</label>'+
           '<label class="pay-opt"><input type="radio" name="pm" value="eft"> 🏦 EFT bank transfer or deposit</label>'+
         '</div>'+
+        '<h3 class="sec">When would you like to pay?</h3>'+
         '<div class="pay-opts">'+
-          '<label class="pay-opt"><input type="radio" name="pp" value="full" checked> Pay in full now — '+rand(q.totalCents)+'</label>'+
-          '<label class="pay-opt"><input type="radio" name="pp" value="split"> Pay 50% now ('+rand(half)+'), 50% three days before check-in</label>'+
+          '<label class="pay-opt"><input type="radio" name="pp" value="full" checked> Pay the full amount now — '+rand(q.totalCents)+'</label>'+
+          (canSplit?('<label class="pay-opt"><input type="radio" name="pp" value="split"> Pay 50% now, 50% at least 3 days before check-in <span class="muted">(+'+rand(SPLIT_FEE)+' admin fee)</span></label>'):'')+
         '</div>'+
+        '<div id="payNote" class="note small" style="margin-top:6px"></div>'+
         '<div id="eftBox" class="eft-box" hidden></div>'+
         '<h3 class="sec">Terms &amp; conditions</h3>'+
         (p.cancellationPolicy?('<div class="desc policy small"><b>Cancellation policy:</b> '+esc(p.cancellationPolicy)+'</div>'):'')+
@@ -556,6 +561,13 @@
       if(m==='eft'){ eftBox.hidden=false; eftBox.innerHTML=(HOST&&HOST.eft)?('<b>EFT / bank transfer or deposit</b><br>'+[HOST.eft.accountName&&('Account name: '+esc(HOST.eft.accountName)),HOST.eft.bankName&&('Bank: '+esc(HOST.eft.bankName)),HOST.eft.accountNumber&&('Account no.: '+esc(HOST.eft.accountNumber)),HOST.eft.branch&&('Branch: '+esc(HOST.eft.branch))].filter(Boolean).join('<br>')+'<br><span class="muted small">Use your <b>booking reference</b> (shown once you confirm) as the payment reference, and send proof of payment — your booking is confirmed once it’s received.</span>'):'<span class="muted small">We’ll send you the EFT details after you book.</span>'; }
       else { eftBox.hidden=true; } }
     overlay.querySelectorAll('input[name=pm]').forEach(function(r){ r.onchange=updEft; }); updEft();
+    // Payment-plan note: show amounts, adding the R250 admin fee when split.
+    function updPayNote(){ var plan=(overlay.querySelector('input[name=pp]:checked')||{}).value;
+      var el2=overlay.querySelector('#payNote');
+      if(plan==='split'){ var tot=q.totalCents+SPLIT_FEE, h=Math.round(tot/2);
+        el2.innerHTML='Including the '+rand(SPLIT_FEE)+' admin fee, your total is <b>'+rand(tot)+'</b>. Pay <b>'+rand(h)+'</b> now, and <b>'+rand(tot-h)+'</b> at least 3 days before check-in.';
+      } else { el2.innerHTML="You'll pay the full <b>"+rand(q.totalCents)+'</b> now.'; } }
+    overlay.querySelectorAll('input[name=pp]').forEach(function(r){ r.onchange=updPayNote; }); updPayNote();
     // The guest must accept the T&Cs before the booking can be confirmed/paid.
     // Both boxes (property terms + site T&Cs) must be ticked to enable Confirm.
     var syncAgree=function(){ overlay.querySelector('#confirmBtn').disabled=!(overlay.querySelector('#agree').checked && overlay.querySelector('#agreeTnc').checked); };
@@ -601,7 +613,7 @@
     var mNote;
     if(method==='eft'){ mNote='Please pay by <b>EFT / bank transfer or deposit</b> using your booking reference <b>'+esc(ref)+'</b> as the payment reference, then send us proof of payment. Your booking is confirmed once it’s received.'; }
     else { mNote='This is a <b>test confirmation</b> — online card payment is being finalised, so no charge was taken.'; }
-    if(plan==='split') mNote+=' You chose to pay 50% now and 50% three days before check-in.';
+    if(plan==='split') mNote+=' You chose to pay 50% now and 50% at least 3 days before check-in (a '+rand(25000)+' admin fee applies).';
     var eftHtml = (method==='eft' && HOST && HOST.eft) ? ('<div class="eft-box" style="text-align:left">'+[HOST.eft.accountName&&('Account name: '+esc(HOST.eft.accountName)),HOST.eft.bankName&&('Bank: '+esc(HOST.eft.bankName)),HOST.eft.accountNumber&&('Account no.: '+esc(HOST.eft.accountNumber)),HOST.eft.branch&&('Branch: '+esc(HOST.eft.branch)),('<b>Reference: '+esc(ref)+'</b>')].filter(Boolean).join('<br>')+'</div>') : '';
     var overlay=el('div','overlay');
     overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>Booking placed</h2><button class="x">&times;</button></div>'+
@@ -632,8 +644,10 @@
     if(q.lateCents) rows+='<tr><td>Late checkout</td><td>'+rand(q.lateCents)+'</td></tr>';
     rows+='<tr class="sub"><td>Rental subtotal</td><td>'+rand(q.rentalCents)+'</td></tr>';
     if(q.depositCents) rows+='<tr><td>Refundable breakage deposit</td><td>'+rand(q.depositCents)+'</td></tr>';
-    rows+='<tr class="tot"><td>Total</td><td>'+rand(q.totalCents)+'</td></tr>';
-    if(STATE.plan==='split') rows+='<tr><td>50% due now</td><td>'+rand(Math.round(q.totalCents/2))+'</td></tr><tr><td>50% due 3 days before check-in</td><td>'+rand(Math.round(q.totalCents/2))+'</td></tr>';
+    var splitFee=(STATE.plan==='split')?25000:0, payable=q.totalCents+splitFee;
+    if(splitFee) rows+='<tr><td>50/50 split admin fee</td><td>'+rand(splitFee)+'</td></tr>';
+    rows+='<tr class="tot"><td>Total</td><td>'+rand(payable)+'</td></tr>';
+    if(splitFee){ var sh=Math.round(payable/2); rows+='<tr><td>50% due now</td><td>'+rand(sh)+'</td></tr><tr><td>50% due at least 3 days before check-in</td><td>'+rand(payable-sh)+'</td></tr>'; }
     var payLine = STATE.method==='eft' && eft ? ('Pay by EFT to '+esc(eft.bankName||'')+' · Acct '+esc(eft.accountNumber||'')+(eft.branch?(' · Branch '+esc(eft.branch)):'')+' · <b>Reference '+esc(ref)+'</b>') : 'Paid by card (online).';
     var html='<!doctype html><html><head><meta charset="utf-8"><title>Invoice '+esc(ref)+'</title>'+
       '<style>body{font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#1f2430;max-width:640px;margin:24px auto;padding:0 18px}h1{color:#1a7a3a;margin:0}.muted{color:#6b7280}table{width:100%;border-collapse:collapse;margin:14px 0}td{padding:6px 0;border-bottom:1px solid #eee}td:last-child{text-align:right;white-space:nowrap}tr.sub td{border-top:1px solid #ccc;font-weight:600}tr.tot td{font-weight:800;font-size:17px;border-bottom:0}.box{background:#f6f7f9;border-radius:10px;padding:12px 14px;margin:10px 0}.row{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}@media print{.noprint{display:none}}</style></head><body>'+

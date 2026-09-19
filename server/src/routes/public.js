@@ -307,12 +307,15 @@ router.post('/book', async (req, res, next) => {
     // Payment choice from the checkout screen (card or EFT — no cash).
     const method = b.paymentMethod === 'eft' ? 'EFT' : 'Card';
     const split = b.paymentPlan === 'split';
-    const owingCents = split ? Math.round(q.totalCents / 2) : null; // 50% due 3 days before check-in
+    const SPLIT_FEE_CENTS = 25000; // R250 admin fee for the 50/50 split plan
+    const adminFeeCents = split ? SPLIT_FEE_CENTS : 0;
+    const payableCents = q.totalCents + adminFeeCents;
+    const owingCents = split ? Math.round(payableCents / 2) : null; // 50% due at least 3 days before check-in
     // Human-friendly booking reference (also the EFT payment reference).
     const seq = (await prisma.booking.count({ where: { hostId, source: 'website' } })) + 1;
     const ref = 'SS' + String(1000 + seq);
-    const payTxt = ` · Pay: ${method}${split ? ' · 50/50 split (50% now, 50% 3 days before check-in)' : ''}`;
-    const comments = `Website booking ${ref} (awaiting payment) · Contact: ${contact} · Guests: ${b.guests || '—'} · Rental R${(q.rentalCents / 100).toFixed(2)}${depoTxt} · Payable R${(q.totalCents / 100).toFixed(2)}${payTxt}${b.message ? ` · Note: ${b.message}` : ''}`;
+    const payTxt = ` · Pay: ${method}${split ? ` · 50/50 split (50% now, 50% at least 3 days before check-in) · +R${(SPLIT_FEE_CENTS / 100).toFixed(2)} admin fee` : ''}`;
+    const comments = `Website booking ${ref} (awaiting payment) · Contact: ${contact} · Guests: ${b.guests || '—'} · Rental R${(q.rentalCents / 100).toFixed(2)}${depoTxt} · Payable R${(payableCents / 100).toFixed(2)}${payTxt}${b.message ? ` · Note: ${b.message}` : ''}`;
 
     const billing = (b.billing || b.billingDetails || '').trim() || null;
     const booking = await prisma.booking.create({
@@ -326,7 +329,7 @@ router.post('/book', async (req, res, next) => {
         earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut,
       },
     });
-    const checkout = await payments.createCheckout(booking, q.totalCents);
+    const checkout = await payments.createCheckout(booking, payableCents);
 
     // Email the guest their invoice (fire-and-forget — never block the booking).
     if (b.guestEmail) {
@@ -337,11 +340,11 @@ router.post('/book', async (req, res, next) => {
         checkInTime: unit.checkInTime || '15:00', checkOutTime: unit.checkOutTime || '10:00',
         cancellationPolicy: unit.property.cancellationPolicy || DEFAULT_CANCELLATION_POLICY,
         guestName: b.guestName, guestEmail: b.guestEmail, guestPhone: b.guestPhone,
-        billing, quote: q, method, split, owingCents,
+        billing, quote: q, method, split, owingCents, adminFeeCents,
       }).catch((e) => console.error('[invoice email] failed:', e.message));
     }
     res.status(201).json({
-      bookingId: booking.id, ref, amountCents: q.totalCents, quote: q,
+      bookingId: booking.id, ref, amountCents: payableCents, quote: q,
       property: unit.property.name, unit: unit.name,
       checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut),
       payment: checkout, // { mode:'simulate' } for now; { mode:'redirect', url } when a vendor is live
