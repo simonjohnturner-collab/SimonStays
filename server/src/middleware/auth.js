@@ -15,6 +15,36 @@ function authHost(req, res, next) {
   }
 }
 
+/** Require a valid guest (shopfront customer) JWT. Sets req.guestId. */
+function authGuest(req, res, next) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'missing_token' });
+  try {
+    const payload = verify(token);
+    if (payload.kind !== 'guest' || !payload.guestId) return res.status(401).json({ error: 'invalid_token' });
+    req.guestId = payload.guestId;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'invalid_token' });
+  }
+}
+
+// Best-effort: if a valid guest token is present, set req.guestId; otherwise
+// carry on unauthenticated. Used by /public/book so a signed-in guest's booking
+// is linked to their account, while anonymous booking still works.
+function optionalGuest(req, res, next) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (token) {
+    try {
+      const payload = verify(token);
+      if (payload.kind === 'guest' && payload.guestId) req.guestId = payload.guestId;
+    } catch (_) { /* ignore — anonymous booking */ }
+  }
+  next();
+}
+
 /**
  * Load a unit by id and assert it belongs to the authenticated host.
  * Attaches req.unit. Use after authHost on routes with :unitId.
@@ -54,4 +84,4 @@ async function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { authHost, requireOwnedUnit, requireOwnedProperty, requireAdmin, isAdminEmail, ADMIN_EMAIL };
+module.exports = { authHost, authGuest, optionalGuest, requireOwnedUnit, requireOwnedProperty, requireAdmin, isAdminEmail, ADMIN_EMAIL };

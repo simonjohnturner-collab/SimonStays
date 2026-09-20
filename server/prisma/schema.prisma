@@ -38,6 +38,7 @@ model Host {
   guests           Guest[]
   photos           Photo[]           @relation("HostPhotos")
   lockProvider     LockProvider?
+  competitors      Competitor[]
 }
 
 // A host's connection to a smart-lock cloud provider (RemoteLock). Holds the
@@ -92,6 +93,22 @@ model Guest {
   updatedAt DateTime @updatedAt
 
   @@index([hostId])
+}
+
+// A guest's own login for the public shopfront. Separate from the host-scoped
+// Guest contact-book (which is the host's notes about people): this is an
+// account the guest creates to view their upcoming + previous trips. A guest
+// may book across hosts, so this is NOT host-scoped. Bookings are linked to it
+// explicitly (guestAccountId, stamped when booking while signed in) and by email.
+model GuestAccount {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  name         String?
+  phone        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  bookings     Booking[]
 }
 
 // The host's own "invoice from" details + bank info (one per host, editable).
@@ -372,6 +389,14 @@ model Booking {
   channelType  ChannelType?
   status       BookingStatus @default(confirmed)
   guestName    String?
+  // Structured guest contact (website bookings) — also used to match a booking
+  // to a GuestAccount by email so guests see their trips. Historically these
+  // lived only inside `comments`; a startup backfill fills them for old rows.
+  guestEmail   String?
+  guestPhone   String?
+  totalCents   Int?    // payable total captured at booking time (website bookings)
+  guestAccountId String?
+  guestAccount   GuestAccount? @relation(fields: [guestAccountId], references: [id], onDelete: SetNull)
   checkIn      DateTime // date-only (stored at noon UTC)
   checkOut     DateTime // checkout day = exclusive of last night; the clean day
   paid         Boolean       @default(false) // true only when fully paid
@@ -405,6 +430,8 @@ model Booking {
   @@unique([unitId, externalUid])
   @@index([unitId, checkIn, checkOut])
   @@index([hostId, status])
+  @@index([guestAccountId])
+  @@index([guestEmail])
 }
 
 model SyncLog {
@@ -457,4 +484,68 @@ enum BookingStatus {
   floating
   cancelled
   pending // website hold awaiting payment; does NOT block the calendar
+}
+
+// ---- Competitor market intelligence (the "building fill" gauge) ----
+// Tracks other operators in the same building (e.g. The Vantage, Rosebank) so we
+// can see how full the building is running and price our own units against the
+// live market. A Competitor is one operator; MarketSnapshot rows are the
+// per-night, per-room-type observations captured on each probe run.
+
+enum MarketSource {
+  SITEMINDER_TBB // SiteMinder "The Booking Button" GraphQL (direct-book.com) — e.g. CAG
+  OTA            // read from an OTA listing (Booking.com/Agoda) — manual or scraped
+  MANUAL         // hand-entered weekly snapshot
+}
+
+model Competitor {
+  id          String       @id @default(uuid())
+  hostId      String
+  host        Host         @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  name        String       // e.g. "CAG — The Vantage"
+  building    String?      // e.g. "The Vantage, Rosebank" — groups operators we compare
+  source      MarketSource @default(MANUAL)
+  // SiteMinder TBB: the booking channel code (the direct-book.com URL slug),
+  // e.g. "TheVantageDirect". Null for MANUAL/OTA competitors.
+  channelCode String?
+  // Optional override of the GraphQL host (defaults to https://direct-book.com).
+  apiBase     String?
+  currency    String       @default("ZAR")
+  // Best estimate of how many physical units this operator runs in the building,
+  // keyed by room type, e.g. { "Studio Apartment": 10, "One Bedroom Apartment": 8 }.
+  // Used to weight the occupancy index; free-form so it can be filled over time.
+  unitCounts  Json         @default("{}")
+  active      Boolean      @default(true)
+  notes       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  snapshots   MarketSnapshot[]
+
+  @@index([hostId])
+}
+
+// One observation: for a competitor's room type, on one stay-date, as seen on one
+// capture run — was a booking quotable and at what price. The time-series behind
+// the occupancy + price charts. One row per (competitor, room type, stay date)
+// per capture day, so a re-run on the same day updates rather than duplicates.
+model MarketSnapshot {
+  id            String     @id @default(uuid())
+  competitorId  String
+  competitor    Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  capturedAt    DateTime   @default(now()) // exact time of the probe run
+  capturedDate  DateTime   // date-only (noon UTC) of the run — the daily bucket
+  stayDate      DateTime   // date-only (noon UTC) — the night being priced
+  roomType      String     // e.g. "Studio Apartment"
+  roomTypeExtId String?    // provider's room-type uuid, when known
+  available     Boolean    // did the engine return a bookable quote for this night?
+  availableUnits Int?      // units bookable per minAvailability (gated to 0 server-side; kept for reference)
+  priceCents    Int?       // standard-rate nightly price (gross, incl. tax)
+  promoPriceCents Int?     // promotional-rate nightly price when one is offered (measures discount depth)
+  currency      String     @default("ZAR")
+  raw           Json?      // trimmed provider payload, kept for debugging
+  createdAt     DateTime   @default(now())
+
+  @@unique([competitorId, stayDate, roomType, capturedDate])
+  @@index([competitorId, stayDate])
+  @@index([competitorId, capturedDate])
 }

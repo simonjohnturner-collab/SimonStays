@@ -25,6 +25,11 @@ services:
         generateValue: true
       - key: SYNC_CRON
         value: "*/30 * * * *"
+      # Competitor "building fill" probe — reads other operators' live booking
+      # engines once a day. No-ops until a SiteMinder-TBB competitor is registered
+      # (seed with server/scripts/probe-market.js --seed), so it's safe to leave on.
+      - key: MARKET_CRON
+        value: "20 3 * * *"
       - key: ZOHO_POLL_CRON
         value: "*/5 * * * *"
       - key: ZOHO_IMAP_HOST

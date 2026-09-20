@@ -150,6 +150,14 @@ export const api = {
   updateFormSubmission: (id, data) => req('PATCH', `/forms/submissions/${id}`, data),
   deleteFormSubmission: (id) => req('DELETE', `/forms/submissions/${id}`),
 
+  // competitor market intelligence (the "building fill" / market-watch view)
+  marketCompetitors: () => req('GET', '/market/competitors'),
+  marketAddCompetitor: (data) => req('POST', '/market/competitors', data),
+  marketUpdateCompetitor: (id, data) => req('PATCH', `/market/competitors/${id}`, data),
+  marketProbe: (id, days) => req('POST', `/market/competitors/${id}/probe`, { days }),
+  marketPrices: (competitorId, days = 30) => req('GET', `/market/prices?competitorId=${competitorId || ''}&days=${days}`),
+  marketOccupancy: (competitorId, days = 30) => req('GET', `/market/occupancy?competitorId=${competitorId || ''}&days=${days}`),
+
   // bookings
   availability: (unitId, checkIn, checkOut) =>
     req('GET', `/units/${unitId}/availability?checkIn=${checkIn}&checkOut=${checkOut}`),

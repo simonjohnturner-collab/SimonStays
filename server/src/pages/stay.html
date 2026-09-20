@@ -151,14 +151,39 @@
   .lightbox{ position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:70; display:flex; align-items:center; justify-content:center; padding:20px; }
   .lightbox img{ max-width:100%; max-height:100%; border-radius:8px; }
   .lightbox .x{ position:absolute; top:14px; right:18px; color:#fff; font-size:34px; }
-  @media(max-width:640px){ .gallery{ grid-template-columns:1fr 1fr; } .gallery .g0{ grid-column:span 2; } }
+  /* Guest account: header control, sign-in form, "my trips" */
+  .acct-wrap{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .acct-btn{ background:#eef1f4; color:var(--ink); border-radius:8px; padding:8px 14px; font-weight:600; font-size:14px; white-space:nowrap; }
+  .acct-btn:hover{ background:#e2e6ea; }
+  .acct-name{ font-size:14px; color:var(--ink); font-weight:600; white-space:nowrap; }
+  .auth-toggle{ text-align:center; margin-top:12px; font-size:14px; color:var(--muted); }
+  .auth-toggle a{ font-weight:600; cursor:pointer; }
+  .tabs{ display:flex; gap:8px; margin-bottom:14px; }
+  .tabs button{ background:#eef1f4; color:var(--ink); flex:1; }
+  .tabs button.on{ background:var(--green); color:#fff; }
+  .trip{ border:1px solid var(--line); border-radius:14px; overflow:hidden; display:flex; margin-bottom:14px; background:#fff; }
+  .trip-thumb{ width:150px; flex-shrink:0; background:#e9edf1 center/cover no-repeat; min-height:140px; }
+  .trip-body{ padding:14px 16px; flex:1; min-width:0; }
+  .trip-nm{ font-weight:700; font-size:16px; }
+  .trip-sub{ color:var(--muted); font-size:13px; margin-top:2px; }
+  .trip-row{ display:flex; justify-content:space-between; gap:12px; font-size:14px; padding:3px 0; }
+  .trip-row span:last-child{ text-align:right; }
+  .badge{ display:inline-block; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:700; vertical-align:1px; }
+  .badge.confirmed{ background:#eafaf0; color:var(--green-d); }
+  .badge.pending{ background:#fff7e6; color:#8a5a00; }
+  .badge.cancelled{ background:#fdecec; color:#c0392b; }
+  .trip-info{ background:#eef6f0; border:1px solid #cfe6d6; border-radius:10px; padding:8px 12px; margin-top:8px; font-size:13px; line-height:1.6; }
+  @media(max-width:640px){ .gallery{ grid-template-columns:1fr 1fr; } .gallery .g0{ grid-column:span 2; } .trip{ flex-direction:column; } .trip-thumb{ width:100%; height:170px; } }
 </style>
 </head>
 <body>
 <header class="top">
   <div class="top-in">
     <div class="brand">Simon<span>Stays</span></div>
-    <a class="become-host" href="__ADMIN_URL__/?signup">Sign up to become a host</a>
+    <div class="acct-wrap">
+      <div id="acctBox"></div>
+      <a class="become-host" href="__ADMIN_URL__/?signup">Sign up to become a host</a>
+    </div>
   </div>
 </header>
 
@@ -573,6 +598,12 @@
     var syncAgree=function(){ overlay.querySelector('#confirmBtn').disabled=!(overlay.querySelector('#agree').checked && overlay.querySelector('#agreeTnc').checked); };
     overlay.querySelector('#agree').onchange=syncAgree; overlay.querySelector('#agreeTnc').onchange=syncAgree;
     if($('#g').value) overlay.querySelector('#gGuests').value=$('#g').value;
+    // Prefill from the signed-in guest's account so they don't retype it.
+    if(GUEST){
+      if(GUEST.name) overlay.querySelector('#gName').value=GUEST.name;
+      if(GUEST.email) overlay.querySelector('#gEmail').value=GUEST.email;
+      if(GUEST.phone) overlay.querySelector('#gPhone').value=GUEST.phone;
+    }
     overlay.querySelector('#confirmBtn').onclick=function(){ confirmBooking(overlay); };
   }
 
@@ -590,7 +621,7 @@
     STATE.method=method; STATE.plan=plan;
     try{
       var body={ unitId:STATE.unit.id, checkIn:STATE.ciSel, checkOut:STATE.coSel, guestName:name, guestEmail:email, guestPhone:phone, guests:STATE.guest.guests||undefined, message:STATE.guest.message||undefined, billing:biz||undefined, earlyCheckIn:!!STATE.early, lateCheckOut:!!STATE.late, paymentMethod:method, paymentPlan:plan, acceptedTerms:true };
-      var r=await fetch(API+'/public/book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      var r=await fetch(API+'/public/book',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify(body)});
       var d=await r.json();
       if(!r.ok){ cm.innerHTML='<div class="msg err">'+esc(d.message||'Could not create the booking.')+'</div>'; btn.disabled=false; btn.textContent='Confirm booking'; return; }
       STATE.ref=d.ref||null;
@@ -615,6 +646,8 @@
     else { mNote='This is a <b>test confirmation</b> — online card payment is being finalised, so no charge was taken.'; }
     if(plan==='split') mNote+=' You chose to pay 50% now and 50% at least 3 days before check-in (a '+rand(25000)+' admin fee applies).';
     var eftHtml = (method==='eft' && HOST && HOST.eft) ? ('<div class="eft-box" style="text-align:left">'+[HOST.eft.accountName&&('Account name: '+esc(HOST.eft.accountName)),HOST.eft.bankName&&('Bank: '+esc(HOST.eft.bankName)),HOST.eft.accountNumber&&('Account no.: '+esc(HOST.eft.accountNumber)),HOST.eft.branch&&('Branch: '+esc(HOST.eft.branch)),('<b>Reference: '+esc(ref)+'</b>')].filter(Boolean).join('<br>')+'</div>') : '';
+    // Nudge anonymous guests to make an account so this trip is tracked for them.
+    var acctCta = (!GUEST && g.email) ? '<div class="trip-info" style="text-align:left;margin-top:10px">📱 <b>Track this trip.</b> Create an account with <b>'+esc(g.email)+'</b> to see this and future bookings any time. <a id="ctaSignup" style="cursor:pointer;font-weight:700">Create an account →</a></div>' : '';
     var overlay=el('div','overlay');
     overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>Booking placed</h2><button class="x">&times;</button></div>'+
       '<div class="sheet-body"><div class="done"><div class="big">✅</div>'+
@@ -624,12 +657,14 @@
       (g.email?('<p class="note">📧 An invoice has been emailed to <b>'+esc(g.email)+'</b>.</p>'):'')+
       '<div class="todo" style="text-align:left">'+mNote+'</div>'+
       eftHtml+
+      acctCta+
       '<div class="frm" style="text-align:left;margin-top:10px"><label class="muted small">Need to change the billing details on your invoice? Edit &amp; re-download below.</label><textarea id="billTo" placeholder="e.g. Company name, VAT no., postal address">'+esc(g.billing||'')+'</textarea></div>'+
       '<div style="display:flex;gap:8px;margin-top:12px"><button id="invBtn" class="ghost" style="flex:1;background:#eef1f4;color:var(--ink)">🧾 Download invoice</button><button id="doneBtn" class="cta-btn" style="flex:1;margin:0">Done</button></div>'+
       '</div></div></div>';
     host.innerHTML=''; host.appendChild(overlay);
     overlay.querySelector('.x').onclick=overlay.querySelector('#doneBtn').onclick=function(){ host.innerHTML=''; load(); };
     overlay.querySelector('#invBtn').onclick=function(){ openInvoice(pd, ref, overlay.querySelector('#billTo').value||''); };
+    var cta=overlay.querySelector('#ctaSignup'); if(cta) cta.onclick=function(){ openAuth('register', g.email); };
   }
 
   // A printable invoice in a new window: breakdown + guest details + reference.
@@ -664,6 +699,137 @@
     else { alert('Please allow pop-ups to download your invoice.'); }
   }
 
+  // ---- Guest accounts: sign in / register → "My trips" ----
+  var GUEST=null, GTOKEN=null;
+  function loadSession(){ try{ var s=JSON.parse(localStorage.getItem('ss_guest')||'null'); if(s&&s.token){ GTOKEN=s.token; GUEST=s.account||null; } }catch(e){} }
+  function saveSession(tok,acct){ GTOKEN=tok; GUEST=acct||null; try{ localStorage.setItem('ss_guest',JSON.stringify({token:tok,account:acct})); }catch(e){} renderAcct(); }
+  function clearSession(){ GTOKEN=null; GUEST=null; try{ localStorage.removeItem('ss_guest'); }catch(e){} renderAcct(); }
+  function authHeaders(){ return GTOKEN?{'Authorization':'Bearer '+GTOKEN}:{}; }
+
+  function renderAcct(){
+    var box=$('#acctBox'); if(!box) return;
+    if(GUEST){
+      var who=GUEST.name?esc(GUEST.name.split(' ')[0]):'account';
+      box.innerHTML='<span class="acct-name">Hi, '+who+'</span> <button class="acct-btn" id="tripsBtn">My trips</button> <button class="acct-btn" id="signoutBtn">Sign out</button>';
+      $('#tripsBtn').onclick=openTrips;
+      $('#signoutBtn').onclick=function(){ clearSession(); };
+    } else {
+      box.innerHTML='<button class="acct-btn" id="signinBtn">Sign in</button>';
+      $('#signinBtn').onclick=function(){ openAuth('login'); };
+    }
+  }
+
+  // Re-check a stored token on load; drop it silently if it's expired/invalid.
+  async function refreshAccount(){
+    if(!GTOKEN) return;
+    try{
+      var r=await fetch(API+'/public/account/me',{headers:authHeaders()});
+      if(r.status===401){ clearSession(); return; }
+      var d=await r.json(); if(d&&d.account){ GUEST=d.account; try{ localStorage.setItem('ss_guest',JSON.stringify({token:GTOKEN,account:GUEST})); }catch(e){} renderAcct(); }
+    }catch(e){}
+  }
+
+  function openAuth(mode, prefillEmail){
+    var host=$('#detail');
+    var overlay=el('div','overlay');
+    function draw(){
+      var login=(mode==='login');
+      overlay.innerHTML='<div class="sheet" style="max-width:440px"><div class="sheet-head"><h2>'+(login?'Sign in':'Create your account')+'</h2><button class="x">&times;</button></div>'+
+        '<div class="sheet-body">'+
+          '<p class="note">'+(login?'View your upcoming and previous trips.':'Sign up to keep track of your upcoming and previous trips.')+'</p>'+
+          '<div class="frm">'+
+            (login?'':'<input id="aName" placeholder="Full name" autocomplete="name" />')+
+            '<input id="aEmail" type="email" placeholder="Email" autocomplete="email" />'+
+            (login?'':'<input id="aPhone" placeholder="Phone (optional)" autocomplete="tel" />')+
+            '<input id="aPass" type="password" placeholder="Password'+(login?'':' (at least 8 characters)')+'" autocomplete="'+(login?'current-password':'new-password')+'" />'+
+          '</div>'+
+          '<div id="amsg"></div>'+
+          '<button id="aGo" class="cta-btn">'+(login?'Sign in':'Create account')+'</button>'+
+          '<div class="auth-toggle">'+(login?"New here? <a id='aSwap'>Create an account</a>":"Already have an account? <a id='aSwap'>Sign in</a>")+'</div>'+
+        '</div></div>';
+      overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
+      overlay.querySelector('#aSwap').onclick=function(){ mode=login?'register':'login'; draw(); };
+      overlay.querySelector('#aGo').onclick=doAuth;
+      overlay.querySelector('#aPass').addEventListener('keydown',function(e){ if(e.key==='Enter') doAuth(); });
+      if(prefillEmail) overlay.querySelector('#aEmail').value=prefillEmail;
+    }
+    async function doAuth(){
+      var login=(mode==='login'), msg=overlay.querySelector('#amsg');
+      var email=(overlay.querySelector('#aEmail').value||'').trim();
+      var pass=overlay.querySelector('#aPass').value||'';
+      if(!email||!pass){ msg.innerHTML='<div class="msg err">Please enter your email and password.</div>'; return; }
+      if(!login && pass.length<8){ msg.innerHTML='<div class="msg err">Password must be at least 8 characters.</div>'; return; }
+      var body={ email:email, password:pass };
+      if(!login){ body.name=(overlay.querySelector('#aName').value||'').trim(); body.phone=(overlay.querySelector('#aPhone').value||'').trim(); }
+      var btn=overlay.querySelector('#aGo'); btn.disabled=true; btn.textContent=login?'Signing in…':'Creating…'; msg.innerHTML='';
+      try{
+        var r=await fetch(API+'/public/account/'+(login?'login':'register'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        var d=await r.json();
+        if(!r.ok){ msg.innerHTML='<div class="msg err">'+esc(d.message||'Could not sign you in. Please try again.')+'</div>'; btn.disabled=false; btn.textContent=login?'Sign in':'Create account'; return; }
+        saveSession(d.token,d.account);
+        openTrips();
+      }catch(e){ msg.innerHTML='<div class="msg err">Something went wrong. Please try again.</div>'; btn.disabled=false; btn.textContent=login?'Sign in':'Create account'; }
+    }
+    overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
+    host.innerHTML=''; host.appendChild(overlay); draw();
+  }
+
+  async function openTrips(){
+    if(!GTOKEN){ openAuth('login'); return; }
+    var host=$('#detail');
+    var overlay=el('div','overlay');
+    overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
+    overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>My trips</h2><button class="x">&times;</button></div><div class="sheet-body"><p class="note">Loading your trips…</p></div></div>';
+    host.innerHTML=''; host.appendChild(overlay);
+    overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
+    var data;
+    try{
+      var r=await fetch(API+'/public/account/trips',{headers:authHeaders()});
+      if(r.status===401){ clearSession(); openAuth('login'); return; }
+      data=await r.json();
+    }catch(e){ overlay.querySelector('.sheet-body').innerHTML='<div class="msg err">Could not load your trips. Please try again.</div>'; return; }
+    var up=data.upcoming||[], prev=data.previous||[];
+    var body=overlay.querySelector('.sheet-body');
+    var tab='upcoming';
+    function draw(){
+      var list=tab==='upcoming'?up:prev;
+      var cards=list.length?list.map(function(t){ return tripCard(t); }).join(''):
+        ('<div class="empty">'+(tab==='upcoming'?'No upcoming trips yet. When you book a stay it’ll appear here.':'No previous trips yet.')+'</div>');
+      body.innerHTML='<div class="tabs"><button class="'+(tab==='upcoming'?'on':'')+'" data-t="upcoming">Upcoming ('+up.length+')</button><button class="'+(tab==='previous'?'on':'')+'" data-t="previous">Previous ('+prev.length+')</button></div>'+cards;
+      body.querySelectorAll('.tabs button').forEach(function(b){ b.onclick=function(){ tab=b.getAttribute('data-t'); draw(); }; });
+    }
+    draw();
+  }
+
+  function tripCard(t){
+    var cover=t.coverPhotoId?('background-image:url('+API+'/photos/'+t.coverPhotoId+')'):'';
+    var money=[];
+    if(t.totalCents!=null) money.push('<div class="trip-row"><span>Total</span><span><b>'+rand(t.totalCents)+'</b></span></div>');
+    if(t.depositCents) money.push('<div class="trip-row"><span>Refundable deposit</span><span>'+rand(t.depositCents)+'</span></div>');
+    if(t.amountOwingCents) money.push('<div class="trip-row"><span>Balance due before check-in</span><span>'+rand(t.amountOwingCents)+'</span></div>');
+    // Arrival info only appears once a booking is confirmed.
+    var info=[];
+    if(t.status==='confirmed'){
+      if(t.accessCode) info.push('🔑 Access code: <b>'+esc(t.accessCode)+'</b>');
+      if(t.wifiName) info.push('📶 Wi-Fi: <b>'+esc(t.wifiName)+'</b>');
+      if(t.parking) info.push('🅿️ Parking: '+esc(t.parking));
+    }
+    var pending=t.status==='pending'?'<div class="trip-info" style="background:#fff7e6;border-color:#f0d9a8;color:#8a5a00">This booking is awaiting payment. Once payment is received it’s confirmed and your dates are held.</div>':'';
+    return '<div class="trip">'+
+      '<div class="trip-thumb" style="'+cover+'"></div>'+
+      '<div class="trip-body">'+
+        '<div class="trip-nm">'+esc(t.propertyName||'Stay')+(t.unitName?(' · Unit '+esc(t.unitName)):'')+' <span class="badge '+t.status+'">'+esc(t.status)+'</span></div>'+
+        '<div class="trip-sub">'+(t.address?('📍 '+esc(t.address)):'')+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div>'+
+        '<div class="trip-row"><span>📅 '+esc(t.checkIn)+' → '+esc(t.checkOut)+'</span><span>'+t.nights+' night'+(t.nights===1?'':'s')+'</span></div>'+
+        '<div class="trip-sub">Check-in from '+esc(t.checkInTime)+' · checkout by '+esc(t.checkOutTime)+'</div>'+
+        (money.length?('<div style="margin-top:6px">'+money.join('')+'</div>'):'')+
+        (info.length?('<div class="trip-info">'+info.join('<br>')+'</div>'):'')+
+        pending+
+      '</div>'+
+    '</div>';
+  }
+
+  loadSession(); renderAcct(); refreshAccount();
   load();
 })();
 </script>

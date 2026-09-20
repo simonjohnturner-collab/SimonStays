@@ -12,6 +12,7 @@ const locks = require('../utils/locks');
 const { DEFAULT_CANCELLATION_POLICY } = require('../utils/policy');
 const { sendMail } = require('../utils/mailer');
 const { invoiceHtml } = require('../utils/invoiceHtml');
+const { optionalGuest } = require('../middleware/auth');
 
 // The host's EFT details for the invoice (same shape as /public/host).
 async function eftFor(hostId) {
@@ -276,7 +277,7 @@ router.post('/quote', async (req, res, next) => {
 
 // POST /public/book — create a PENDING hold (does NOT block the calendar). The
 // calendar is only blocked once payment succeeds (POST /public/book/:id/pay).
-router.post('/book', async (req, res, next) => {
+router.post('/book', optionalGuest, async (req, res, next) => {
   try {
     const hostId = await publicHostId();
     const b = req.body || {};
@@ -318,10 +319,20 @@ router.post('/book', async (req, res, next) => {
     const comments = `Website booking ${ref} (awaiting payment) · Contact: ${contact} · Guests: ${b.guests || '—'} · Rental R${(q.rentalCents / 100).toFixed(2)}${depoTxt} · Payable R${(payableCents / 100).toFixed(2)}${payTxt}${b.message ? ` · Note: ${b.message}` : ''}`;
 
     const billing = (b.billing || b.billingDetails || '').trim() || null;
+    const guestEmail = (b.guestEmail || '').trim().toLowerCase() || null;
+    const guestPhone = (b.guestPhone || '').trim() || null;
+    // Link to a signed-in guest account if one made this booking; otherwise fall
+    // back to matching an existing account by email so it still shows in "my trips".
+    let guestAccountId = req.guestId || null;
+    if (!guestAccountId && guestEmail) {
+      const acct = await prisma.guestAccount.findUnique({ where: { email: guestEmail }, select: { id: true } });
+      if (acct) guestAccountId = acct.id;
+    }
     const booking = await prisma.booking.create({
       data: {
         unitId: unit.id, hostId: unit.property.hostId, source: 'website', status: 'pending',
         guestName: b.guestName, ref, billingDetails: billing,
+        guestEmail, guestPhone, totalCents: payableCents, guestAccountId,
         termsAcceptedAt: b.acceptedTerms ? new Date() : null,
         checkIn: dateOnly(iso(b.checkIn)), checkOut: dateOnly(iso(b.checkOut)),
         comments, paymentStatus: split ? 'partial' : 'unpaid', amountOwingCents: owingCents,

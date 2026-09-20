@@ -26,6 +26,9 @@ app.use('/feed', require('./routes/feed'));
 // catch-all routers so it isn't shadowed. Its write routes auth themselves.
 app.use('/photos', require('./routes/photos'));
 app.use('/listings', require('./routes/listings'));
+// Public guest accounts (shopfront login → "my trips"). Mount before /public so
+// its paths are matched first (the /public router has no /account/* routes).
+app.use('/public/account', require('./routes/guestAuth'));
 // Public shopfront API (no auth) — mount before the auth'd catch-all routers.
 app.use('/public', require('./routes/public'));
 
@@ -86,6 +89,7 @@ app.use('/smartlocks', require('./routes/smartlocks'));
 app.use('/groups', require('./routes/groups'));
 app.use('/properties', require('./routes/properties'));
 app.use('/units', require('./routes/units'));
+app.use('/market', require('./routes/market'));
 // channels + bookings routers mount their own /units/:unitId/... and top-level paths
 app.use('/', require('./routes/channels'));
 app.use('/', require('./routes/bookings'));
@@ -106,6 +110,9 @@ if (require.main === module) {
   // plus an optional "guest left behind" photo in the Guests section.
   require('./utils/formMigrations').normaliseCleanForms().catch((e) => console.error('[forms] migration failed', e.message));
   require('./utils/formMigrations').seedServiceProviders().catch((e) => console.error('[providers] seed failed', e.message));
+  // Lift guest email/phone out of old website bookings' comments so guests can
+  // see their previous trips, and link them to any registered accounts.
+  require('./utils/guestBackfill').backfillGuestContacts().catch((e) => console.error('[guestBackfill] failed', e.message));
 
   const expr = process.env.SYNC_CRON || '*/30 * * * *';
   if (cron.validate(expr)) {
@@ -134,6 +141,23 @@ if (require.main === module) {
     console.log(`Zoho mail poll scheduled: ${pollExpr} (${mailPoller.config().folder})`);
   } else if (wantMailCron && !mailPoller.enabled()) {
     console.warn('[mailPoller] NOT scheduled — ZOHO_IMAP_USER / ZOHO_IMAP_PASSWORD are not set, so guest-name polling is disabled. Set them in this service\'s Environment.');
+  }
+
+  // Competitor market probe (the "building fill" gauge). Reads other operators'
+  // live booking engines once a day to track their availability + prices. Off by
+  // default; enable by setting MARKET_CRON (e.g. "20 3 * * *"). No-ops when no
+  // active SiteMinder-TBB competitors are registered, so it's safe to leave on.
+  const marketProbe = require('./utils/marketProbe');
+  const marketExpr = process.env.MARKET_CRON;
+  if (marketExpr && cron.validate(marketExpr)) {
+    cron.schedule(marketExpr, async () => {
+      try {
+        const results = await marketProbe.probeAll();
+        const rows = results.reduce((n, r) => n + (r.rows || 0), 0);
+        if (results.length) console.log(`[market] probed ${results.length} competitor(s), ${rows} row(s)`);
+      } catch (e) { console.error('[market] probe run failed', e.message); }
+    });
+    console.log(`Market probe scheduled: ${marketExpr}`);
   }
 }
 
