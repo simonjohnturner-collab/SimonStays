@@ -22,7 +22,7 @@ export default function MarketView({ onClose }) {
   const [noneYet, setNoneYet] = useState(false);
   const [data, setData] = useState(null); // { capturedDate, roomTypes: [...] }
   const [selected, setSelected] = useState(null); // room type name
-  const [days, setDays] = useState(30);
+  const [days, setDays] = useState(60);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const pollRef = useRef(null);
@@ -63,28 +63,51 @@ export default function MarketView({ onClose }) {
 
   async function probeNow() {
     if (!competitor) return;
-    setBusy(true); setMsg('Probing CAG’s live engine… this takes a minute or two. The chart will fill in when it’s done.');
+    setBusy(true); setMsg('Probing CAG’s live engine… nights fill in as they come back (a minute or two for the full window).');
     try {
       await api.marketProbe(competitor.id, days);
-      // Poll for the fresh capture (probe runs server-side, fire-and-forget).
-      let tries = 0;
-      const poll = async () => {
-        tries += 1;
-        try {
-          const d = await api.marketPrices(competitor.id, days);
-          const today = new Date().toISOString().slice(0, 10);
-          if (d.capturedDate === today && d.roomTypes?.length) {
-            setData(d);
-            if (!d.roomTypes.some((r) => r.roomType === selected)) setSelected(d.roomTypes[0].roomType);
-            setMsg(`Updated from CAG’s live rates (${d.roomTypes.length} room types).`);
+    } catch (e) { setMsg(e.message); setBusy(false); return; }
+    // The probe runs server-side and writes nights one at a time, so keep polling
+    // and grow the chart until the night count stops rising (probe finished) or we
+    // reach the window — not just until the first night appears.
+    let tries = 0, stable = 0, lastNights = -1;
+    const poll = async () => {
+      tries += 1;
+      try {
+        const d = await api.marketPrices(competitor.id, days);
+        const today = new Date().toISOString().slice(0, 10);
+        if (d.capturedDate === today && d.roomTypes?.length) {
+          setData(d); // live-growing chart
+          if (!d.roomTypes.some((r) => r.roomType === selected)) setSelected(d.roomTypes[0].roomType);
+          const nights = Math.max(...d.roomTypes.map((r) => r.series.length));
+          if (nights === lastNights) stable += 1; else { stable = 0; lastNights = nights; }
+          if (stable >= 2 || nights >= days) {
+            setMsg(`Updated from CAG’s live rates — ${nights} nights, ${d.roomTypes.length} room types.`);
             setBusy(false); return;
           }
-        } catch (_) { /* keep polling */ }
-        if (tries < 18) pollRef.current = setTimeout(poll, 10000);
-        else { setMsg('Still probing — press Refresh in a moment.'); setBusy(false); }
-      };
-      pollRef.current = setTimeout(poll, 10000);
-    } catch (e) { setMsg(e.message); setBusy(false); }
+          setMsg(`Probing… ${nights} nights so far.`);
+        }
+      } catch (_) { /* keep polling */ }
+      if (tries < 60) pollRef.current = setTimeout(poll, 6000);
+      else { setMsg('Probe is taking a while — press ↻ Refresh to pull the latest.'); setBusy(false); }
+    };
+    pollRef.current = setTimeout(poll, 6000);
+  }
+
+  // Total units per room type isn't published by the engine, so it's the host's
+  // own estimate — stored on the competitor and used to weight the market view.
+  async function saveUnitCount(roomType, value) {
+    if (!competitor) return;
+    const raw = String(value).trim();
+    const n = raw === '' ? null : Math.max(0, Math.round(Number(raw)));
+    if (n != null && Number.isNaN(n)) return;
+    const merged = { ...(competitor.unitCounts || {}) };
+    if (n == null) delete merged[roomType]; else merged[roomType] = n;
+    try {
+      const { competitor: updated } = await api.marketUpdateCompetitor(competitor.id, { unitCounts: merged });
+      setCompetitor(updated);
+      setData((d) => d ? { ...d, roomTypes: d.roomTypes.map((r) => (r.roomType === roomType ? { ...r, unitCount: n } : r)) } : d);
+    } catch (e) { setMsg(e.message); }
   }
 
   const roomTypes = data?.roomTypes || [];
@@ -105,6 +128,7 @@ export default function MarketView({ onClose }) {
               <option value={14}>Next 14 nights</option>
               <option value={30}>Next 30 nights</option>
               <option value={60}>Next 60 nights</option>
+              <option value={90}>Next 90 nights</option>
             </select>
             <button className="ghost" onClick={() => loadPrices(competitor)} disabled={busy}>↻ Refresh</button>
             <button className="ghost" onClick={probeNow} disabled={busy}>{busy ? 'Probing…' : '📡 Probe now'}</button>
@@ -151,9 +175,9 @@ export default function MarketView({ onClose }) {
 
             {current && <PriceChart series={current.series} roomType={current.roomType.trim()} />}
 
-            <SummaryTable roomTypes={roomTypes} />
+            <SummaryTable roomTypes={roomTypes} onSaveUnits={saveUnitCount} />
             <p className="muted small mk-note">
-              Occupancy isn’t published by the engine, so this tracks price instead — CAG’s revenue management moves rates with demand, so rising prices and shrinking promos mean the building is filling. Probe daily (it runs automatically at 03:20) to build the trend.
+              <b>Units</b> is your own estimate per room type (CAG doesn’t publish it) — type a number to set it; it weights the market view. Live <i>available</i> units per category aren’t exposed by the engine yet (see note below). Occupancy itself isn’t published, so this tracks price: CAG’s revenue management moves rates with demand, so rising prices and shrinking promos mean the building is filling. The daily probe (03:20) builds the trend.
             </p>
           </>
         )}
@@ -290,14 +314,14 @@ function Tooltip({ x, y, W, p }) {
   );
 }
 
-function SummaryTable({ roomTypes }) {
+function SummaryTable({ roomTypes, onSaveUnits }) {
   const rows = roomTypes.map((r) => {
     const std = r.series.map((p) => p.priceCents).filter((v) => v != null);
     const promo = r.series.map((p) => p.promoPriceCents).filter((v) => v != null);
     const med = median(std), lo = std.length ? Math.min(...std) : null, hi = std.length ? Math.max(...std) : null;
     const medPromo = median(promo);
     const disc = med != null && medPromo != null && med > 0 ? Math.round((1 - medPromo / med) * 100) : null;
-    return { roomType: r.roomType.trim(), unitCount: r.unitCount, med, lo, hi, disc };
+    return { roomType: r.roomType, label: r.roomType.trim(), unitCount: r.unitCount, med, lo, hi, disc };
   });
   return (
     <table className="mk-table">
@@ -307,8 +331,19 @@ function SummaryTable({ roomTypes }) {
       <tbody>
         {rows.map((r) => (
           <tr key={r.roomType}>
-            <td>{r.roomType}</td>
-            <td className="mk-num">{r.unitCount ?? '—'}</td>
+            <td>{r.label}</td>
+            <td className="mk-num">
+              <input
+                className="mk-units-in"
+                type="number"
+                min="0"
+                defaultValue={r.unitCount ?? ''}
+                placeholder="—"
+                title="Your estimate of CAG's units of this type"
+                onBlur={(e) => onSaveUnits(r.roomType, e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+              />
+            </td>
             <td className="mk-num">{r.med != null ? fmtR(r.med).replace('.00', '') : '—'}</td>
             <td className="mk-num">{r.lo != null ? fmtR(r.lo).replace('.00', '') : '—'}</td>
             <td className="mk-num">{r.hi != null ? fmtR(r.hi).replace('.00', '') : '—'}</td>

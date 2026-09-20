@@ -30,7 +30,7 @@ const UA =
 
 function config() {
   return {
-    windowDays: Number(process.env.MARKET_WINDOW_DAYS) || 30, // nights ahead to probe
+    windowDays: Number(process.env.MARKET_WINDOW_DAYS) || 90, // nights ahead to probe (daily cron)
     stayNights: 1, // each probe is a 1-night stay (check-in -> +1 day)
     reqDelayMs: Number(process.env.MARKET_REQ_DELAY_MS) || 250, // politeness between calls
   };

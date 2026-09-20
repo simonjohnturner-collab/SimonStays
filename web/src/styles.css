@@ -806,5 +806,7 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .mk-table th { background:#fafbfc; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); }
 .mk-table tr:last-child td { border-bottom:none; }
 .mk-table .mk-num { text-align:right; font-variant-numeric:tabular-nums; }
+.mk-units-in { width:56px; text-align:right; padding:3px 6px; border:1px solid var(--line); border-radius:6px; font:inherit; font-variant-numeric:tabular-nums; }
+.mk-units-in:focus { outline:none; border-color:#2a78d6; }
 .mk-note { margin-top:12px; }
 @media (max-width:640px) { .mk-tiles { grid-template-columns:repeat(2,1fr); } }
