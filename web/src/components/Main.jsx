@@ -20,6 +20,7 @@ import PaymentHistoryView from './PaymentHistoryView.jsx';
 import SmartLockView from './SmartLockView.jsx';
 import AccountView from './AccountView.jsx';
 import AdminView from './AdminView.jsx';
+import MarketView from './MarketView.jsx';
 
 const WINDOW_DAYS = 35;
 
@@ -49,6 +50,7 @@ export default function Main() {
   const [smartLocks, setSmartLocks] = useState(false);
   const [account, setAccount] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [market, setMarket] = useState(false);
   const [formsInitialId, setFormsInitialId] = useState(null); // open Forms straight to this submission
   const [focus, setFocus] = useState(null); // { unitId, bookingId, key } — jump target
   function openFormsSubmission(id) { setFormsInitialId(id || null); setForms(true); }
@@ -194,6 +196,9 @@ export default function Main() {
   if (adminOpen) {
     return withChrome(<AdminView onClose={() => setAdminOpen(false)} />);
   }
+  if (market) {
+    return withChrome(<MarketView onClose={() => setMarket(false)} />);
+  }
   if (invoices) {
     return withChrome(<InvoicesView initialInvoiceId={invoices.initialId} onClose={() => setInvoices(null)} />);
   }
@@ -325,6 +330,7 @@ export default function Main() {
           onEditBooking={(booking, unit) => { setMenuOpen(false); setBookingCtx({ booking, unit }); }}
           onOpenInvoices={() => { setMenuOpen(false); setInvoices({ initialId: null }); }}
           onOpenPricing={() => { setMenuOpen(false); setPricingMatrix(true); }}
+          onOpenMarket={() => { setMenuOpen(false); setMarket(true); }}
           onOpenListings={() => { setMenuOpen(false); setListings(true); }}
           onOpenForms={() => { setMenuOpen(false); setForms(true); }}
           onOpenCleaners={() => { setMenuOpen(false); setProvidersOpen(true); }}
