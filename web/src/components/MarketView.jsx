@@ -8,8 +8,9 @@ import { fmtR } from '../money.js';
 // Occupancy isn't published by the engine; CAG's own dynamic pricing is the
 // demand signal we track instead.
 
-const C_STD = '#2a78d6';   // standard rate  (categorical slot 1 — validated)
-const C_PROMO = '#eb6834';  // promo rate     (categorical slot 2 — validated)
+const C_STD = '#2a78d6';   // CAG standard rate  (categorical slot 1 — validated)
+const C_PROMO = '#eb6834';  // CAG promo rate     (categorical slot 2 — validated)
+const C_MINE = '#1baf7a';   // my price           (categorical slot 3 — validated)
 const CAG_SEED = { name: 'CAG — The Vantage', building: 'The Vantage, Rosebank', source: 'SITEMINDER_TBB', channelCode: 'TheVantageDirect', currency: 'ZAR' };
 
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -26,6 +27,26 @@ export default function MarketView({ onClose }) {
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const pollRef = useRef(null);
+  const [myUnits, setMyUnits] = useState([]);
+  const [myUnitId, setMyUnitId] = useState('');
+  const [myRates, setMyRates] = useState({}); // { iso: cents } — my own nightly rate
+
+  // My units, for the "overlay my price" comparison line.
+  useEffect(() => {
+    api.listProperties()
+      .then(({ properties }) => setMyUnits((properties || []).flatMap((p) => p.units.map((u) => ({ id: u.id, label: `${p.name} · ${u.name}` })))))
+      .catch(() => {});
+  }, []);
+
+  // My nightly rates across the window (from my rate card / overrides).
+  useEffect(() => {
+    if (!myUnitId) { setMyRates({}); return; }
+    const from = new Date().toISOString().slice(0, 10);
+    const t = new Date(); t.setUTCDate(t.getUTCDate() + days);
+    api.getNightRates(myUnitId, from, t.toISOString().slice(0, 10))
+      .then(({ nights }) => { const m = {}; (nights || []).forEach((nt) => { if (nt.cents != null) m[nt.date] = nt.cents; }); setMyRates(m); })
+      .catch(() => setMyRates({}));
+  }, [myUnitId, days]);
 
   async function loadCompetitor() {
     const { competitors } = await api.marketCompetitors();
@@ -173,7 +194,16 @@ export default function MarketView({ onClose }) {
               ))}
             </div>
 
-            {current && <PriceChart series={current.series} roomType={current.roomType.trim()} />}
+            <div className="mk-mine-row">
+              <label>Overlay my price:</label>
+              <select value={myUnitId} onChange={(e) => setMyUnitId(e.target.value)}>
+                <option value="">— none —</option>
+                {myUnits.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+              </select>
+              {myUnitId && !Object.keys(myRates).length && <span className="muted small">No rate card on this unit yet — set its pricing to compare.</span>}
+            </div>
+
+            {current && <PriceChart {...buildLines(current, myUnitId, myRates)} title={current.roomType.trim()} />}
 
             <SummaryTable roomTypes={roomTypes} onSaveUnits={saveUnitCount} />
             <p className="muted small mk-note">
@@ -214,29 +244,35 @@ function computeTiles(roomTypes) {
   return { lo, hi, loName, hiName, discPct };
 }
 
-// ---- SVG line chart: standard vs promo across the forward nights ----
-function PriceChart({ series, roomType }) {
-  const [hover, setHover] = useState(null); // index
-  const svgRef = useRef(null);
-  const W = 760, H = 300, ml = 52, mr = 74, mt = 18, mb = 30;
-  const plotW = W - ml - mr, plotH = H - mt - mb;
+// Build the chart's x-domain (dates) and its lines: CAG standard/promo + my price.
+function buildLines(current, myUnitId, myRates) {
+  const dates = current.series.map((p) => p.date);
+  const stdBy = {}, promoBy = {};
+  current.series.forEach((p) => { if (p.priceCents != null) stdBy[p.date] = p.priceCents; if (p.promoPriceCents != null) promoBy[p.date] = p.promoPriceCents; });
+  const lines = [{ key: 'std', label: 'CAG standard', color: C_STD, byDate: stdBy }];
+  if (Object.keys(promoBy).length) lines.push({ key: 'promo', label: 'CAG promo', color: C_PROMO, dash: '4 3', byDate: promoBy });
+  if (myUnitId && Object.keys(myRates).length) lines.push({ key: 'mine', label: 'My price', color: C_MINE, byDate: myRates });
+  return { dates, lines };
+}
 
-  const pts = series.filter((p) => p.priceCents != null);
-  const hasPromo = pts.some((p) => p.promoPriceCents != null);
-  const vals = pts.flatMap((p) => [p.priceCents, p.promoPriceCents].filter((v) => v != null));
-  if (!pts.length || !vals.length) return <div className="mk-chart muted small">No price data for this room type.</div>;
+// ---- SVG line chart: any number of price lines across the forward nights ----
+function PriceChart({ dates, lines, title }) {
+  const [hover, setHover] = useState(null); // date index
+  const svgRef = useRef(null);
+  const W = 760, H = 300, ml = 52, mr = 92, mt = 18, mb = 30;
+  const plotW = W - ml - mr, plotH = H - mt - mb;
+  const n = dates.length;
+  const vals = lines.flatMap((l) => dates.map((d) => l.byDate[d]).filter((v) => v != null));
+  if (!n || !vals.length) return <div className="mk-chart muted small">No price data yet.</div>;
 
   const rawMin = Math.min(...vals), rawMax = Math.max(...vals);
-  const pad = Math.max(50_00, (rawMax - rawMin) * 0.15) || 100_00;
-  const yMin = Math.max(0, Math.floor((rawMin - pad) / 100_00) * 100_00);
-  const yMax = Math.ceil((rawMax + pad) / 100_00) * 100_00;
-  const n = pts.length;
+  const pad = Math.max(5000, (rawMax - rawMin) * 0.15) || 10000;
+  const yMin = Math.max(0, Math.floor((rawMin - pad) / 10000) * 10000);
+  const yMax = Math.ceil((rawMax + pad) / 10000) * 10000;
   const x = (i) => n === 1 ? ml + plotW / 2 : ml + (i / (n - 1)) * plotW;
   const y = (v) => mt + plotH - ((v - yMin) / (yMax - yMin || 1)) * plotH;
-
-  const line = (key) => pts.map((p, i) => (p[key] != null ? `${i === 0 || pts[i - 1][key] == null ? 'M' : 'L'}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}` : '')).join(' ');
-  const yTicks = 4;
-  const ticks = Array.from({ length: yTicks + 1 }, (_, i) => yMin + ((yMax - yMin) * i) / yTicks);
+  const path = (l) => dates.map((d, i) => { const v = l.byDate[d]; if (v == null) return ''; const prev = i > 0 ? l.byDate[dates[i - 1]] : null; return `${prev == null ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`; }).join(' ');
+  const ticks = Array.from({ length: 5 }, (_, i) => yMin + ((yMax - yMin) * i) / 4);
   const xEvery = Math.max(1, Math.round(n / 8));
 
   function onMove(e) {
@@ -247,41 +283,30 @@ function PriceChart({ series, roomType }) {
     for (let i = 0; i < n; i++) { const d = Math.abs(x(i) - vx); if (d < bd) { bd = d; best = i; } }
     setHover(best);
   }
-
-  const hp = hover != null ? pts[hover] : null;
+  const hd = hover != null ? dates[hover] : null;
 
   return (
     <div className="mk-chart">
       <div className="mk-legend">
-        <span className="mk-leg"><i style={{ background: C_STD }} /> Standard rate</span>
-        {hasPromo && <span className="mk-leg"><i style={{ background: C_PROMO }} /> Promo rate</span>}
-        <span className="mk-leg-rt">{roomType}</span>
+        {lines.map((l) => <span key={l.key} className="mk-leg"><i style={{ background: l.color }} /> {l.label}</span>)}
+        <span className="mk-leg-rt">{title}</span>
       </div>
-      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="mk-svg" onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label={`CAG price for ${roomType}`}>
-        {/* weekend markers */}
-        {pts.map((p, i) => (dow(p.date) === 6 || dow(p.date) === 0) ? <line key={`wk${i}`} x1={x(i)} x2={x(i)} y1={mt} y2={mt + plotH} className="mk-weekend" /> : null)}
-        {/* y grid + labels */}
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="mk-svg" onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label={`Price comparison for ${title}`}>
+        {dates.map((d, i) => (dow(d) === 6 || dow(d) === 0) ? <line key={`wk${i}`} x1={x(i)} x2={x(i)} y1={mt} y2={mt + plotH} className="mk-weekend" /> : null)}
         {ticks.map((t, i) => (
           <g key={`y${i}`}>
             <line x1={ml} x2={ml + plotW} y1={y(t)} y2={y(t)} className="mk-grid" />
             <text x={ml - 8} y={y(t) + 4} className="mk-ylab">{fmtR(t).replace('.00', '')}</text>
           </g>
         ))}
-        {/* x labels */}
-        {pts.map((p, i) => i % xEvery === 0 ? <text key={`x${i}`} x={x(i)} y={mt + plotH + 20} className="mk-xlab">{shortDate(p.date)}</text> : null)}
-        {/* lines */}
-        {hasPromo && <path d={line('promoPriceCents')} className="mk-path" style={{ stroke: C_PROMO }} strokeDasharray="4 3" />}
-        <path d={line('priceCents')} className="mk-path" style={{ stroke: C_STD }} />
-        {/* end direct labels */}
-        <EndLabel pts={pts} i={n - 1} key_="priceCents" x={x} y={y} color={C_STD} text="Standard" />
-        {hasPromo && <EndLabel pts={pts} i={n - 1} key_="promoPriceCents" x={x} y={y} color={C_PROMO} text="Promo" />}
-        {/* hover */}
-        {hp && (
+        {dates.map((d, i) => i % xEvery === 0 ? <text key={`x${i}`} x={x(i)} y={mt + plotH + 20} className="mk-xlab">{shortDate(d)}</text> : null)}
+        {lines.map((l) => <path key={l.key} d={path(l)} className="mk-path" style={{ stroke: l.color }} strokeDasharray={l.dash || undefined} />)}
+        {lines.map((l) => <EndLabel key={`e${l.key}`} dates={dates} line={l} x={x} y={y} />)}
+        {hd && (
           <g>
             <line x1={x(hover)} x2={x(hover)} y1={mt} y2={mt + plotH} className="mk-cross" />
-            {hp.priceCents != null && <circle cx={x(hover)} cy={y(hp.priceCents)} r="4" style={{ fill: C_STD }} className="mk-dot" />}
-            {hp.promoPriceCents != null && <circle cx={x(hover)} cy={y(hp.promoPriceCents)} r="4" style={{ fill: C_PROMO }} className="mk-dot" />}
-            <Tooltip x={x(hover)} y={mt} W={W} p={hp} />
+            {lines.map((l) => l.byDate[hd] != null ? <circle key={`d${l.key}`} cx={x(hover)} cy={y(l.byDate[hd])} r="4" style={{ fill: l.color }} className="mk-dot" /> : null)}
+            <Tooltip x={x(hover)} y={mt} W={W} date={hd} lines={lines} />
           </g>
         )}
       </svg>
@@ -289,27 +314,29 @@ function PriceChart({ series, roomType }) {
   );
 }
 
-function EndLabel({ pts, i, key_, x, y, color, text }) {
-  // last non-null point of the series
-  let j = i; while (j >= 0 && pts[j][key_] == null) j -= 1;
+function EndLabel({ dates, line, x, y }) {
+  let j = dates.length - 1; while (j >= 0 && line.byDate[dates[j]] == null) j -= 1;
   if (j < 0) return null;
+  const v = line.byDate[dates[j]];
   return (
     <g>
-      <circle cx={x(j) + 8} cy={y(pts[j][key_])} r="3" style={{ fill: color }} />
-      <text x={x(j) + 15} y={y(pts[j][key_]) + 4} className="mk-endlab">{text}</text>
+      <circle cx={x(j) + 8} cy={y(v)} r="3" style={{ fill: line.color }} />
+      <text x={x(j) + 14} y={y(v) + 4} className="mk-endlab">{line.label.replace('CAG ', '')}</text>
     </g>
   );
 }
 
-function Tooltip({ x, y, W, p }) {
-  const w = 132, h = p.promoPriceCents != null ? 56 : 40;
+function Tooltip({ x, y, W, date, lines }) {
+  const rows = lines.filter((l) => l.byDate[date] != null);
+  const w = 152, h = 20 + rows.length * 15;
   const tx = Math.min(Math.max(x + 10, 4), W - w - 4);
   return (
     <g className="mk-tip" pointerEvents="none">
       <rect x={tx} y={y + 4} width={w} height={h} rx="6" className="mk-tip-box" />
-      <text x={tx + 10} y={y + 21} className="mk-tip-date">{new Date(p.date + 'T12:00:00Z').toUTCString().slice(0, 11)}</text>
-      <text x={tx + 10} y={y + 37} className="mk-tip-row"><tspan style={{ fill: C_STD }}>●</tspan> {p.priceCents != null ? fmtR(p.priceCents).replace('.00', '') : '—'}</text>
-      {p.promoPriceCents != null && <text x={tx + 10} y={y + 51} className="mk-tip-row"><tspan style={{ fill: C_PROMO }}>●</tspan> {fmtR(p.promoPriceCents).replace('.00', '')} promo</text>}
+      <text x={tx + 10} y={y + 20} className="mk-tip-date">{new Date(date + 'T12:00:00Z').toUTCString().slice(0, 11)}</text>
+      {rows.map((l, i) => (
+        <text key={l.key} x={tx + 10} y={y + 35 + i * 15} className="mk-tip-row"><tspan style={{ fill: l.color }}>●</tspan> {l.label}: {fmtR(l.byDate[date]).replace('.00', '')}</text>
+      ))}
     </g>
   );
 }

@@ -783,6 +783,9 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .mk-tab { border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:999px; padding:5px 12px; font-size:12px; cursor:pointer; }
 .mk-tab:hover { border-color:#b9c2cf; }
 .mk-tab.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+.mk-mine-row { display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:13px; }
+.mk-mine-row label { color:var(--muted); }
+.mk-mine-row select { padding:5px 8px; border:1px solid var(--line); border-radius:6px; font:inherit; background:var(--card); }
 .mk-chart { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px 6px; margin-bottom:18px; }
 .mk-legend { display:flex; align-items:center; gap:16px; font-size:12px; color:var(--muted); margin-bottom:2px; }
 .mk-leg { display:inline-flex; align-items:center; gap:6px; }
