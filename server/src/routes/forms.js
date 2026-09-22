@@ -112,7 +112,20 @@ router.get('/submissions/:id', async (req, res) => {
     },
   });
   if (!sub) return res.status(404).json({ error: 'not_found' });
-  res.json({ submission: { ...fmtSub(sub), answers: sub.answers, photos: sub.photos } });
+  res.json({ submission: { ...fmtSub(sub), answers: sub.answers, photos: sub.photos, purchaseSummary: sub.purchaseSummary, purchaseStatus: sub.purchaseStatus } });
+});
+
+// POST /forms/submissions/:id/analyze — (re)read this submission's purchase
+// receipt with the AI analyzer and return the fresh summary. Runs inline so the
+// admin button gets a result; a few seconds is fine for a manual action.
+router.post('/submissions/:id/analyze', async (req, res) => {
+  const sub = await prisma.formSubmission.findFirst({ where: { id: req.params.id, hostId: req.hostId }, select: { id: true } });
+  if (!sub) return res.status(404).json({ error: 'not_found' });
+  const { analyzePurchase, enabled } = require('../utils/purchaseAnalyzer');
+  if (!enabled()) return res.status(400).json({ error: 'no_key', message: 'AI receipt reading is off — set ANTHROPIC_API_KEY in the server environment to enable it.' });
+  await analyzePurchase(sub.id);
+  const fresh = await prisma.formSubmission.findFirst({ where: { id: sub.id, hostId: req.hostId }, select: { purchaseSummary: true, purchaseStatus: true } });
+  res.json({ purchaseSummary: fresh && fresh.purchaseSummary, purchaseStatus: fresh && fresh.purchaseStatus });
 });
 
 router.patch('/submissions/:id', async (req, res) => {

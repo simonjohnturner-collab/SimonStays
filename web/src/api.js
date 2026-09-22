@@ -149,6 +149,7 @@ export const api = {
   getFormSubmission: (id) => req('GET', `/forms/submissions/${id}`),
   updateFormSubmission: (id, data) => req('PATCH', `/forms/submissions/${id}`, data),
   deleteFormSubmission: (id) => req('DELETE', `/forms/submissions/${id}`),
+  analyzePurchase: (id) => req('POST', `/forms/submissions/${id}/analyze`),
 
   // competitor market intelligence (the "building fill" / market-watch view)
   marketCompetitors: () => req('GET', '/market/competitors'),

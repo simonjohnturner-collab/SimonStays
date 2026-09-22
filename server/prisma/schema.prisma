@@ -361,8 +361,40 @@ model FormSubmission {
   photos           Photo[]
   createdAt        DateTime  @default(now())
 
+  // AI receipt/till-slip analysis of any purchase photos on this submission.
+  purchaseSummary  Json?     // { merchant, purchaseDate, currency, items[], totalCents, totalsMatch, summary, model, generatedAt }
+  purchaseStatus   String?   // pending | done | failed | no_key | none
+  purchaseItems    PurchaseItem[]
+
   @@index([hostId, type, createdAt])
   @@index([propertyId])
+}
+
+// One extracted line item from a cleaner's purchase receipt. Normalised (not just
+// JSON on the submission) so we can trend spend over time — per cleaner, unit,
+// property or category — and track when durable items were last replaced.
+model PurchaseItem {
+  id             String         @id @default(uuid())
+  hostId         String
+  submissionId   String
+  submission     FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  propertyId     String?
+  unitId         String?
+  cleanerName    String?
+  purchasedAt    DateTime // receipt date when readable, else the submission date
+  name           String // item text as printed on the slip
+  category       String? // normalised bucket (Cleaning supplies, Linen & towels, …)
+  quantity       Float?         @default(1)
+  unitPriceCents Int?
+  lineTotalCents Int?
+  currency       String?        @default("ZAR")
+  isReplacement  Boolean        @default(false) // durable item (kettle, iron, linen) vs consumable
+  createdAt      DateTime       @default(now())
+
+  @@index([hostId, purchasedAt])
+  @@index([unitId, category])
+  @@index([propertyId, category])
+  @@index([submissionId])
 }
 
 model ChannelConnection {

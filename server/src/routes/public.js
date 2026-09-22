@@ -524,6 +524,13 @@ router.post('/forms/:id/finalize', async (req, res, next) => {
     if (missing.length) return res.status(400).json({ error: 'photos_required', message: 'Please add the required photos.', missing });
     if (sub.status === 'incomplete') await prisma.formSubmission.update({ where: { id: sub.id }, data: { status: 'new' } });
     res.json({ ok: true });
+
+    // Fire-and-forget: if this clean has a purchase receipt photo, read it with
+    // the AI receipt analyzer (after responding, so the cleaner isn't kept waiting).
+    try {
+      const { analyzePurchase, hasPurchasePhotos } = require('../utils/purchaseAnalyzer');
+      if (hasPurchasePhotos(sub.photos)) analyzePurchase(sub.id).catch(() => {});
+    } catch (e) { /* analyzer optional */ }
   } catch (e) { next(e); }
 });
 
