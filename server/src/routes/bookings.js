@@ -115,16 +115,39 @@ router.get('/bookings/search', async (req, res) => {
   res.json({ results });
 });
 
-// Payment fields: paymentStatus ('paid'|'partial'|'unpaid') drives paid (fully paid only).
+// Payment fields. Three amounts drive it:
+//   quotedCents      — what the guest was actually quoted (source of truth for owed)
+//   amountPaidCents  — what they've paid so far
+//   amountOwingCents — outstanding, DERIVED here as quoted − paid (kept for board/invoice)
+// paymentStatus ('paid'|'partial'|'unpaid') drives `paid` (fully paid only).
 function paymentFields(b) {
   const out = {};
+  const toCents = (v) => (v === '' || v == null ? null : Math.round(Number(v)));
   if ('paymentStatus' in b) {
     out.paymentStatus = ['paid', 'partial', 'unpaid'].includes(b.paymentStatus) ? b.paymentStatus : 'unpaid';
     out.paid = out.paymentStatus === 'paid';
   } else if ('paid' in b) {
     out.paid = !!b.paid; out.paymentStatus = b.paid ? 'paid' : 'unpaid';
   }
-  if ('amountOwingCents' in b) out.amountOwingCents = b.amountOwingCents === '' || b.amountOwingCents == null ? null : Math.round(Number(b.amountOwingCents));
+  if ('quotedCents' in b) out.quotedCents = toCents(b.quotedCents);
+  if ('amountPaidCents' in b) out.amountPaidCents = toCents(b.amountPaidCents);
+
+  const status = out.paymentStatus;
+  const quoted = 'quotedCents' in b ? toCents(b.quotedCents) : undefined;
+  const paidAmt = 'amountPaidCents' in b ? toCents(b.amountPaidCents) : undefined;
+  if (status === 'paid') {
+    out.amountOwingCents = 0;
+    if (quoted != null) out.amountPaidCents = quoted; // fully paid = the quoted amount
+  } else if (status === 'unpaid') {
+    if (quoted != null) out.amountOwingCents = quoted; // whole quote outstanding
+    else if ('amountOwingCents' in b) out.amountOwingCents = toCents(b.amountOwingCents);
+    if ('amountPaidCents' in b || quoted != null) out.amountPaidCents = 0;
+  } else if (status === 'partial') {
+    if (quoted != null && paidAmt != null) out.amountOwingCents = Math.max(0, quoted - paidAmt);
+    else if ('amountOwingCents' in b) out.amountOwingCents = toCents(b.amountOwingCents);
+  } else if ('amountOwingCents' in b) {
+    out.amountOwingCents = toCents(b.amountOwingCents);
+  }
   return out;
 }
 

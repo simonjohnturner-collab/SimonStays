@@ -139,7 +139,24 @@ td.cell.blue.late { background: #cdb4f0; }        /* late checkout (purple) */
 .insta-row input[type=date] { width: 140px; flex: none; }
 .insta-row select { width: 150px; flex: none; }
 .insta-row input:not([type=date]) { flex: 1; min-width: 60px; }
-.modal-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.modal-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
+/* Booking modal footer: secondary actions sit in an even, wrapping row; Save is a
+   full-width primary button beneath them (no horizontal scroll, consistent sizes). */
+.booking-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.booking-actions button { flex: 1 1 auto; min-width: 120px; white-space: nowrap; }
+.booking-actions .save { flex-basis: 100%; }
+/* Collapsible "Requests & add-ons" block */
+.addons-block { border: 1px solid var(--line); border-radius: 8px; margin: 12px 0 0; }
+.addons-block > summary { cursor: pointer; list-style: none; padding: 8px 12px; font-size: 12px; color: var(--muted); font-weight: 700; }
+.addons-block > summary::-webkit-details-marker { display: none; }
+.addons-block > summary::after { content: '▾'; float: right; }
+.addons-block[open] > summary::after { content: '▴'; }
+.addons-block .checks { padding: 0 12px 10px; margin-top: 4px; }
+/* Payment: the "per pricing schedule" calc line, outstanding note, read-only field */
+.pay-calc { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; background: #f6f8fa; border-radius: 7px; padding: 7px 10px; font-size: 13px; margin-bottom: 6px; }
+.pay-calc > span:first-child { color: var(--muted); font-weight: 600; }
+.pay-out { margin: 8px 0 0; font-size: 14px; color: var(--red); }
+.modal input.ro { background: #f6f8fa; color: var(--ink); font-weight: 700; }
 .msg { margin-top: 10px; font-size: 13px; padding: 8px 10px; border-radius: 7px; }
 .msg.ok { background: #eafaf0; color: var(--green-d); }
 .msg.err { background: #fdeaea; color: var(--red); }

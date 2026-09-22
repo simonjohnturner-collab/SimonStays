@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api.js';
-import { prettyDate } from '../dates.js';
 import { fmtR, centsToRand, randToCents } from '../money.js';
 
 export default function BookingModal({ unit, booking, floating, units = [], groups = [], cleaners = [], onClose, onSaved, onInvoice }) {
@@ -16,14 +15,17 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   const [moveUnitId, setMoveUnitId] = useState(booking?.unitId || ''); // reassign an allocated booking to another unit
   const [groupId, setGroupId] = useState(booking?.pricingGroupId || '');
 
-  // Payment: paid / partial / unpaid
+  // Payment: paid / partial / unpaid, plus the quoted amount and what's been paid.
   const [paymentStatus, setPaymentStatus] = useState(booking?.paymentStatus || (booking?.paid ? 'paid' : 'unpaid'));
-  const [amountOwing, setAmountOwing] = useState(booking?.amountOwingCents != null ? centsToRand(booking.amountOwingCents) : '');
+  const [quoted, setQuoted] = useState(booking?.quotedCents != null ? centsToRand(booking.quotedCents) : '');
+  const [amountPaid, setAmountPaid] = useState(booking?.amountPaidCents != null ? centsToRand(booking.amountPaidCents) : '');
 
   const [earlyCheckIn, setEarlyCheckIn] = useState(booking?.earlyCheckIn || false);
   const [lateCheckOut, setLateCheckOut] = useState(booking?.lateCheckOut || false);
   const [extraMattress, setExtraMattress] = useState(booking?.extraMattress || false);
   const [hairDryer, setHairDryer] = useState(booking?.hairDryer || false);
+  const addonCount = [earlyCheckIn, lateCheckOut, extraMattress, hairDryer].filter(Boolean).length;
+  const [addonsOpen, setAddonsOpen] = useState(addonCount > 0);
 
   const [cleans, setCleans] = useState(
     (booking?.cleans || []).map((c) => ({ date: c.date?.slice(0, 10) || '', paymentMethod: c.paymentMethod || 'prepaid', cleaner: c.cleaner || '' }))
@@ -50,26 +52,27 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
     return () => { cancelled = true; clearTimeout(t); };
   }, [checkIn, checkOut, extraMattress, earlyCheckIn, lateCheckOut, unit?.id]);
 
+  // Three amounts: what the pricing schedule calculates, what we actually quoted,
+  // and what's been paid. Outstanding = quoted − paid (only shown when there's a balance).
+  const calcCents = quote ? quote.totalCents : null;
+  const effQuotedCents = quoted.trim() ? randToCents(quoted) : calcCents; // typed quote, else the calc
+  const paidCents = paymentStatus === 'partial' ? (amountPaid.trim() ? randToCents(amountPaid) : 0) : 0;
+  const outstandingCents = effQuotedCents == null ? null
+    : paymentStatus === 'paid' ? 0
+    : paymentStatus === 'unpaid' ? effQuotedCents
+    : Math.max(0, effQuotedCents - paidCents);
+
   function payload(extra = {}) {
     return {
       guestName, checkIn, checkOut, cleaner, comments,
-      paymentStatus, amountOwingCents: paymentStatus === 'partial' ? randToCents(amountOwing) : null,
+      paymentStatus,
+      quotedCents: effQuotedCents,
+      amountPaidCents: paymentStatus === 'partial' ? paidCents : null,
       earlyCheckIn, lateCheckOut, extraMattress, hairDryer,
       cleans: cleans.filter((c) => c.date || c.cleaner),
       ...(isFloating ? { pricingGroupId: groupId || null } : {}),
       ...extra,
     };
-  }
-
-  async function checkAvail() {
-    if (!checkIn || !checkOut) { setMsg({ text: 'Pick both dates first.', kind: 'err' }); return; }
-    setBusy(true); setMsg({ text: 'Checking channels live…', kind: 'muted' }); setConflicts(null);
-    try {
-      const r = await api.availability(unit.id, checkIn, checkOut);
-      if (r.available) setMsg({ text: `✅ ${unit.name} is free ${prettyDate(checkIn)} → ${prettyDate(checkOut)}.`, kind: 'ok' });
-      else { setMsg({ text: '⛔ Not available.', kind: 'err' }); setConflicts(r.conflicts); }
-    } catch (e) { setMsg({ text: e.message, kind: 'err' }); }
-    finally { setBusy(false); }
   }
 
   async function save(override) {
@@ -136,15 +139,6 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
           <label>Check-in<input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} /></label>
           <label>Check-out<input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} /></label>
         </div>
-        {quote && (
-          <div className="quote-hint">
-            💲 Rate card: <b>{fmtR(quote.totalCents)}</b> · {quote.nights} night{quote.nights > 1 ? 's' : ''} @ {fmtR(quote.avgNightlyCents)}/night
-            {quote.discountPercent ? ` · ${quote.discountPercent}% discount` : ''}
-            {quote.cleaningCents ? ` · clean ${fmtR(quote.cleaningCents)}` : ''}
-            {quote.breakageCents ? ` · breakage ${fmtR(quote.breakageCents)}` : ''}
-          </div>
-        )}
-
         {editing && !isFloating && booking.source === 'manual' && units.length > 0 && (
           <label>Move to a different unit <span className="muted small">(reassigns this booking &amp; blocks the new unit)</span>
             <select value={moveUnitId} onChange={(e) => setMoveUnitId(e.target.value)}>
@@ -172,26 +166,44 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
 
         <fieldset>
           <legend>Payment</legend>
+          <div className="pay-calc">
+            <span>Per pricing schedule</span>
+            <b>{calcCents != null ? fmtR(calcCents) : '—'}</b>
+            {quote && (
+              <span className="muted small">{quote.nights} night{quote.nights > 1 ? 's' : ''} @ {fmtR(quote.avgNightlyCents)}
+                {quote.discountPercent ? ` · ${quote.discountPercent}% off` : ''}
+                {quote.cleaningCents ? ` · clean ${fmtR(quote.cleaningCents)}` : ''}</span>
+            )}
+          </div>
+          <label>Quoted to the guest (R) <span className="muted small">(what you actually charge)</span>
+            <input value={quoted} onChange={(e) => setQuoted(e.target.value)} placeholder={calcCents != null ? centsToRand(calcCents) : '0.00'} />
+          </label>
           <div className="checks wrap">
             <label className="chk"><input type="radio" name="pay" checked={paymentStatus === 'paid'} onChange={() => setPaymentStatus('paid')} /> Paid</label>
             <label className="chk"><input type="radio" name="pay" checked={paymentStatus === 'partial'} onChange={() => setPaymentStatus('partial')} /> Partially paid</label>
             <label className="chk"><input type="radio" name="pay" checked={paymentStatus === 'unpaid'} onChange={() => setPaymentStatus('unpaid')} /> Unpaid (owing)</label>
           </div>
           {paymentStatus === 'partial' && (
-            <label>Amount still owing (R)<input value={amountOwing} onChange={(e) => setAmountOwing(e.target.value)} placeholder="0.00" /></label>
+            <div className="row2">
+              <label>Amount paid (R)<input value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} placeholder="0.00" /></label>
+              <label>Still outstanding<input className="ro" readOnly value={outstandingCents != null ? fmtR(outstandingCents) : '—'} /></label>
+            </div>
+          )}
+          {paymentStatus === 'unpaid' && outstandingCents != null && (
+            <p className="pay-out">Outstanding: <b>{fmtR(outstandingCents)}</b></p>
           )}
           {paymentStatus !== 'paid' && <p className="muted small" style={{ color: 'var(--red)' }}>Money owing — the guest name shows red on the board.</p>}
         </fieldset>
 
-        <fieldset>
-          <legend>Requests & add-ons</legend>
+        <details className="addons-block" open={addonsOpen} onToggle={(e) => setAddonsOpen(e.currentTarget.open)}>
+          <summary>Requests &amp; add-ons{addonCount ? ` · ${addonCount} selected` : ''}</summary>
           <div className="checks wrap">
             <label className="chk"><input type="checkbox" checked={earlyCheckIn} onChange={(e) => setEarlyCheckIn(e.target.checked)} /> Early check-in</label>
             <label className="chk"><input type="checkbox" checked={lateCheckOut} onChange={(e) => setLateCheckOut(e.target.checked)} /> Late check-out</label>
             <label className="chk"><input type="checkbox" checked={extraMattress} onChange={(e) => setExtraMattress(e.target.checked)} /> Extra mattress</label>
             <label className="chk"><input type="checkbox" checked={hairDryer} onChange={(e) => setHairDryer(e.target.checked)} /> Hair dryer</label>
           </div>
-        </fieldset>
+        </details>
 
         <fieldset>
           <legend>Cleaning</legend>
@@ -228,15 +240,13 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
           </div>
         )}
 
-        <div className="modal-actions">
+        <div className="booking-actions">
           {editing && <button className="danger ghost" disabled={busy} onClick={remove}>Cancel booking</button>}
           {editing && booking.unitId && booking.source === 'manual' && (
             <button className="secondary" disabled={busy} onClick={makeFloating}>↩ Make floating</button>
           )}
           {editing && onInvoice && <button className="secondary" disabled={busy} onClick={() => onInvoice(booking)}>🧾 Invoice</button>}
-          <div className="spacer" />
-          {!isFloating && <button className="secondary" disabled={busy} onClick={checkAvail}>Check availability</button>}
-          <button disabled={busy} onClick={() => save(false)}>{editing ? 'Save' : 'Create booking'}</button>
+          <button className="save" disabled={busy} onClick={() => save(false)}>{editing ? 'Save' : 'Create booking'}</button>
         </div>
       </div>
     </div>

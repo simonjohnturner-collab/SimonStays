@@ -433,7 +433,9 @@ model Booking {
   checkOut     DateTime // checkout day = exclusive of last night; the clean day
   paid         Boolean       @default(false) // true only when fully paid
   paymentStatus String       @default("unpaid") // 'paid' | 'partial' | 'unpaid'
-  amountOwingCents Int? // optional, for partial payments
+  quotedCents   Int? // amount actually quoted to the guest (may differ from the pricing-schedule calc)
+  amountPaidCents Int? // how much the guest has actually paid so far
+  amountOwingCents Int? // outstanding = quoted − paid (derived; kept for the board/invoice)
   ref           String? // human-friendly booking reference (website bookings), used as the EFT payment reference
   billingDetails String? // optional business/billing details the guest entered for their invoice
   termsAcceptedAt DateTime? // when the guest ticked the T&Cs + cancellation policy at checkout (chargeback evidence)
