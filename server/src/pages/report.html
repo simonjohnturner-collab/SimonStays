@@ -85,6 +85,22 @@
   var issuesEl = document.getElementById('issues');
   var issues = []; // [{ id, files: [File] }]
 
+  // ---- Save-as-you-go: keep the typed report on this phone so it isn't lost if
+  // the guest gets interrupted. Photos stay in this session; the text is restored.
+  var DKEY = 'ss_damage_draft_v1', draftUnit = null, dTimer = null;
+  function saveDraft() {
+    try {
+      localStorage.setItem(DKEY, JSON.stringify({
+        unit: document.getElementById('unit').value,
+        date: document.getElementById('date').value,
+        name: document.getElementById('name').value,
+        issues: issues.map(function (i) { return { description: i.description || '' }; })
+      }));
+    } catch (e) {}
+  }
+  function scheduleSave() { if (dTimer) clearTimeout(dTimer); dTimer = setTimeout(saveDraft, 400); }
+  function clearDraft() { try { localStorage.removeItem(DKEY); } catch (e) {} }
+
   // Read the original file bytes as a data URL — the reliable fallback that
   // works even in webviews (WhatsApp/Gmail in‑app browsers) where canvas is blocked.
   function readRaw(file) {
@@ -129,7 +145,7 @@
       head.appendChild(h);
       if (issues.length > 1) {
         var rm = document.createElement('button'); rm.type = 'button'; rm.className = 'rm'; rm.textContent = 'Remove';
-        rm.onclick = function () { issues.splice(idx, 1); renderIssues(); };
+        rm.onclick = function () { issues.splice(idx, 1); renderIssues(); scheduleSave(); };
         head.appendChild(rm);
       }
       card.appendChild(head);
@@ -138,7 +154,7 @@
       card.appendChild(lbl);
       var ta = document.createElement('textarea'); ta.placeholder = 'e.g. Broken lamp in the main bedroom';
       ta.value = iss.description || '';
-      ta.oninput = function () { iss.description = ta.value; };
+      ta.oninput = function () { iss.description = ta.value; scheduleSave(); };
       card.appendChild(ta);
 
       var plabel = document.createElement('label'); plabel.textContent = 'Photos (optional)'; card.appendChild(plabel);
@@ -169,12 +185,28 @@
     });
   }
 
-  function addIssue() { issues.push({ description: '', files: [] }); renderIssues(); }
+  function addIssue() { issues.push({ description: '', files: [] }); renderIssues(); scheduleSave(); }
   document.getElementById('addIssue').onclick = addIssue;
-  addIssue(); // start with one
 
-  // default date = today
-  document.getElementById('date').value = new Date().toISOString().slice(0, 10);
+  // Restore a saved draft on this phone (text only), else start with one blank issue.
+  (function restore() {
+    var raw; try { raw = localStorage.getItem(DKEY); } catch (e) { raw = null; }
+    var d = null; if (raw) { try { d = JSON.parse(raw); } catch (e) {} }
+    if (d) {
+      if (d.name) document.getElementById('name').value = d.name;
+      if (d.date) document.getElementById('date').value = d.date;
+      draftUnit = d.unit || null;
+      if (d.issues && d.issues.length) { issues = d.issues.map(function (i) { return { description: i.description || '', files: [] }; }); renderIssues(); }
+      else addIssue();
+    } else addIssue();
+  })();
+  // Save any further typing (unit/name changes, description edits are covered too).
+  document.getElementById('form').addEventListener('input', scheduleSave);
+  document.getElementById('form').addEventListener('change', scheduleSave);
+
+  // default date = today (only if the restored draft didn't set one)
+  var dateEl = document.getElementById('date');
+  if (!dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
 
   // load units
   fetch('/public/forms/damage').then(function (r) { return r.json(); }).then(function (d) {
@@ -185,6 +217,7 @@
         var o = document.createElement('option'); o.value = u.id; o.textContent = p.name + ' · ' + u.name; sel.appendChild(o);
       });
     });
+    if (draftUnit) sel.value = draftUnit; // re-select the unit from the saved draft
   }).catch(function () { document.getElementById('unit').innerHTML = '<option value="">Could not load units</option>'; });
 
   function showErr(t) { var m = document.getElementById('msg'); m.className = 'msg err'; m.textContent = t; }
@@ -226,6 +259,7 @@
       })
       .then(function (failed) {
         if (failed) alert(failed + ' photo(s) could not be uploaded, but your report was saved. Please try again from Safari or Chrome (not an in‑app browser).');
+        clearDraft();
         document.getElementById('form').classList.add('hidden');
         document.getElementById('done').classList.remove('hidden');
         window.scrollTo(0, 0);

@@ -306,7 +306,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
                 const rows = [];
                 groups.forEach((g, gi) => {
                   const sec = g.section;
-                  const repeat = sec && (sec.repeat === 'bedroom' || sec.repeat === 'bathroom');
+                  const repeat = sec && (sec.repeat === 'bedroom' || sec.repeat === 'bathroom' || sec.repeat === 'ondemand');
                   const insts = sec ? instancesFor(g) : [''];
                   const multi = insts.length > 1;
                   insts.forEach((sfx, idx) => {
@@ -564,6 +564,7 @@ function FormBuilder({ kind, initial, properties, onReload, flash }) {
                   <option value="">once</option>
                   <option value="bedroom">per bedroom</option>
                   <option value="bathroom">per bathroom</option>
+                  <option value="ondemand">let cleaner add several</option>
                 </select>
               </label>
             )}
