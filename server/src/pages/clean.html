@@ -33,6 +33,9 @@
   .pbtn { flex:1; text-align:center; padding:11px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font-size:14px; font-weight:600; cursor:pointer; }
   .pbtn:hover { border-color:var(--green); color:var(--green); }
   .pbtn input { display:none; }
+  .photo-warn { margin-top:8px; padding:9px 11px; border:1px solid #f2c7c7; background:#fdeeee; color:#8a1f1f; border-radius:10px; font-size:13px; line-height:1.35; }
+  .photo-warn .anyway { display:block; margin-top:7px; padding:0; background:none; border:0; color:#6b7280; font-size:12px; text-decoration:underline; cursor:pointer; }
+  .photo-checking { margin-top:8px; font-size:12px; color:var(--muted, #6b7280); }
   .room-tag { display:inline-block; font-size:11px; font-weight:700; color:var(--green-d); background:#e6f2ea; padding:1px 7px; border-radius:5px; margin-right:6px; text-transform:uppercase; letter-spacing:.3px; }
   .form-section { background:#fff; border:1px solid var(--line); border-radius:12px; margin-top:12px; overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,.04); }
   .form-section > summary { list-style:none; cursor:pointer; padding:13px 16px; font-weight:700; font-size:15px; color:var(--green-d); background:#eef6f0; }
@@ -202,6 +205,48 @@
     });
   }
 
+  // Rough on-phone legibility check so a cleaner can't submit a photo too blurry,
+  // dark or tiny to read — we tell them there and then to retake it. Deliberately
+  // lenient (cleaners have cheap phones) and FAIL-OPEN: if the browser can't decode
+  // or measure the image (some in-app webviews taint the canvas), we allow it
+  // rather than wrongly block. `strict` (invoices) demands a bit more sharpness.
+  var BLUR_MIN = 42, BLUR_MIN_STRICT = 85, MIN_SIDE = 480, DARK_MAX = 38, BRIGHT_MAX = 249;
+  function assessPhoto(file, strict) {
+    return new Promise(function (resolve) {
+      var img = new Image(), url = URL.createObjectURL(file), done = false;
+      var allow = function () { if (done) return; done = true; try { URL.revokeObjectURL(url); } catch (e) {} resolve({ ok: true }); };
+      var fail = function (reason) { if (done) return; done = true; try { URL.revokeObjectURL(url); } catch (e) {} resolve({ ok: false, reason: reason }); };
+      img.onerror = allow;
+      img.onload = function () {
+        try {
+          var ow = img.width, oh = img.height;
+          if (!ow || !oh) return allow();
+          if (Math.min(ow, oh) < MIN_SIDE) return fail('too small or low‑resolution');
+          var maxD = 500, sc = Math.min(1, maxD / Math.max(ow, oh));
+          var w = Math.max(1, Math.round(ow * sc)), h = Math.max(1, Math.round(oh * sc));
+          var c = document.createElement('canvas'); c.width = w; c.height = h;
+          var ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
+          var data; try { data = ctx.getImageData(0, 0, w, h).data; } catch (e) { return allow(); }
+          var n = w * h, gray = new Float32Array(n), sum = 0;
+          for (var i = 0, p = 0; i < n; i++, p += 4) { var g = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2]; gray[i] = g; sum += g; }
+          var mean = sum / n;
+          if (mean < DARK_MAX) return fail('too dark');
+          if (mean > BRIGHT_MAX) return fail('too bright or washed out');
+          // Variance of the Laplacian — a standard focus/sharpness measure.
+          var ls = 0, lsq = 0, cnt = 0;
+          for (var y = 1; y < h - 1; y++) for (var x = 1; x < w - 1; x++) {
+            var o = y * w + x, lap = 4 * gray[o] - gray[o - 1] - gray[o + 1] - gray[o - w] - gray[o + w];
+            ls += lap; lsq += lap * lap; cnt++;
+          }
+          var lvar = cnt ? (lsq / cnt) - (ls / cnt) * (ls / cnt) : 0;
+          if (lvar < (strict ? BLUR_MIN_STRICT : BLUR_MIN)) return fail('too blurry');
+          return resolve({ ok: true });
+        } catch (e) { allow(); }
+      };
+      img.src = url;
+    });
+  }
+
   function renderField(f) {
     var q = el('div', 'q');
     var lbl = el('div', 'field-label' + (f.required ? ' req' : ''));
@@ -239,16 +284,39 @@
       photoRedraw[f.id] = draw;
       q.appendChild(photos);
       var btns = el('div', 'photo-btns'); var l = el('label', 'pbtn', '📷 Add photos'); var inp = el('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+      var warn = el('div', 'photo-warn'); warn.style.display = 'none';
+      var checking = el('div', 'photo-checking', 'Checking the photo is clear enough…'); checking.style.display = 'none';
+      // Invoices must be readable enough to itemise, so they're checked more strictly.
+      var strict = (f.id === 'buy_invoice' || String(f.id).indexOf('buy_invoice__') === 0);
+      var fails = 0, lastRejected = null;
+      function accept(file) {
+        warn.style.display = 'none';
+        photoFiles[f.id].push(file); var idx = photoFiles[f.id].length - 1;
+        // Keep a compressed copy in the on-phone draft so progress survives a reload.
+        prep(file, 1400, 0.75).then(function (p) { if (p && p.dataBase64 && photoFiles[f.id][idx] === file) { photoData[f.id][idx] = p.dataBase64; scheduleSave(); } });
+        draw(); afterChange();
+      }
+      function reject(file, reason) {
+        fails++; lastRejected = file; warn.innerHTML = '';
+        warn.appendChild(el('div', null, '⚠️ That photo looks ' + reason + ' — please take a clearer picture so it can be read.'));
+        if (fails >= 2) {
+          var a = el('button', 'anyway', 'Photo still not accepted after a few tries? Add it anyway'); a.type = 'button';
+          a.onclick = function () { if (lastRejected) { var f2 = lastRejected; lastRejected = null; accept(f2); } };
+          warn.appendChild(a);
+        }
+        warn.style.display = 'block';
+      }
       inp.onchange = function (e) {
         var files = Array.prototype.slice.call(e.target.files); e.target.value = '';
-        files.forEach(function (file) {
-          photoFiles[f.id].push(file); var idx = photoFiles[f.id].length - 1;
-          // Keep a compressed copy in the on-phone draft so progress survives a reload.
-          prep(file, 1400, 0.75).then(function (p) { if (p && p.dataBase64 && photoFiles[f.id][idx] === file) { photoData[f.id][idx] = p.dataBase64; scheduleSave(); } });
-        });
-        draw(); afterChange();
+        if (!files.length) return;
+        checking.style.display = 'block';
+        files.reduce(function (chain, file) {
+          return chain.then(function () {
+            return assessPhoto(file, strict).then(function (res) { if (res.ok) accept(file); else reject(file, res.reason); });
+          });
+        }, Promise.resolve()).then(function () { checking.style.display = 'none'; });
       };
-      l.appendChild(inp); btns.appendChild(l); q.appendChild(btns);
+      l.appendChild(inp); btns.appendChild(l); q.appendChild(btns); q.appendChild(checking); q.appendChild(warn);
       SETTERS[f.id] = function (list) {
         list = list || []; photoData[f.id] = list.slice();
         photoFiles[f.id] = list.map(function (d) { return dataURLtoFile(d); }).filter(Boolean);
