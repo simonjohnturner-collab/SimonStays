@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, photoUrl, formLink } from '../api.js';
 
 // Bar with the public, shareable links guests/cleaners use to FILL IN a form.
@@ -119,6 +119,8 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
   const [selMode, setSelMode] = useState(false); // bulk-select on/off
   const [picked, setPicked] = useState(() => new Set()); // ids ticked for deletion
   const [busy, setBusy] = useState(false);
+  const [toc, setToc] = useState([]); // side "jump to" index for the open submission
+  const detailRef = useRef(null);
 
   useEffect(() => {
     if (!zoom) return;
@@ -126,6 +128,19 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [zoom]);
+
+  // Build the "jump to" index by scanning the rendered section headers (so it
+  // always matches what's on screen — no separate logic to keep in step).
+  useEffect(() => {
+    if (!sel) { setToc([]); return; }
+    const root = detailRef.current;
+    const items = [];
+    if (sel.type === 'clean') items.push({ id: 'secjump-purchases', label: '🧾 Purchases & pay' });
+    if (root) root.querySelectorAll('.ans-section-head[id]').forEach((n) => items.push({ id: n.id, label: (n.textContent || 'Section').trim() }));
+    setToc(items);
+  }, [sel && sel.id, sel && sel.templateId]);
+
+  const jumpTo = (id) => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
 
   async function load() {
     const params = new URLSearchParams();
@@ -213,7 +228,14 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
 
       <main className="forms-detail">
         {!sel ? <div className="center muted">Select a submission to view it.</div> : (
-          <div className="sub-card">
+          <div className="sub-layout">
+            {toc.length > 1 && (
+              <aside className="sub-index">
+                <div className="sub-index-title">Jump to</div>
+                {toc.map((t) => <button key={t.id} className="sub-index-link" onClick={() => jumpTo(t.id)}>{t.label}</button>)}
+              </aside>
+            )}
+          <div className="sub-card" ref={detailRef}>
             <div className="sub-head">
               <div>
                 <span className={`ftag ${sel.type}`}>{sel.type === 'damage' ? 'Damage / issue' : 'Checkout clean'}</span>
@@ -228,7 +250,9 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
               </div>
             </div>
 
-            <PurchaseSummaryCard sub={sel} onUpdate={(patch) => setSel((x) => (x ? { ...x, ...patch } : x))} />
+            <div id="secjump-purchases">
+              <PurchaseSummaryCard sub={sel} onUpdate={(patch) => setSel((x) => (x ? { ...x, ...patch } : x))} />
+            </div>
 
             {(() => {
               const answers = sel.answers || {};
@@ -314,7 +338,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
                   insts.forEach((sfx, idx) => {
                     if (sec) {
                       const head = (repeat && multi) ? `${sec.label} ${idx + 1}` : sec.label;
-                      rows.push(<div key={`sec-${gi}-${idx}`} className="ans-section-head">{head}</div>);
+                      rows.push(<div key={`sec-${gi}-${idx}`} id={`secjump-${gi}-${idx}`} className="ans-section-head">{head}</div>);
                     }
                     g.fields.forEach((f) => {
                       const key = f.id + sfx;
@@ -354,6 +378,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
                 </>
               );
             })()}
+          </div>
           </div>
         )}
       </main>

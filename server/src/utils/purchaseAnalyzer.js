@@ -38,45 +38,57 @@ const SYSTEM = [
   'Classify each item into exactly one of the given categories. Set isReplacement=true only for durable items that get replaced occasionally (kettle, iron, toaster, linen, towels, crockery, appliances, decor) — not for consumables like detergent or toilet paper.',
   'If the printed total does not match the sum of the line items, set totalsMatch=false. If the slip is too blurry/dark to read reliably, set readable=false and extract what you can.',
   'Also capture the slip\'s own reference number as invoiceNumber (labelled Invoice/Receipt/Slip/Tax Invoice/Doc No/Trans/Ref — pick the document number, not the till/cashier/store number), and the time of purchase as purchaseTime in 24-hour HH:MM. Use null for either if it is not printed or you cannot read it.',
-  'Always call the record_purchase tool with your result.',
+  'IMPORTANT: a single photo may show more than one separate till slip — two receipts side by side, stacked, or overlapping. Return EACH distinct slip as its own entry in the receipts array; never merge two different slips (different store, invoice number, date or total) into one.',
+  'Always call the record_receipts tool, with one entry per slip you can see.',
 ].join(' ');
 
+// Schema for one till slip. The tool returns an array of these so several slips
+// in a single photo each become their own receipt.
+const RECEIPT_PROPS = {
+  merchant: { type: ['string', 'null'], description: 'Store name on the slip, or null.' },
+  invoiceNumber: { type: ['string', 'null'], description: 'The slip\'s own invoice / receipt / slip / document number, or null.' },
+  purchaseDate: { type: ['string', 'null'], description: 'Date on the slip as YYYY-MM-DD, or null if not visible.' },
+  purchaseTime: { type: ['string', 'null'], description: 'Time on the slip as HH:MM (24-hour), or null if not visible.' },
+  items: {
+    type: 'array',
+    description: 'Every purchased line item on THIS slip.',
+    items: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        name: { type: 'string' },
+        category: { type: 'string', enum: CATEGORIES },
+        quantity: { type: 'number' },
+        unitPriceCents: { type: ['integer', 'null'] },
+        lineTotalCents: { type: ['integer', 'null'] },
+        isReplacement: { type: 'boolean' },
+      },
+      required: ['name', 'category', 'quantity', 'unitPriceCents', 'lineTotalCents', 'isReplacement'],
+    },
+  },
+  subtotalCents: { type: ['integer', 'null'] },
+  totalCents: { type: ['integer', 'null'] },
+  totalsMatch: { type: 'boolean' },
+  readable: { type: 'boolean' },
+  summary: { type: 'string', description: 'One short sentence summarising this slip.' },
+};
+const RECEIPT_REQUIRED = ['merchant', 'invoiceNumber', 'purchaseDate', 'purchaseTime', 'items', 'subtotalCents', 'totalCents', 'totalsMatch', 'readable', 'summary'];
+
 const TOOL = {
-  name: 'record_purchase',
-  description: 'Record the itemised contents of a purchase receipt / till slip.',
+  name: 'record_receipts',
+  description: 'Record every till slip / invoice visible in the photo(s) — one entry per distinct slip.',
   input_schema: {
     type: 'object',
     additionalProperties: false,
     properties: {
-      merchant: { type: ['string', 'null'], description: 'Store name on the slip, or null.' },
-      invoiceNumber: { type: ['string', 'null'], description: 'The slip\'s own invoice / receipt / slip / document number, or null.' },
-      purchaseDate: { type: ['string', 'null'], description: 'Date on the slip as YYYY-MM-DD, or null if not visible.' },
-      purchaseTime: { type: ['string', 'null'], description: 'Time on the slip as HH:MM (24-hour), or null if not visible.' },
       currency: { type: 'string', description: 'ISO currency code, e.g. ZAR.' },
-      items: {
+      receipts: {
         type: 'array',
-        description: 'Every purchased line item.',
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            name: { type: 'string' },
-            category: { type: 'string', enum: CATEGORIES },
-            quantity: { type: 'number' },
-            unitPriceCents: { type: ['integer', 'null'] },
-            lineTotalCents: { type: ['integer', 'null'] },
-            isReplacement: { type: 'boolean' },
-          },
-          required: ['name', 'category', 'quantity', 'unitPriceCents', 'lineTotalCents', 'isReplacement'],
-        },
+        description: 'One entry per distinct till slip/invoice visible across the photo(s). A single photo may contain more than one — split them.',
+        items: { type: 'object', additionalProperties: false, properties: RECEIPT_PROPS, required: RECEIPT_REQUIRED },
       },
-      subtotalCents: { type: ['integer', 'null'] },
-      totalCents: { type: ['integer', 'null'] },
-      totalsMatch: { type: 'boolean' },
-      readable: { type: 'boolean' },
-      summary: { type: 'string', description: 'One short sentence summarising the purchase.' },
     },
-    required: ['merchant', 'invoiceNumber', 'purchaseDate', 'purchaseTime', 'currency', 'items', 'subtotalCents', 'totalCents', 'totalsMatch', 'readable', 'summary'],
+    required: ['currency', 'receipts'],
   },
 };
 
@@ -122,19 +134,20 @@ async function analyzePurchase(submissionId) {
 
     // A cleaner may hand in several receipts. Analyse each invoice photo on its
     // OWN so every till slip gets its own itemised breakdown + total, instead of
-    // being merged into a single lump. Item photos (buy_items) aren't priced
-    // receipts, so they only stand in when no invoice photo was uploaded.
+    // being merged into a single lump — and each photo can itself yield more than
+    // one slip (readReceipts returns an array). Item photos (buy_items) aren't
+    // priced receipts, so they only stand in when no invoice photo was uploaded.
     const invoices = photos.filter((p) => matchesField(p, 'buy_invoice'));
     const itemsOnly = photos.filter((p) => !matchesField(p, 'buy_invoice'));
     const groups = invoices.length
-      ? invoices.slice(0, 12).map((p) => [p])       // one receipt per invoice photo
+      ? invoices.slice(0, 12).map((p) => [p])       // each invoice photo analysed on its own
       : (itemsOnly.length ? [itemsOnly.slice(0, 8)] : []); // fallback: item photos only
 
     const receipts = [];
     let usageIn = 0, usageOut = 0;
     for (const g of groups) {
-      const r = await readOneReceipt(client, g);
-      if (r) { receipts.push(r.data); usageIn += r.usageIn; usageOut += r.usageOut; }
+      const r = await readReceipts(client, g);
+      if (r && r.receipts.length) { receipts.push(...r.receipts); usageIn += r.usageIn; usageOut += r.usageOut; }
     }
     if (!receipts.length) throw new Error('no structured data returned');
     await store(sub, receipts, { input_tokens: usageIn, output_tokens: usageOut });
@@ -144,8 +157,9 @@ async function analyzePurchase(submissionId) {
   }
 }
 
-// Read a single receipt (one invoice photo, or the item photos as a fallback).
-async function readOneReceipt(client, photoGroup) {
+// Read a photo (or the item photos as a fallback) and return EVERY till slip on
+// it — a single photo can hold more than one, so this returns an array.
+async function readReceipts(client, photoGroup) {
   const images = photoGroup.map((p) => ({
     type: 'image',
     source: { type: 'base64', media_type: mediaType(p.contentType), data: Buffer.from(p.data).toString('base64') },
@@ -156,12 +170,17 @@ async function readOneReceipt(client, photoGroup) {
     system: SYSTEM,
     tools: [TOOL],
     tool_choice: { type: 'auto' }, // 'auto' (not forced) stays compatible with adaptive thinking
-    messages: [{ role: 'user', content: [...images, { type: 'text', text: 'Read this ONE till slip / invoice and record every purchased item on it.' }] }],
+    messages: [{ role: 'user', content: [...images, { type: 'text', text: 'Read every till slip / invoice in the attached photo(s). If a photo shows more than one separate slip, record each one on its own. Record every purchased item.' }] }],
   });
   const tu = (resp.content || []).find((b) => b.type === 'tool_use');
   const data = tu ? tu.input : parseJsonFromText(resp.content);
-  if (!data || !Array.isArray(data.items)) return null;
-  return { data, usageIn: resp.usage ? resp.usage.input_tokens : 0, usageOut: resp.usage ? resp.usage.output_tokens : 0 };
+  const currency = (data && typeof data.currency === 'string' && data.currency.trim()) || 'ZAR';
+  // New shape: { receipts: [...] }. Tolerate the old single-object shape too.
+  let list = data && Array.isArray(data.receipts) ? data.receipts
+    : (data && Array.isArray(data.items) ? [data] : []);
+  list = list.filter((r) => r && Array.isArray(r.items));
+  list.forEach((r) => { if (!r.currency) r.currency = currency; });
+  return { receipts: list, usageIn: resp.usage ? resp.usage.input_tokens : 0, usageOut: resp.usage ? resp.usage.output_tokens : 0 };
 }
 
 // Fallback: pull a JSON object out of a text response if no tool_use came back.
