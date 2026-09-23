@@ -452,14 +452,15 @@ function formatAnswer(v) {
 }
 
 // AI-read receipt breakdown for a checkout clean's purchases: an itemised table
-// with a total, plus a "re-analyse" button for blurry slips.
+// with a total, plus a "re-analyse" button for blurry slips — followed by the
+// day-settlement (what I still owe the cleaner: purchases − reimbursed + fee).
 function PurchaseSummaryCard({ sub, onUpdate }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   if (!sub || sub.type !== 'clean') return null;
   const s = sub.purchaseSummary;
   const status = sub.purchaseStatus;
-  if (!s && (!status || status === 'none')) return null; // no purchase on this clean
+  const hasPurchase = !!s || (status && status !== 'none');
 
   const rand = (c) => (c == null ? '—' : 'R' + (Number(c) / 100).toFixed(2));
   async function reanalyze() {
@@ -469,56 +470,127 @@ function PurchaseSummaryCard({ sub, onUpdate }) {
     finally { setBusy(false); }
   }
 
+  // Amount the cleaner spent on purchases (printed total, else the summed lines).
+  const spentCents = s ? (s.totalCents != null ? s.totalCents
+    : (s.items || []).reduce((a, it) => a + (Number(it.lineTotalCents != null ? it.lineTotalCents : it.unitPriceCents) || 0), 0))
+    : 0;
+
   const box = { background: '#fff', border: '1px solid #e3e6ea', borderRadius: 12, padding: '12px 14px', margin: '12px 0' };
   const head = { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 };
   const btn = { marginLeft: 'auto', padding: '6px 12px', border: '1px solid #cdeede', background: '#eafaf0', color: '#14622f', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' };
 
   return (
     <div style={box}>
-      <div style={head}>
-        <strong>🧾 Purchases {s && s.merchant ? `· ${s.merchant}` : ''}</strong>
-        {s && s.purchaseDate && <span className="muted small">{s.purchaseDate}</span>}
-        <button style={btn} disabled={busy} onClick={reanalyze}>{busy ? 'Reading…' : (s ? '↻ Re-analyse' : 'Analyse receipt')}</button>
-      </div>
-
-      {status === 'pending' && !s && <p className="muted small">Reading the till slip…</p>}
-      {status === 'failed' && !s && <p className="muted small">Couldn’t read the receipt — try “Re-analyse”, or check the photo.</p>}
-      {status === 'no_key' && !s && <p className="muted small">AI receipt reading is off — set <code>ANTHROPIC_API_KEY</code> in the server environment to switch it on.</p>}
-      {err && <p className="muted small" style={{ color: '#a11' }}>{err}</p>}
-
-      {s && (
+      {hasPurchase ? (
         <>
-          {s.summary && <p className="muted small" style={{ marginTop: 0 }}>{s.summary}</p>}
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-            <thead>
-              <tr style={{ textAlign: 'left', color: '#6b7280', fontSize: 12 }}>
-                <th style={{ padding: '4px 6px' }}>Item</th>
-                <th style={{ padding: '4px 6px' }}>Category</th>
-                <th style={{ padding: '4px 6px', textAlign: 'right' }}>Qty</th>
-                <th style={{ padding: '4px 6px', textAlign: 'right' }}>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(s.items || []).map((it, i) => (
-                <tr key={i} style={{ borderTop: '1px solid #eef0ee' }}>
-                  <td style={{ padding: '5px 6px' }}>{it.name}{it.isReplacement ? ' 🔁' : ''}</td>
-                  <td style={{ padding: '5px 6px', color: '#6b7280' }}>{it.category || '—'}</td>
-                  <td style={{ padding: '5px 6px', textAlign: 'right' }}>{it.quantity ?? 1}</td>
-                  <td style={{ padding: '5px 6px', textAlign: 'right' }}>{rand(it.lineTotalCents != null ? it.lineTotalCents : it.unitPriceCents)}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr style={{ borderTop: '2px solid #e3e6ea', fontWeight: 700 }}>
-                <td style={{ padding: '6px' }} colSpan={3}>Total</td>
-                <td style={{ padding: '6px', textAlign: 'right' }}>{rand(s.totalCents)}</td>
-              </tr>
-            </tfoot>
-          </table>
-          {s.totalsMatch === false && <p className="small" style={{ color: '#a15c00', margin: '6px 0 0' }}>⚠️ The printed total didn’t match the line items — worth an eyeball.</p>}
-          {s.readable === false && <p className="small" style={{ color: '#a15c00', margin: '4px 0 0' }}>⚠️ The slip was hard to read — double-check the figures.</p>}
-          <p className="muted small" style={{ margin: '6px 0 0' }}>🔁 = a durable item that gets replaced (tracked for “last replaced” history).</p>
+          <div style={head}>
+            <strong>🧾 Purchases {s && s.merchant ? `· ${s.merchant}` : ''}</strong>
+            {s && s.purchaseDate && <span className="muted small">{s.purchaseDate}</span>}
+            <button style={btn} disabled={busy} onClick={reanalyze}>{busy ? 'Reading…' : (s ? '↻ Re-analyse' : 'Analyse receipt')}</button>
+          </div>
+
+          {status === 'pending' && !s && <p className="muted small">Reading the till slip…</p>}
+          {status === 'failed' && !s && <p className="muted small">Couldn’t read the receipt — try “Re-analyse”, or check the photo.</p>}
+          {status === 'no_key' && !s && <p className="muted small">AI receipt reading is off — set <code>ANTHROPIC_API_KEY</code> in the server environment to switch it on.</p>}
+          {err && <p className="muted small" style={{ color: '#a11' }}>{err}</p>}
+
+          {s && (
+            <>
+              {s.summary && <p className="muted small" style={{ marginTop: 0 }}>{s.summary}</p>}
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', color: '#6b7280', fontSize: 12 }}>
+                    <th style={{ padding: '4px 6px' }}>Item</th>
+                    <th style={{ padding: '4px 6px' }}>Category</th>
+                    <th style={{ padding: '4px 6px', textAlign: 'right' }}>Qty</th>
+                    <th style={{ padding: '4px 6px', textAlign: 'right' }}>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(s.items || []).map((it, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid #eef0ee' }}>
+                      <td style={{ padding: '5px 6px' }}>{it.name}{it.isReplacement ? ' 🔁' : ''}</td>
+                      <td style={{ padding: '5px 6px', color: '#6b7280' }}>{it.category || '—'}</td>
+                      <td style={{ padding: '5px 6px', textAlign: 'right' }}>{it.quantity ?? 1}</td>
+                      <td style={{ padding: '5px 6px', textAlign: 'right' }}>{rand(it.lineTotalCents != null ? it.lineTotalCents : it.unitPriceCents)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ borderTop: '2px solid #e3e6ea', fontWeight: 700 }}>
+                    <td style={{ padding: '6px' }} colSpan={3}>Total</td>
+                    <td style={{ padding: '6px', textAlign: 'right' }}>{rand(s.totalCents)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+              {s.totalsMatch === false && <p className="small" style={{ color: '#a15c00', margin: '6px 0 0' }}>⚠️ The printed total didn’t match the line items — worth an eyeball.</p>}
+              {s.readable === false && <p className="small" style={{ color: '#a15c00', margin: '4px 0 0' }}>⚠️ The slip was hard to read — double-check the figures.</p>}
+              <p className="muted small" style={{ margin: '6px 0 0' }}>🔁 = a durable item that gets replaced (tracked for “last replaced” history).</p>
+            </>
+          )}
         </>
+      ) : (
+        <div style={head}><strong>💰 Cleaner day-settlement</strong></div>
+      )}
+
+      <DaySettlement key={sub.id} sub={sub} spentCents={spentCents} onUpdate={onUpdate} />
+    </div>
+  );
+}
+
+// What I still owe the cleaner for this clean: purchases − what I've reimbursed +
+// the day's fee (pre-filled from the property's per-clean rate, editable per clean).
+function DaySettlement({ sub, spentCents, onUpdate }) {
+  const centsToStr = (c) => (c == null ? '' : (Number(c) / 100).toFixed(2));
+  const feeDefault = sub.cleanerFeeCents != null ? sub.cleanerFeeCents : sub.propertyCleanRateCents;
+  const [reimbursed, setReimbursed] = useState(centsToStr(sub.reimbursedCents));
+  const [fee, setFee] = useState(centsToStr(feeDefault));
+  const [saving, setSaving] = useState('');
+
+  const toCents = (str) => { const t = (str || '').trim(); if (t === '') return null; const n = Math.round(parseFloat(t) * 100); return Number.isFinite(n) ? Math.max(0, n) : null; };
+  const reimbursedCents = toCents(reimbursed) || 0;
+  const feeCents = toCents(fee) || 0;
+  const owedCents = Math.max(0, (spentCents || 0) - reimbursedCents) + feeCents;
+
+  async function save(patch) {
+    setSaving('…');
+    try { await api.updateFormSubmission(sub.id, patch); onUpdate && onUpdate(patch); setSaving('✓'); setTimeout(() => setSaving(''), 900); }
+    catch (e) { setSaving('!'); }
+  }
+
+  const rowS = { display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' };
+  const lbl = { flex: 1, color: '#374151' };
+  const rand = (c) => 'R' + (Number(c) / 100).toFixed(2);
+
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid #eef0ee', paddingTop: 8 }}>
+      <div style={{ ...rowS, color: '#6b7280', fontSize: 13 }}>
+        <span style={lbl}>Spent on purchases</span>
+        <span>{rand(spentCents || 0)}</span>
+      </div>
+      <div style={rowS}>
+        <span style={lbl}>Reimbursed to cleaner</span>
+        <span className="muted">R</span>
+        <input style={{ width: 90, textAlign: 'right' }} inputMode="decimal" placeholder="0.00"
+          value={reimbursed} onChange={(e) => setReimbursed(e.target.value)}
+          onBlur={() => save({ reimbursedCents: toCents(reimbursed) })}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
+      </div>
+      <div style={rowS}>
+        <span style={lbl}>Daily fee</span>
+        <span className="muted">R</span>
+        <input style={{ width: 90, textAlign: 'right' }} inputMode="decimal" placeholder="0.00"
+          value={fee} onChange={(e) => setFee(e.target.value)}
+          onBlur={() => save({ cleanerFeeCents: toCents(fee) })}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
+      </div>
+      <div style={{ ...rowS, borderTop: '2px solid #e3e6ea', marginTop: 4, fontWeight: 700, fontSize: 15 }}>
+        <span style={{ flex: 1 }}>You owe the cleaner</span>
+        <span>{rand(owedCents)}</span>
+        {saving && <span className="muted small" style={{ marginLeft: 6 }}>{saving}</span>}
+      </div>
+      {sub.cleanerFeeCents == null && sub.propertyCleanRateCents == null && (
+        <p className="muted small" style={{ margin: '4px 0 0' }}>Tip: set this property’s per-clean rate on the Service providers tab to pre-fill the daily fee.</p>
       )}
     </div>
   );

@@ -221,8 +221,8 @@ export default function Main() {
     return withChrome(
       <ServiceProvidersView
         onClose={() => setProvidersOpen(false)}
-        properties={properties.map((p) => ({ id: p.id, name: p.name }))}
-        onChanged={() => api.listCleaners().then((c) => setCleaners(c.cleaners || [])).catch(() => {})}
+        properties={properties.map((p) => ({ id: p.id, name: p.name, cleanRateCents: p.cleanRateCents }))}
+        onChanged={() => { api.listCleaners().then((c) => setCleaners(c.cleaners || [])).catch(() => {}); api.listProperties().then((r) => setProperties(r.properties || [])).catch(() => {}); }}
       />
     );
   }

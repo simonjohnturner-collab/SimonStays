@@ -151,4 +151,23 @@ async function seedServiceProviders() {
   return created;
 }
 
-module.exports = { normaliseCleanForms, seedServiceProviders };
+// Seed each property's per-clean cleaner fee (cleanRateCents) once — only where
+// it hasn't been set yet, so it never stomps a rate the host has edited.
+// Starting balances: R350/clean everywhere, R400 for Morning Sun Gardens and the
+// Four Protea Place (Plettenberg Bay) properties. Matched by name, case-insensitive.
+async function seedCleanRates() {
+  const DEFAULT = 35000; // R350.00
+  const rateFor = (name) => (/morning sun/i.test(name) || /protea/i.test(name)) ? 40000 : DEFAULT;
+  let props;
+  try { props = await prisma.property.findMany({ where: { cleanRateCents: null }, select: { id: true, name: true } }); }
+  catch (e) { console.error('[cleanrate] seed skipped:', e.message); return 0; }
+  let set = 0;
+  for (const p of props) {
+    await prisma.property.update({ where: { id: p.id }, data: { cleanRateCents: rateFor(p.name || '') } });
+    set++;
+  }
+  if (set) console.log(`[cleanrate] seeded per-clean fee on ${set} propertie(s)`);
+  return set;
+}
+
+module.exports = { normaliseCleanForms, seedServiceProviders, seedCleanRates };

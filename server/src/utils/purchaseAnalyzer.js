@@ -34,6 +34,7 @@ const SYSTEM = [
   'You read South African retail till slips / receipts and return a clean, itemised breakdown.',
   'Prices are in South African rand (ZAR). Amounts must be returned in CENTS (integers): R24.99 -> 2499.',
   'Only list actual purchased products. Ignore VAT lines, subtotals, change, tender/card lines, loyalty points and store slogans.',
+  'For each item\'s name, expand the cryptic till abbreviation into the normal, recognisable product name in ordinary casing (e.g. "HANDY ANDY CRM 750" -> "Handy Andy", "DOMESTOS 750ML" -> "Domestos", "SUNLGHT DISHWSH" -> "Sunlight dishwashing liquid"). Keep it faithful — do not invent a brand you cannot read; if unsure, use a plain description of what it is.',
   'Classify each item into exactly one of the given categories. Set isReplacement=true only for durable items that get replaced occasionally (kettle, iron, toaster, linen, towels, crockery, appliances, decor) — not for consumables like detergent or toilet paper.',
   'If the printed total does not match the sum of the line items, set totalsMatch=false. If the slip is too blurry/dark to read reliably, set readable=false and extract what you can.',
   'Always call the record_purchase tool with your result.',

@@ -47,6 +47,7 @@ router.patch('/:id', requireOwnedProperty, async (req, res) => {
     .forEach((k) => { if (k in b) data[k] = b[k] === '' ? null : b[k]; });
   ['latitude', 'longitude'].forEach((k) => { if (k in b) data[k] = (b[k] === '' || b[k] == null) ? null : Number(b[k]); });
   if ('parkingBays' in b) data.parkingBays = (b.parkingBays === '' || b.parkingBays == null) ? null : Number(b.parkingBays);
+  if ('cleanRateCents' in b) data.cleanRateCents = (b.cleanRateCents === '' || b.cleanRateCents == null) ? null : Math.max(0, Math.round(Number(b.cleanRateCents)));
   const property = await prisma.property.update({ where: { id: req.property.id }, data });
   res.json({ property });
 });

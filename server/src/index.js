@@ -110,6 +110,7 @@ if (require.main === module) {
   // plus an optional "guest left behind" photo in the Guests section.
   require('./utils/formMigrations').normaliseCleanForms().catch((e) => console.error('[forms] migration failed', e.message));
   require('./utils/formMigrations').seedServiceProviders().catch((e) => console.error('[providers] seed failed', e.message));
+  require('./utils/formMigrations').seedCleanRates().catch((e) => console.error('[cleanrate] seed failed', e.message));
   // Lift guest email/phone out of old website bookings' comments so guests can
   // see their previous trips, and link them to any registered accounts.
   require('./utils/guestBackfill').backfillGuestContacts().catch((e) => console.error('[guestBackfill] failed', e.message));

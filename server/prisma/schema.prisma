@@ -194,6 +194,7 @@ model Property {
   parkingBays  Int?    // number of bays
   parkingNotes String? // where they are
   cancellationPolicy String? // shown on the shopfront; falls back to the standard policy
+  cleanRateCents Int?    // what a cleaner is paid per checkout clean here (the day's fee), in cents
   sortOrder   Int      @default(0) // manual order on the board (lower = higher up)
   createdAt   DateTime @default(now())
   units       Unit[]
@@ -361,6 +362,10 @@ model FormSubmission {
   photos           Photo[]
   createdAt        DateTime  @default(now())
 
+  // Cleaner day-settlement (checkout cleans): what I still owe the cleaner.
+  reimbursedCents  Int?      // amount I've already paid the cleaner back for purchases
+  cleanerFeeCents  Int?      // this clean's daily fee (defaults to the property's cleanRateCents)
+
   // AI receipt/till-slip analysis of any purchase photos on this submission.
   purchaseSummary  Json?     // { merchant, purchaseDate, currency, items[], totalCents, totalsMatch, summary, model, generatedAt }
   purchaseStatus   String?   // pending | done | failed | no_key | none
@@ -382,7 +387,7 @@ model PurchaseItem {
   unitId         String?
   cleanerName    String?
   purchasedAt    DateTime // receipt date when readable, else the submission date
-  name           String // item text as printed on the slip
+  name           String // recognisable product name (till abbreviation expanded, e.g. "Handy Andy")
   category       String? // normalised bucket (Cleaning supplies, Linen & towels, …)
   quantity       Float?         @default(1)
   unitPriceCents Int?

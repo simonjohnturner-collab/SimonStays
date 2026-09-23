@@ -106,13 +106,18 @@ router.get('/submissions/:id', async (req, res) => {
   const sub = await prisma.formSubmission.findFirst({
     where: { id: req.params.id, hostId: req.hostId },
     include: {
-      property: { select: { name: true } },
+      property: { select: { name: true, cleanRateCents: true } },
       unit: { select: { name: true } },
       photos: { select: { id: true, fieldId: true, filename: true }, orderBy: { createdAt: 'asc' } },
     },
   });
   if (!sub) return res.status(404).json({ error: 'not_found' });
-  res.json({ submission: { ...fmtSub(sub), answers: sub.answers, photos: sub.photos, purchaseSummary: sub.purchaseSummary, purchaseStatus: sub.purchaseStatus } });
+  res.json({ submission: {
+    ...fmtSub(sub), answers: sub.answers, photos: sub.photos,
+    purchaseSummary: sub.purchaseSummary, purchaseStatus: sub.purchaseStatus,
+    reimbursedCents: sub.reimbursedCents, cleanerFeeCents: sub.cleanerFeeCents,
+    propertyCleanRateCents: sub.property ? sub.property.cleanRateCents : null,
+  } });
 });
 
 // POST /forms/submissions/:id/analyze — (re)read this submission's purchase
@@ -131,10 +136,14 @@ router.post('/submissions/:id/analyze', async (req, res) => {
 router.patch('/submissions/:id', async (req, res) => {
   const sub = await prisma.formSubmission.findFirst({ where: { id: req.params.id, hostId: req.hostId }, select: { id: true } });
   if (!sub) return res.status(404).json({ error: 'not_found' });
+  const b = req.body || {};
   const data = {};
-  if ('status' in (req.body || {})) data.status = req.body.status;
+  if ('status' in b) data.status = b.status;
+  const money = (v) => (v === '' || v == null ? null : Math.max(0, Math.round(Number(v))));
+  if ('reimbursedCents' in b) data.reimbursedCents = money(b.reimbursedCents);
+  if ('cleanerFeeCents' in b) data.cleanerFeeCents = money(b.cleanerFeeCents);
   const updated = await prisma.formSubmission.update({ where: { id: sub.id }, data });
-  res.json({ submission: { id: updated.id, status: updated.status } });
+  res.json({ submission: { id: updated.id, status: updated.status, reimbursedCents: updated.reimbursedCents, cleanerFeeCents: updated.cleanerFeeCents } });
 });
 
 router.delete('/submissions/:id', async (req, res) => {

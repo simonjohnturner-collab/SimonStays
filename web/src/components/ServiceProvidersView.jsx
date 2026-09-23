@@ -51,6 +51,8 @@ export default function ServiceProvidersView({ onClose, properties = [], onChang
       <div className="sp-wrap">
         <p className="muted small">Your cleaners, electricians, plumbers, handymen and other providers. <b>Cleaner</b> names appear in the checkout-cleaner dropdowns.</p>
 
+        <CleanRatesPanel properties={properties} onChanged={onChanged} />
+
         <div className="sp-add">
           <input placeholder="Name" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') addProvider(); }} />
           <select value={nw.role} onChange={(e) => setNw({ ...nw, role: e.target.value })}>{ROLES.map((r) => <option key={r}>{r}</option>)}</select>
@@ -83,5 +85,55 @@ export default function ServiceProvidersView({ onClose, properties = [], onChang
         ))}
       </div>
     </div>
+  );
+}
+
+// What a cleaner is paid per checkout clean, set per property (the day's fee).
+// This pre-fills the "Daily fee" on each clean submission's day-settlement.
+function CleanRatesPanel({ properties = [], onChanged }) {
+  const centsToStr = (c) => (c == null ? '' : (Number(c) / 100).toFixed(2));
+  const [rates, setRates] = useState(() => {
+    const m = {}; properties.forEach((p) => { m[p.id] = centsToStr(p.cleanRateCents); }); return m;
+  });
+  const [msg, setMsg] = useState('');
+
+  async function save(p) {
+    const raw = (rates[p.id] || '').trim();
+    const cents = raw === '' ? null : Math.max(0, Math.round(parseFloat(raw) * 100));
+    if (raw !== '' && !Number.isFinite(cents)) { setMsg('Enter a number.'); return; }
+    try {
+      await api.setCleanRate(p.id, cents);
+      setRates((r) => ({ ...r, [p.id]: centsToStr(cents) }));
+      setMsg(`Saved ${p.name}.`); setTimeout(() => setMsg(''), 1200);
+      onChanged && onChanged();
+    } catch (e) { setMsg(e.message); }
+  }
+
+  if (!properties.length) return null;
+  return (
+    <section className="sp-card" style={{ marginBottom: 14 }}>
+      <div className="sp-top" style={{ display: 'block' }}>
+        <b>💰 What a cleaner earns per clean</b>
+        <p className="muted small" style={{ margin: '4px 0 0' }}>
+          The day’s fee for a checkout clean at each property. Pre-fills the “Daily fee” on the cleaner’s day-settlement so you can see what you owe.
+        </p>
+      </div>
+      <div className="clean-rates">
+        {properties.map((p) => (
+          <div key={p.id} className="clean-rate-row" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '6px 0' }}>
+            <span style={{ flex: 1 }}>{p.name}</span>
+            <span className="muted">R</span>
+            <input
+              style={{ width: 90, textAlign: 'right' }} inputMode="decimal" placeholder="0.00"
+              value={rates[p.id] ?? ''}
+              onChange={(e) => setRates((r) => ({ ...r, [p.id]: e.target.value }))}
+              onBlur={() => save(p)}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+            />
+          </div>
+        ))}
+      </div>
+      {msg && <span className="small muted">{msg}</span>}
+    </section>
   );
 }
