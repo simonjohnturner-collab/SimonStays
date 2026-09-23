@@ -257,7 +257,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
             {(() => {
               const answers = sel.answers || {};
               const issues = Array.isArray(answers.issues) ? answers.issues : null;
-              const known = { date: 'Date' };
+              const known = { date: 'Date', invoice_date_note: '⚠️ Invoice-date explanation (cleaner)' };
               const byField = {};
               (sel.photos || []).forEach((ph) => { const k = ph.fieldId || ''; (byField[k] = byField[k] || []).push(ph); });
               const Gallery = ({ photos }) => (

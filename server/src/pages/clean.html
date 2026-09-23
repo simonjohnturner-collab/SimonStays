@@ -43,6 +43,9 @@
   .live-pay .lp-row { display:flex; justify-content:space-between; gap:10px; padding:3px 0; border-top:1px solid #dcefe3; margin-top:4px; }
   .live-pay .lp-total { display:flex; justify-content:space-between; gap:10px; padding-top:6px; margin-top:4px; border-top:2px solid var(--green); font-weight:800; font-size:16px; color:var(--green-d, #14622f); }
   .live-pay .lp-fine { font-size:11px; color:#6b7280; margin-top:6px; }
+  .date-check { margin-top:10px; padding:11px 13px; border:1px solid #e6c67a; background:#fff8e8; border-radius:12px; }
+  .date-check .dc-msg { font-size:13px; color:#8a5a00; line-height:1.4; margin-bottom:8px; }
+  .date-check .dc-note { width:100%; min-height:60px; padding:9px 11px; border:1px solid var(--line); border-radius:10px; font-size:14px; box-sizing:border-box; }
   .room-tag { display:inline-block; font-size:11px; font-weight:700; color:var(--green-d); background:#e6f2ea; padding:1px 7px; border-radius:5px; margin-right:6px; text-transform:uppercase; letter-spacing:.3px; }
   .form-section { background:#fff; border:1px solid var(--line); border-radius:12px; margin-top:12px; overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,.04); }
   .form-section > summary { list-style:none; cursor:pointer; padding:13px 16px; font-weight:700; font-size:15px; color:var(--green-d); background:#eef6f0; }
@@ -145,6 +148,8 @@
   var RATE_CENTS = null;        // the selected property's per-clean fee
   var INVOICE_LIVEBOX = null;   // the card element under the invoice photo field
   var INVOICE_FIELD_ID = null;  // the buy_invoice field's id (set when it renders)
+  var INVOICE_DATEBOX = null, INVOICE_DATE_MSG = null; // "invoice is from another day" prompt
+  var INVOICE_DATE_HASFLAGS = false; // an invoice is dated before the clean day → needs a note
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function rand(c) { return (c == null) ? '—' : 'R' + (Number(c) / 100).toFixed(2); }
@@ -170,6 +175,17 @@
       if (key) seen[key] = true;
       kept.push(rc);
     });
+    // Date check: an invoice dated BEFORE the clean day probably isn't for this
+    // clean — flag it and ask the cleaner for a short explanation (we still accept).
+    var cleanDate = (document.getElementById('date') || {}).value || '';
+    var pastDates = [];
+    kept.forEach(function (rc) {
+      if (rc.purchaseDate && /^\d{4}-\d{2}-\d{2}$/.test(rc.purchaseDate) && cleanDate && rc.purchaseDate < cleanDate) {
+        pastDates.push(rc.purchaseDate + (rc.invoiceNumber ? ' (#' + rc.invoiceNumber + ')' : ''));
+      }
+    });
+    renderDateCheck(pastDates, cleanDate);
+
     if (!files.length && RATE_CENTS == null) { box.style.display = 'none'; return; }
     var spent = 0; kept.forEach(function (rc) { if (typeof rc.totalCents === 'number') spent += rc.totalCents; });
     var owed = spent + (RATE_CENTS || 0);
@@ -187,6 +203,20 @@
     html += '<div class="lp-total"><span>You’ll be paid</span><span>' + rand(owed) + '</span></div>';
     html += '<div class="lp-fine">Estimated from your invoices — the host confirms the final amount.</div>';
     box.innerHTML = html; box.style.display = 'block';
+  }
+
+  // Show/hide the "invoice is from another day" prompt. The textarea itself is a
+  // persistent element (created once) so typing isn't wiped when this re-runs.
+  function renderDateCheck(pastDates, cleanDate) {
+    INVOICE_DATE_HASFLAGS = pastDates.length > 0;
+    var box = INVOICE_DATEBOX, msg = INVOICE_DATE_MSG;
+    if (!box || !msg) return;
+    if (!pastDates.length) { box.style.display = 'none'; return; }
+    msg.textContent = (pastDates.length > 1
+      ? pastDates.length + ' invoices are dated'
+      : 'This invoice is dated') + ' ' + pastDates.join(', ')
+      + ', which is before today’s clean (' + cleanDate + '). Please add a short note explaining why — we’ll accept it with your comment.';
+    box.style.display = 'block';
   }
 
   // ---- Draft (save-as-you-go) helpers -------------------------------------
@@ -396,7 +426,19 @@
         });
       }
       l.appendChild(inp); btns.appendChild(l); q.appendChild(btns); q.appendChild(checking); q.appendChild(warn);
-      if (strict) { INVOICE_FIELD_ID = f.id; INVOICE_LIVEBOX = el('div', 'live-pay'); INVOICE_LIVEBOX.style.display = 'none'; q.appendChild(INVOICE_LIVEBOX); renderLiveSummary(); }
+      if (strict) {
+        INVOICE_FIELD_ID = f.id;
+        INVOICE_LIVEBOX = el('div', 'live-pay'); INVOICE_LIVEBOX.style.display = 'none'; q.appendChild(INVOICE_LIVEBOX);
+        // Persistent "invoice from another day" prompt: a message that re-renders +
+        // a textarea that keeps its value, bound to answers so it saves & submits.
+        INVOICE_DATEBOX = el('div', 'date-check'); INVOICE_DATEBOX.style.display = 'none';
+        INVOICE_DATE_MSG = el('div', 'dc-msg'); INVOICE_DATEBOX.appendChild(INVOICE_DATE_MSG);
+        var dta = el('textarea', 'dc-note'); dta.placeholder = 'e.g. I bought supplies the evening before the clean.';
+        dta.oninput = function () { answers['invoice_date_note'] = dta.value; scheduleSave(); };
+        SETTERS['invoice_date_note'] = function (v) { dta.value = v == null ? '' : v; answers['invoice_date_note'] = dta.value; };
+        INVOICE_DATEBOX.appendChild(dta); q.appendChild(INVOICE_DATEBOX);
+        renderLiveSummary();
+      }
       SETTERS[f.id] = function (list) {
         list = list || []; photoData[f.id] = list.slice();
         photoFiles[f.id] = list.map(function (d) { return dataURLtoFile(d); }).filter(Boolean);
@@ -614,6 +656,7 @@
   }).catch(function () { document.getElementById('prop').innerHTML = '<option value="">Could not load</option>'; });
 
   document.getElementById('date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('date').addEventListener('change', function () { renderLiveSummary(); });
   function showErr(t) { var m = document.getElementById('msg'); m.className = 'msg err'; m.textContent = t; window.scrollTo(0, document.body.scrollHeight); }
 
   // Autosave: any typing/selection saves the draft (debounced) and updates pills.
@@ -638,6 +681,11 @@
       inc.forEach(function (s) { if (s.det) s.det.open = true; });
       var names = inc.map(function (s) { return s.name; });
       return showErr(inc.length + ' section' + (inc.length > 1 ? 's' : '') + ' still to complete: ' + names.join(', ') + '.');
+    }
+    // A past-dated invoice needs the cleaner's short explanation before submitting.
+    if (INVOICE_DATE_HASFLAGS && !(answers['invoice_date_note'] || '').trim()) {
+      if (INVOICE_DATEBOX) { INVOICE_DATEBOX.scrollIntoView({ behavior: 'smooth', block: 'center' }); var t = INVOICE_DATEBOX.querySelector('textarea'); if (t) t.focus(); }
+      return showErr('One of your invoices is dated before today’s clean — please add a short note explaining why.');
     }
 
     var btn = document.getElementById('submit'); btn.disabled = true; btn.textContent = 'Sending…';
