@@ -37,6 +37,7 @@ const SYSTEM = [
   'For each item\'s name, expand the cryptic till abbreviation into the normal, recognisable product name in ordinary casing (e.g. "HANDY ANDY CRM 750" -> "Handy Andy", "DOMESTOS 750ML" -> "Domestos", "SUNLGHT DISHWSH" -> "Sunlight dishwashing liquid"). Keep it faithful — do not invent a brand you cannot read; if unsure, use a plain description of what it is.',
   'Classify each item into exactly one of the given categories. Set isReplacement=true only for durable items that get replaced occasionally (kettle, iron, toaster, linen, towels, crockery, appliances, decor) — not for consumables like detergent or toilet paper.',
   'If the printed total does not match the sum of the line items, set totalsMatch=false. If the slip is too blurry/dark to read reliably, set readable=false and extract what you can.',
+  'Also capture the slip\'s own reference number as invoiceNumber (labelled Invoice/Receipt/Slip/Tax Invoice/Doc No/Trans/Ref — pick the document number, not the till/cashier/store number), and the time of purchase as purchaseTime in 24-hour HH:MM. Use null for either if it is not printed or you cannot read it.',
   'Always call the record_purchase tool with your result.',
 ].join(' ');
 
@@ -48,7 +49,9 @@ const TOOL = {
     additionalProperties: false,
     properties: {
       merchant: { type: ['string', 'null'], description: 'Store name on the slip, or null.' },
+      invoiceNumber: { type: ['string', 'null'], description: 'The slip\'s own invoice / receipt / slip / document number, or null.' },
       purchaseDate: { type: ['string', 'null'], description: 'Date on the slip as YYYY-MM-DD, or null if not visible.' },
+      purchaseTime: { type: ['string', 'null'], description: 'Time on the slip as HH:MM (24-hour), or null if not visible.' },
       currency: { type: 'string', description: 'ISO currency code, e.g. ZAR.' },
       items: {
         type: 'array',
@@ -73,7 +76,7 @@ const TOOL = {
       readable: { type: 'boolean' },
       summary: { type: 'string', description: 'One short sentence summarising the purchase.' },
     },
-    required: ['merchant', 'purchaseDate', 'currency', 'items', 'subtotalCents', 'totalCents', 'totalsMatch', 'readable', 'summary'],
+    required: ['merchant', 'invoiceNumber', 'purchaseDate', 'purchaseTime', 'currency', 'items', 'subtotalCents', 'totalCents', 'totalsMatch', 'readable', 'summary'],
   },
 };
 
@@ -202,9 +205,14 @@ async function store(sub, receipts, usage) {
     const receiptTotal = printed != null ? printed : (rItems.length ? summed : null);
     if (receiptTotal != null) { grandTotal += receiptTotal; anyTotal = true; }
 
+    const invoiceNumber = (typeof data.invoiceNumber === 'string' && data.invoiceNumber.trim()) ? data.invoiceNumber.trim().slice(0, 60) : null;
+    const purchaseTime = (typeof data.purchaseTime === 'string' && /^\d{1,2}:\d{2}$/.test(data.purchaseTime.trim()))
+      ? data.purchaseTime.trim().replace(/^(\d):/, '0$1:') : null;
     displayReceipts.push({
       merchant: data.merchant || null,
+      invoiceNumber,
       purchaseDate: purchasedAt.toISOString().slice(0, 10),
+      purchaseTime,
       items: rItems,
       subtotalCents: toInt(data.subtotalCents),
       totalCents: receiptTotal,

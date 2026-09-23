@@ -506,19 +506,22 @@ function PurchaseSummaryCard({ sub, onUpdate }) {
             <>
               {receipts.map((r, ri) => (
                 <div key={ri} style={{ margin: '10px 0', padding: receipts.length > 1 ? '2px 0 8px' : 0, borderTop: ri > 0 ? '1px dashed #e3e6ea' : 'none' }}>
-                  {receipts.length > 1 && (
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', margin: '6px 0 2px' }}>
-                      <strong style={{ fontSize: 13 }}>Invoice {ri + 1}{r.merchant ? ` · ${r.merchant}` : ''}</strong>
-                      {r.purchaseDate && <span className="muted small">{r.purchaseDate}</span>}
-                    </div>
-                  )}
-                  {receipts.length === 1 && r.merchant && (
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', margin: '2px 0' }}>
-                      <strong style={{ fontSize: 13 }}>{r.merchant}</strong>
-                      {r.purchaseDate && <span className="muted small">{r.purchaseDate}</span>}
-                    </div>
-                  )}
-                  {r.summary && <p className="muted small" style={{ marginTop: 0 }}>{r.summary}</p>}
+                  {(() => {
+                    const meta = [
+                      r.invoiceNumber ? `Invoice #${r.invoiceNumber}` : null,
+                      r.purchaseDate,
+                      r.purchaseTime,
+                    ].filter(Boolean).join(' · ');
+                    const title = (receipts.length > 1 ? `Receipt ${ri + 1} of ${receipts.length}` : 'Receipt')
+                      + (r.merchant ? ` · ${r.merchant}` : '');
+                    return (
+                      <div style={{ margin: '6px 0 2px' }}>
+                        <strong style={{ fontSize: 13 }}>{title}</strong>
+                        {meta && <div className="muted small" style={{ marginTop: 1 }}>{meta}</div>}
+                      </div>
+                    );
+                  })()}
+                  {r.summary && <p className="muted small" style={{ marginTop: 2 }}>{r.summary}</p>}
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                     <thead>
                       <tr style={{ textAlign: 'left', color: '#6b7280', fontSize: 12 }}>
