@@ -475,6 +475,14 @@ function PurchaseSummaryCard({ sub, onUpdate }) {
     : (s.items || []).reduce((a, it) => a + (Number(it.lineTotalCents != null ? it.lineTotalCents : it.unitPriceCents) || 0), 0))
     : 0;
 
+  // Normalise to a list of receipts: the multi-invoice shape, or an old single
+  // summary wrapped as one receipt so the same renderer handles both.
+  const receipts = s
+    ? (Array.isArray(s.receipts) && s.receipts.length
+        ? s.receipts
+        : [{ merchant: s.merchant, purchaseDate: s.purchaseDate, items: s.items || [], totalCents: s.totalCents, totalsMatch: s.totalsMatch, readable: s.readable, summary: s.summary }])
+    : [];
+
   const box = { background: '#fff', border: '1px solid #e3e6ea', borderRadius: 12, padding: '12px 14px', margin: '12px 0' };
   const head = { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 };
   const btn = { marginLeft: 'auto', padding: '6px 12px', border: '1px solid #cdeede', background: '#eafaf0', color: '#14622f', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' };
@@ -484,47 +492,69 @@ function PurchaseSummaryCard({ sub, onUpdate }) {
       {hasPurchase ? (
         <>
           <div style={head}>
-            <strong>🧾 Purchases {s && s.merchant ? `· ${s.merchant}` : ''}</strong>
-            {s && s.purchaseDate && <span className="muted small">{s.purchaseDate}</span>}
+            <strong>🧾 Purchases</strong>
+            {receipts.length > 1 && <span className="muted small">{receipts.length} receipts</span>}
             <button style={btn} disabled={busy} onClick={reanalyze}>{busy ? 'Reading…' : (s ? '↻ Re-analyse' : 'Analyse receipt')}</button>
           </div>
 
-          {status === 'pending' && !s && <p className="muted small">Reading the till slip…</p>}
+          {status === 'pending' && !s && <p className="muted small">Reading the till slips…</p>}
           {status === 'failed' && !s && <p className="muted small">Couldn’t read the receipt — try “Re-analyse”, or check the photo.</p>}
           {status === 'no_key' && !s && <p className="muted small">AI receipt reading is off — set <code>ANTHROPIC_API_KEY</code> in the server environment to switch it on.</p>}
           {err && <p className="muted small" style={{ color: '#a11' }}>{err}</p>}
 
           {s && (
             <>
-              {s.summary && <p className="muted small" style={{ marginTop: 0 }}>{s.summary}</p>}
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-                <thead>
-                  <tr style={{ textAlign: 'left', color: '#6b7280', fontSize: 12 }}>
-                    <th style={{ padding: '4px 6px' }}>Item</th>
-                    <th style={{ padding: '4px 6px' }}>Category</th>
-                    <th style={{ padding: '4px 6px', textAlign: 'right' }}>Qty</th>
-                    <th style={{ padding: '4px 6px', textAlign: 'right' }}>Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(s.items || []).map((it, i) => (
-                    <tr key={i} style={{ borderTop: '1px solid #eef0ee' }}>
-                      <td style={{ padding: '5px 6px' }}>{it.name}{it.isReplacement ? ' 🔁' : ''}</td>
-                      <td style={{ padding: '5px 6px', color: '#6b7280' }}>{it.category || '—'}</td>
-                      <td style={{ padding: '5px 6px', textAlign: 'right' }}>{it.quantity ?? 1}</td>
-                      <td style={{ padding: '5px 6px', textAlign: 'right' }}>{rand(it.lineTotalCents != null ? it.lineTotalCents : it.unitPriceCents)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr style={{ borderTop: '2px solid #e3e6ea', fontWeight: 700 }}>
-                    <td style={{ padding: '6px' }} colSpan={3}>Total</td>
-                    <td style={{ padding: '6px', textAlign: 'right' }}>{rand(s.totalCents)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-              {s.totalsMatch === false && <p className="small" style={{ color: '#a15c00', margin: '6px 0 0' }}>⚠️ The printed total didn’t match the line items — worth an eyeball.</p>}
-              {s.readable === false && <p className="small" style={{ color: '#a15c00', margin: '4px 0 0' }}>⚠️ The slip was hard to read — double-check the figures.</p>}
+              {receipts.map((r, ri) => (
+                <div key={ri} style={{ margin: '10px 0', padding: receipts.length > 1 ? '2px 0 8px' : 0, borderTop: ri > 0 ? '1px dashed #e3e6ea' : 'none' }}>
+                  {receipts.length > 1 && (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', margin: '6px 0 2px' }}>
+                      <strong style={{ fontSize: 13 }}>Invoice {ri + 1}{r.merchant ? ` · ${r.merchant}` : ''}</strong>
+                      {r.purchaseDate && <span className="muted small">{r.purchaseDate}</span>}
+                    </div>
+                  )}
+                  {receipts.length === 1 && r.merchant && (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', margin: '2px 0' }}>
+                      <strong style={{ fontSize: 13 }}>{r.merchant}</strong>
+                      {r.purchaseDate && <span className="muted small">{r.purchaseDate}</span>}
+                    </div>
+                  )}
+                  {r.summary && <p className="muted small" style={{ marginTop: 0 }}>{r.summary}</p>}
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                    <thead>
+                      <tr style={{ textAlign: 'left', color: '#6b7280', fontSize: 12 }}>
+                        <th style={{ padding: '4px 6px' }}>Item</th>
+                        <th style={{ padding: '4px 6px' }}>Category</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'right' }}>Qty</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'right' }}>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(r.items || []).map((it, i) => (
+                        <tr key={i} style={{ borderTop: '1px solid #eef0ee' }}>
+                          <td style={{ padding: '5px 6px' }}>{it.name}{it.isReplacement ? ' 🔁' : ''}</td>
+                          <td style={{ padding: '5px 6px', color: '#6b7280' }}>{it.category || '—'}</td>
+                          <td style={{ padding: '5px 6px', textAlign: 'right' }}>{it.quantity ?? 1}</td>
+                          <td style={{ padding: '5px 6px', textAlign: 'right' }}>{rand(it.lineTotalCents != null ? it.lineTotalCents : it.unitPriceCents)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid #e3e6ea', fontWeight: 700 }}>
+                        <td style={{ padding: '6px' }} colSpan={3}>{receipts.length > 1 ? `Invoice ${ri + 1} total` : 'Total'}</td>
+                        <td style={{ padding: '6px', textAlign: 'right' }}>{rand(r.totalCents)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                  {r.totalsMatch === false && <p className="small" style={{ color: '#a15c00', margin: '6px 0 0' }}>⚠️ The printed total didn’t match the line items — worth an eyeball.</p>}
+                  {r.readable === false && <p className="small" style={{ color: '#a15c00', margin: '4px 0 0' }}>⚠️ This slip was hard to read — double-check the figures.</p>}
+                </div>
+              ))}
+              {receipts.length > 1 && (
+                <div style={{ display: 'flex', borderTop: '2px solid #cbd5cf', paddingTop: 6, fontWeight: 800, fontSize: 15 }}>
+                  <span style={{ flex: 1 }}>Total across {receipts.length} receipts</span>
+                  <span>{rand(s.totalCents)}</span>
+                </div>
+              )}
               <p className="muted small" style={{ margin: '6px 0 0' }}>🔁 = a durable item that gets replaced (tracked for “last replaced” history).</p>
             </>
           )}

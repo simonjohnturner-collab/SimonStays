@@ -81,6 +81,7 @@ const enabled = () => !!(Anthropic && process.env.ANTHROPIC_API_KEY);
 const mediaType = (ct) => (ALLOWED_MEDIA.has(ct) ? ct : 'image/jpeg');
 const toInt = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : null);
 const toNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+const matchesField = (p, base) => { const f = p.fieldId || ''; return f === base || f.startsWith(base + '__'); };
 
 async function setStatus(id, status) {
   try { await prisma.formSubmission.update({ where: { id }, data: { purchaseStatus: status } }); } catch (e) { /* row may be gone */ }
@@ -115,26 +116,49 @@ async function analyzePurchase(submissionId) {
   await setStatus(sub.id, 'pending');
   try {
     const client = new Anthropic();
-    const images = photos.slice(0, 8).map((p) => ({
-      type: 'image',
-      source: { type: 'base64', media_type: mediaType(p.contentType), data: Buffer.from(p.data).toString('base64') },
-    }));
-    const resp = await client.messages.create({
-      model: MODEL,
-      max_tokens: 8000,
-      system: SYSTEM,
-      tools: [TOOL],
-      tool_choice: { type: 'auto' }, // 'auto' (not forced) stays compatible with adaptive thinking
-      messages: [{ role: 'user', content: [...images, { type: 'text', text: 'Read the attached till slip(s) and record every purchased item.' }] }],
-    });
-    const tu = (resp.content || []).find((b) => b.type === 'tool_use');
-    const data = tu ? tu.input : parseJsonFromText(resp.content);
-    if (!data || !Array.isArray(data.items)) throw new Error('no structured data returned');
-    await store(sub, data, resp.usage);
+
+    // A cleaner may hand in several receipts. Analyse each invoice photo on its
+    // OWN so every till slip gets its own itemised breakdown + total, instead of
+    // being merged into a single lump. Item photos (buy_items) aren't priced
+    // receipts, so they only stand in when no invoice photo was uploaded.
+    const invoices = photos.filter((p) => matchesField(p, 'buy_invoice'));
+    const itemsOnly = photos.filter((p) => !matchesField(p, 'buy_invoice'));
+    const groups = invoices.length
+      ? invoices.slice(0, 12).map((p) => [p])       // one receipt per invoice photo
+      : (itemsOnly.length ? [itemsOnly.slice(0, 8)] : []); // fallback: item photos only
+
+    const receipts = [];
+    let usageIn = 0, usageOut = 0;
+    for (const g of groups) {
+      const r = await readOneReceipt(client, g);
+      if (r) { receipts.push(r.data); usageIn += r.usageIn; usageOut += r.usageOut; }
+    }
+    if (!receipts.length) throw new Error('no structured data returned');
+    await store(sub, receipts, { input_tokens: usageIn, output_tokens: usageOut });
   } catch (e) {
     console.error('[purchase] analyze failed:', e && e.message);
     await setStatus(sub.id, 'failed');
   }
+}
+
+// Read a single receipt (one invoice photo, or the item photos as a fallback).
+async function readOneReceipt(client, photoGroup) {
+  const images = photoGroup.map((p) => ({
+    type: 'image',
+    source: { type: 'base64', media_type: mediaType(p.contentType), data: Buffer.from(p.data).toString('base64') },
+  }));
+  const resp = await client.messages.create({
+    model: MODEL,
+    max_tokens: 8000,
+    system: SYSTEM,
+    tools: [TOOL],
+    tool_choice: { type: 'auto' }, // 'auto' (not forced) stays compatible with adaptive thinking
+    messages: [{ role: 'user', content: [...images, { type: 'text', text: 'Read this ONE till slip / invoice and record every purchased item on it.' }] }],
+  });
+  const tu = (resp.content || []).find((b) => b.type === 'tool_use');
+  const data = tu ? tu.input : parseJsonFromText(resp.content);
+  if (!data || !Array.isArray(data.items)) return null;
+  return { data, usageIn: resp.usage ? resp.usage.input_tokens : 0, usageOut: resp.usage ? resp.usage.output_tokens : 0 };
 }
 
 // Fallback: pull a JSON object out of a text response if no tool_use came back.
@@ -145,40 +169,58 @@ function parseJsonFromText(content) {
   try { return JSON.parse(text.slice(i, j + 1)); } catch (e) { return null; }
 }
 
-async function store(sub, data, usage) {
-  const items = Array.isArray(data.items) ? data.items : [];
-  const currency = (typeof data.currency === 'string' && data.currency.trim()) || 'ZAR';
-  let purchasedAt = sub.createdAt;
-  if (typeof data.purchaseDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.purchaseDate)) {
-    const d = new Date(data.purchaseDate + 'T12:00:00Z');
-    if (!isNaN(d.getTime())) purchasedAt = d;
-  }
-  const rows = items.slice(0, 300).map((it) => ({
-    hostId: sub.hostId,
-    submissionId: sub.id,
-    propertyId: sub.propertyId,
-    unitId: sub.unitId,
-    cleanerName: sub.submitterName || null,
-    purchasedAt,
-    name: String(it && it.name ? it.name : 'Item').slice(0, 300),
-    category: it && CATEGORIES.includes(it.category) ? it.category : 'Other',
-    quantity: toNum(it && it.quantity) || 1,
-    unitPriceCents: toInt(it && it.unitPriceCents),
-    lineTotalCents: toInt(it && it.lineTotalCents),
-    currency,
-    isReplacement: !!(it && it.isReplacement),
-  }));
+// Aggregate one-or-more analysed receipts into a per-invoice display summary and
+// a flat set of PurchaseItem rows (for trend analysis, which doesn't group).
+async function store(sub, receipts, usage) {
+  const currency = (receipts.map((d) => d && d.currency).find((c) => typeof c === 'string' && c.trim())) || 'ZAR';
+  const rows = [];
+  const displayReceipts = [];
+  let grandTotal = 0; let anyTotal = false;
+
+  receipts.forEach((data) => {
+    const items = Array.isArray(data.items) ? data.items : [];
+    let purchasedAt = sub.createdAt;
+    if (typeof data.purchaseDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.purchaseDate)) {
+      const d = new Date(data.purchaseDate + 'T12:00:00Z');
+      if (!isNaN(d.getTime())) purchasedAt = d;
+    }
+    const rItems = items.slice(0, 300).map((it) => ({
+      name: String(it && it.name ? it.name : 'Item').slice(0, 300),
+      category: it && CATEGORIES.includes(it.category) ? it.category : 'Other',
+      quantity: toNum(it && it.quantity) || 1,
+      unitPriceCents: toInt(it && it.unitPriceCents),
+      lineTotalCents: toInt(it && it.lineTotalCents),
+      isReplacement: !!(it && it.isReplacement),
+    }));
+    rItems.forEach((it) => rows.push({
+      hostId: sub.hostId, submissionId: sub.id, propertyId: sub.propertyId, unitId: sub.unitId,
+      cleanerName: sub.submitterName || null, purchasedAt, currency, ...it,
+    }));
+
+    const printed = toInt(data.totalCents);
+    const summed = rItems.reduce((a, it) => a + (it.lineTotalCents || 0), 0);
+    const receiptTotal = printed != null ? printed : (rItems.length ? summed : null);
+    if (receiptTotal != null) { grandTotal += receiptTotal; anyTotal = true; }
+
+    displayReceipts.push({
+      merchant: data.merchant || null,
+      purchaseDate: purchasedAt.toISOString().slice(0, 10),
+      items: rItems,
+      subtotalCents: toInt(data.subtotalCents),
+      totalCents: receiptTotal,
+      totalsMatch: data.totalsMatch !== false,
+      readable: data.readable !== false,
+      summary: typeof data.summary === 'string' ? data.summary : '',
+    });
+  });
 
   const summary = {
-    merchant: data.merchant || null,
-    purchaseDate: purchasedAt.toISOString().slice(0, 10),
     currency,
-    items: rows.map((r) => ({ name: r.name, category: r.category, quantity: r.quantity, unitPriceCents: r.unitPriceCents, lineTotalCents: r.lineTotalCents, isReplacement: r.isReplacement })),
-    subtotalCents: toInt(data.subtotalCents),
-    totalCents: toInt(data.totalCents),
-    totalsMatch: data.totalsMatch !== false,
-    readable: data.readable !== false,
-    summary: typeof data.summary === 'string' ? data.summary : '',
+    receiptCount: displayReceipts.length,
+    receipts: displayReceipts,
+    // Flat concatenation kept for backward-compatible readers of the old shape.
+    items: displayReceipts.flatMap((r) => r.items),
+    totalCents: anyTotal ? grandTotal : null,
     model: MODEL,
     generatedAt: new Date().toISOString(),
     usage: usage ? { input: usage.input_tokens, output: usage.output_tokens } : null,
@@ -186,7 +228,7 @@ async function store(sub, data, usage) {
 
   await prisma.$transaction([
     prisma.purchaseItem.deleteMany({ where: { submissionId: sub.id } }),
-    ...(rows.length ? [prisma.purchaseItem.createMany({ data: rows })] : []),
+    ...(rows.length ? [prisma.purchaseItem.createMany({ data: rows.slice(0, 600) })] : []),
     prisma.formSubmission.update({ where: { id: sub.id }, data: { purchaseSummary: summary, purchaseStatus: 'done' } }),
   ]);
 }
