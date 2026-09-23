@@ -583,6 +583,7 @@ function PurchaseSummaryCard({ sub, onUpdate }) {
                   <span>{rand(s.totalCents)}</span>
                 </div>
               )}
+              {s.duplicatesDropped > 0 && <p className="small" style={{ color: '#a15c00', margin: '6px 0 0' }}>ℹ️ {s.duplicatesDropped} duplicate invoice{s.duplicatesDropped > 1 ? 's' : ''} ignored (same invoice number) — not counted twice.</p>}
               <p className="muted small" style={{ margin: '6px 0 0' }}>🔁 = a durable item that gets replaced (tracked for “last replaced” history).</p>
             </>
           )}

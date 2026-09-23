@@ -36,6 +36,13 @@
   .photo-warn { margin-top:8px; padding:9px 11px; border:1px solid #f2c7c7; background:#fdeeee; color:#8a1f1f; border-radius:10px; font-size:13px; line-height:1.35; }
   .photo-warn .anyway { display:block; margin-top:7px; padding:0; background:none; border:0; color:#6b7280; font-size:12px; text-decoration:underline; cursor:pointer; }
   .photo-checking { margin-top:8px; font-size:12px; color:var(--muted, #6b7280); }
+  .live-pay { margin-top:12px; padding:12px 14px; border:1px solid var(--green); background:#f2faf5; border-radius:12px; }
+  .live-pay .lp-title { font-weight:800; color:var(--green-d, #14622f); margin-bottom:6px; }
+  .live-pay .lp-line { display:flex; justify-content:space-between; gap:10px; font-size:13px; color:#374151; padding:2px 0; }
+  .live-pay .lp-muted { font-size:12px; color:#6b7280; padding:2px 0; }
+  .live-pay .lp-row { display:flex; justify-content:space-between; gap:10px; padding:3px 0; border-top:1px solid #dcefe3; margin-top:4px; }
+  .live-pay .lp-total { display:flex; justify-content:space-between; gap:10px; padding-top:6px; margin-top:4px; border-top:2px solid var(--green); font-weight:800; font-size:16px; color:var(--green-d, #14622f); }
+  .live-pay .lp-fine { font-size:11px; color:#6b7280; margin-top:6px; }
   .room-tag { display:inline-block; font-size:11px; font-weight:700; color:var(--green-d); background:#e6f2ea; padding:1px 7px; border-radius:5px; margin-right:6px; text-transform:uppercase; letter-spacing:.3px; }
   .form-section { background:#fff; border:1px solid var(--line); border-radius:12px; margin-top:12px; overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,.04); }
   .form-section > summary { list-style:none; cursor:pointer; padding:13px 16px; font-weight:700; font-size:15px; color:var(--green-d); background:#eef6f0; }
@@ -134,8 +141,53 @@
   // SETTERS/photoData/photoRedraw let a saved draft be restored into the form.
   var SECTIONS = [], SETTERS = {}, photoData = {}, photoRedraw = {};
   var restoring = false, saveTimer = null;
+  // Live purchases summary (what the cleaner is owed) as she uploads invoices.
+  var RATE_CENTS = null;        // the selected property's per-clean fee
+  var INVOICE_LIVEBOX = null;   // the card element under the invoice photo field
+  var INVOICE_FIELD_ID = null;  // the buy_invoice field's id (set when it renders)
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function rand(c) { return (c == null) ? '—' : 'R' + (Number(c) / 100).toFixed(2); }
+  function esc(s) { return String(s).replace(/[&<>]/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]; }); }
+  function hashStr(s) { var h = 5381, i = s.length; while (i) { h = (h * 33) ^ s.charCodeAt(--i); } return (h >>> 0).toString(36) + ':' + s.length; }
+
+  // Build the cleaner's live "what you'll be paid today" card from the invoices
+  // she's added so far: each analysed receipt + total, her cleaning fee, and the
+  // sum. Duplicate invoice numbers are ignored so nothing is counted twice.
+  function renderLiveSummary() {
+    var box = INVOICE_LIVEBOX; if (!box) return;
+    var files = (INVOICE_FIELD_ID && photoFiles[INVOICE_FIELD_ID]) || [];
+    var anyLoading = false, anyErr = false, all = [];
+    files.forEach(function (fl) {
+      if (fl._invLoading) anyLoading = true;
+      if (fl._invErr) anyErr = true;
+      (fl._invReceipts || []).forEach(function (rc) { all.push(rc); });
+    });
+    var seen = {}, kept = [], dupCount = 0;
+    all.forEach(function (rc) {
+      var key = rc.invoiceNumber ? String(rc.invoiceNumber).toLowerCase() : null;
+      if (key && seen[key]) { dupCount++; return; }
+      if (key) seen[key] = true;
+      kept.push(rc);
+    });
+    if (!files.length && RATE_CENTS == null) { box.style.display = 'none'; return; }
+    var spent = 0; kept.forEach(function (rc) { if (typeof rc.totalCents === 'number') spent += rc.totalCents; });
+    var owed = spent + (RATE_CENTS || 0);
+
+    var html = '<div class="lp-title">💰 What you’ll be paid today</div>';
+    kept.forEach(function (rc, i) {
+      var head = 'Receipt ' + (i + 1) + (rc.merchant ? ' · ' + esc(rc.merchant) : '') + (rc.invoiceNumber ? ' · #' + esc(rc.invoiceNumber) : '');
+      html += '<div class="lp-line"><span>' + head + '</span><span>' + rand(rc.totalCents) + '</span></div>';
+    });
+    if (anyLoading) html += '<div class="lp-muted">Reading your latest invoice…</div>';
+    if (dupCount) html += '<div class="lp-muted">' + dupCount + ' duplicate invoice' + (dupCount > 1 ? 's' : '') + ' ignored.</div>';
+    if (anyErr && !kept.length) html += '<div class="lp-muted">Couldn’t read that invoice clearly — you can still submit; the host will total it.</div>';
+    html += '<div class="lp-row"><span>Purchases</span><span>' + rand(spent) + '</span></div>';
+    if (RATE_CENTS != null) html += '<div class="lp-row"><span>Your cleaning fee</span><span>' + rand(RATE_CENTS) + '</span></div>';
+    html += '<div class="lp-total"><span>You’ll be paid</span><span>' + rand(owed) + '</span></div>';
+    html += '<div class="lp-fine">Estimated from your invoices — the host confirms the final amount.</div>';
+    box.innerHTML = html; box.style.display = 'block';
+  }
 
   // ---- Draft (save-as-you-go) helpers -------------------------------------
   function draftKey(unitId) { return 'ss_clean_draft_v1_' + unitId; }
@@ -280,7 +332,7 @@
       var photos = el('div', 'photos');
       function draw() { photos.innerHTML = ''; photoFiles[f.id].forEach(function (file, i) {
         var t = el('div', 'thumb'); var im = el('img'); im.src = URL.createObjectURL(file); t.appendChild(im);
-        var x = el('button', null, '×'); x.type = 'button'; x.onclick = function () { photoFiles[f.id].splice(i, 1); photoData[f.id].splice(i, 1); draw(); afterChange(); }; t.appendChild(x); photos.appendChild(t); }); }
+        var x = el('button', null, '×'); x.type = 'button'; x.onclick = function () { photoFiles[f.id].splice(i, 1); photoData[f.id].splice(i, 1); draw(); afterChange(); if (f.id === INVOICE_FIELD_ID) renderLiveSummary(); }; t.appendChild(x); photos.appendChild(t); }); }
       photoRedraw[f.id] = draw;
       q.appendChild(photos);
       var btns = el('div', 'photo-btns'); var l = el('label', 'pbtn', '📷 Add photos'); var inp = el('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
@@ -295,7 +347,14 @@
         // Keep a compressed copy in the on-phone draft so progress survives a reload.
         prep(file, 1400, 0.75).then(function (p) { if (p && p.dataBase64 && photoFiles[f.id][idx] === file) { photoData[f.id][idx] = p.dataBase64; scheduleSave(); } });
         draw(); afterChange();
+        if (strict) analyzeInvoiceFile(f.id, file);   // live "what you're owed" summary
       }
+      function removeFile(file) {
+        var arr = photoFiles[f.id] || []; var i = arr.indexOf(file);
+        if (i >= 0) { arr.splice(i, 1); (photoData[f.id] || []).splice(i, 1); }
+        draw(); afterChange();
+      }
+      function warnMsg(text) { warn.innerHTML = ''; warn.appendChild(el('div', null, text)); warn.style.display = 'block'; }
       function reject(file, reason) {
         fails++; lastRejected = file; warn.innerHTML = '';
         warn.appendChild(el('div', null, '⚠️ That photo looks ' + reason + ' — please take a clearer picture so it can be read.'));
@@ -316,7 +375,28 @@
           });
         }, Promise.resolve()).then(function () { checking.style.display = 'none'; });
       };
+      // Read a just-added invoice with the AI, dedup it, and refresh the live summary.
+      function analyzeInvoiceFile(fid, file) {
+        file._invLoading = true; renderLiveSummary();
+        prep(file, 1600, 0.82).then(function (p) {
+          if (!p || !p.dataBase64) { file._invLoading = false; renderLiveSummary(); return; }
+          var h = hashStr(p.dataBase64);
+          var dup = (photoFiles[fid] || []).some(function (o) { return o !== file && o._invHash === h; });
+          if (dup) { removeFile(file); warnMsg('⚠️ That looks like an invoice you already added — it hasn’t been added again.'); renderLiveSummary(); return; }
+          file._invHash = h;
+          fetch('/public/forms/analyze-invoice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ images: [{ dataBase64: p.dataBase64, contentType: p.contentType }] }) })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+              file._invLoading = false;
+              if (res && res.ok && Array.isArray(res.receipts)) { file._invReceipts = res.receipts; file._invErr = false; }
+              else { file._invReceipts = []; file._invErr = (res && res.reason) || 'failed'; }
+              renderLiveSummary();
+            })
+            .catch(function () { file._invLoading = false; file._invReceipts = []; file._invErr = 'failed'; renderLiveSummary(); });
+        });
+      }
       l.appendChild(inp); btns.appendChild(l); q.appendChild(btns); q.appendChild(checking); q.appendChild(warn);
+      if (strict) { INVOICE_FIELD_ID = f.id; INVOICE_LIVEBOX = el('div', 'live-pay'); INVOICE_LIVEBOX.style.display = 'none'; q.appendChild(INVOICE_LIVEBOX); renderLiveSummary(); }
       SETTERS[f.id] = function (list) {
         list = list || []; photoData[f.id] = list.slice();
         photoFiles[f.id] = list.map(function (d) { return dataURLtoFile(d); }).filter(Boolean);
@@ -524,9 +604,11 @@
     PROPS.forEach(function (p) { var o = el('option', null, p.name); o.value = p.id; propSel.appendChild(o); });
     propSel.onchange = function () {
       var p = PROPS.filter(function (x) { return x.id === propSel.value; })[0];
+      RATE_CENTS = (p && typeof p.cleanRateCents === 'number') ? p.cleanRateCents : null;
       var unitSel = document.getElementById('unit'); unitSel.innerHTML = '<option value="">Select a unit…</option>';
       (p ? p.units : []).forEach(function (u) { var o = el('option', null, u.name); o.value = u.id; unitSel.appendChild(o); });
       document.getElementById('fields').innerHTML = ''; TEMPLATE = null;
+      renderLiveSummary();
     };
     document.getElementById('unit').onchange = function () { if (this.value) loadForm(this.value); };
   }).catch(function () { document.getElementById('prop').innerHTML = '<option value="">Could not load</option>'; });

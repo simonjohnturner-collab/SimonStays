@@ -417,13 +417,39 @@ router.get('/forms/units', async (req, res, next) => {
     const [properties, providers, host] = await Promise.all([
       prisma.property.findMany({
         where: { hostId }, orderBy: { sortOrder: 'asc' },
-        select: { id: true, name: true, units: { select: { id: true, name: true, bedrooms: true, bathrooms: true }, orderBy: { createdAt: 'asc' } } },
+        select: { id: true, name: true, cleanRateCents: true, units: { select: { id: true, name: true, bedrooms: true, bathrooms: true }, orderBy: { createdAt: 'asc' } } },
       }),
       prisma.serviceProvider.findMany({ where: { hostId, role: 'Cleaner' }, orderBy: { name: 'asc' }, select: { name: true } }),
       prisma.host.findUnique({ where: { id: hostId }, select: { cleaners: true } }),
     ]);
     const cleaners = providers.length ? providers.map((p) => p.name) : (Array.isArray(host?.cleaners) ? host.cleaners : []);
     res.json({ properties, cleaners });
+  } catch (e) { next(e); }
+});
+
+// POST /public/forms/analyze-invoice — read invoice photo(s) and return the
+// itemised receipt(s), WITHOUT storing anything. Lets the cleaner see a running
+// summary + what she's owed as she uploads. Lightly rate-limited per IP because
+// it's public and triggers an AI call. Silent no-op if the AI key isn't set.
+const _invRate = new Map(); // ip -> { count, resetAt }
+function invoiceRateOk(ip) {
+  const now = Date.now(), WINDOW = 15 * 60 * 1000, MAX = 60;
+  const e = _invRate.get(ip);
+  if (!e || now > e.resetAt) { _invRate.set(ip, { count: 1, resetAt: now + WINDOW }); return true; }
+  if (e.count >= MAX) return false;
+  e.count++; return true;
+}
+router.post('/forms/analyze-invoice', async (req, res, next) => {
+  try {
+    const hostId = await publicHostId();
+    if (!hostId) return res.status(404).json({ ok: false, reason: 'not_available' });
+    const ip = (req.headers['x-forwarded-for'] || req.ip || 'unknown').toString().split(',')[0].trim();
+    if (!invoiceRateOk(ip)) return res.status(429).json({ ok: false, reason: 'rate_limited' });
+    const images = Array.isArray(req.body && req.body.images) ? req.body.images.slice(0, 4) : [];
+    if (!images.length) return res.json({ ok: false, reason: 'no_images' });
+    const { analyzeInvoiceImages } = require('../utils/purchaseAnalyzer');
+    const out = await analyzeInvoiceImages(images);
+    res.json(out);
   } catch (e) { next(e); }
 });
 

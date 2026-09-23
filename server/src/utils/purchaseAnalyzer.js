@@ -198,8 +198,14 @@ async function store(sub, receipts, usage) {
   const rows = [];
   const displayReceipts = [];
   let grandTotal = 0; let anyTotal = false;
+  const seenInvoices = new Set(); // drop the same invoice number twice (a re-photographed slip)
+  let duplicatesDropped = 0;
 
   receipts.forEach((data) => {
+    // Duplicate guard: if this slip's invoice number was already recorded, skip it
+    // entirely so a receipt uploaded twice can't inflate the total.
+    const invNoKey = (typeof data.invoiceNumber === 'string' && data.invoiceNumber.trim()) ? data.invoiceNumber.trim().toLowerCase() : null;
+    if (invNoKey) { if (seenInvoices.has(invNoKey)) { duplicatesDropped++; return; } seenInvoices.add(invNoKey); }
     const items = Array.isArray(data.items) ? data.items : [];
     let purchasedAt = sub.createdAt;
     if (typeof data.purchaseDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.purchaseDate)) {
@@ -245,6 +251,7 @@ async function store(sub, receipts, usage) {
     currency,
     receiptCount: displayReceipts.length,
     receipts: displayReceipts,
+    duplicatesDropped,
     // Flat concatenation kept for backward-compatible readers of the old shape.
     items: displayReceipts.flatMap((r) => r.items),
     totalCents: anyTotal ? grandTotal : null,
@@ -260,4 +267,52 @@ async function store(sub, receipts, usage) {
   ]);
 }
 
-module.exports = { analyzePurchase, hasPurchasePhotos, enabled, MODEL, CATEGORIES };
+// Light display shape for one receipt, used by the live cleaner preview (no DB).
+function previewReceipt(data) {
+  const items = Array.isArray(data.items) ? data.items : [];
+  const rItems = items.slice(0, 300).map((it) => ({
+    name: String(it && it.name ? it.name : 'Item').slice(0, 300),
+    category: it && CATEGORIES.includes(it.category) ? it.category : 'Other',
+    quantity: toNum(it && it.quantity) || 1,
+    lineTotalCents: toInt(it && it.lineTotalCents),
+    unitPriceCents: toInt(it && it.unitPriceCents),
+    isReplacement: !!(it && it.isReplacement),
+  }));
+  const printed = toInt(data.totalCents);
+  const summed = rItems.reduce((a, it) => a + (it.lineTotalCents || 0), 0);
+  const total = printed != null ? printed : (rItems.length ? summed : null);
+  const invoiceNumber = (typeof data.invoiceNumber === 'string' && data.invoiceNumber.trim()) ? data.invoiceNumber.trim().slice(0, 60) : null;
+  const purchaseTime = (typeof data.purchaseTime === 'string' && /^\d{1,2}:\d{2}$/.test(data.purchaseTime.trim())) ? data.purchaseTime.trim().replace(/^(\d):/, '0$1:') : null;
+  const purchaseDate = (typeof data.purchaseDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.purchaseDate)) ? data.purchaseDate : null;
+  return { merchant: data.merchant || null, invoiceNumber, purchaseDate, purchaseTime, items: rItems, totalCents: total, readable: data.readable !== false };
+}
+
+const MAX_IMG_BYTES = 12 * 1024 * 1024;
+function decodeImage(dataBase64) {
+  if (typeof dataBase64 !== 'string') return null;
+  const b64 = dataBase64.indexOf(',') >= 0 ? dataBase64.slice(dataBase64.indexOf(',') + 1) : dataBase64;
+  try { const buf = Buffer.from(b64, 'base64'); return (buf.length && buf.length <= MAX_IMG_BYTES) ? buf : null; } catch (e) { return null; }
+}
+
+// Stateless: read invoice image(s) and return the receipt breakdown WITHOUT touching
+// the DB. Powers the public cleaner form's live "what you're owed" summary as she
+// uploads — the authoritative, stored record is still built on submit via store().
+async function analyzeInvoiceImages(images) {
+  if (!enabled()) return { ok: false, reason: 'no_key' };
+  try {
+    const client = new Anthropic();
+    const receipts = [];
+    for (const im of (Array.isArray(images) ? images : []).slice(0, 4)) {
+      const buf = decodeImage(im && im.dataBase64);
+      if (!buf) continue;
+      const r = await readReceipts(client, [{ data: buf, contentType: (im && im.contentType) || 'image/jpeg' }]);
+      ((r && r.receipts) || []).forEach((rc) => receipts.push(previewReceipt(rc)));
+    }
+    return { ok: true, currency: 'ZAR', receipts };
+  } catch (e) {
+    console.error('[purchase] preview failed:', e && e.message);
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+module.exports = { analyzePurchase, hasPurchasePhotos, enabled, analyzeInvoiceImages, MODEL, CATEGORIES };
