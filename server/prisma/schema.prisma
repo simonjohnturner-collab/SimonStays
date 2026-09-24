@@ -435,6 +435,7 @@ model Booking {
   // lived only inside `comments`; a startup backfill fills them for old rows.
   guestEmail   String?
   guestPhone   String?
+  recommendedBy String? // who referred this guest, so the host can thank them
   totalCents   Int?    // payable total captured at booking time (website bookings)
   guestAccountId String?
   guestAccount   GuestAccount? @relation(fields: [guestAccountId], references: [id], onDelete: SetNull)

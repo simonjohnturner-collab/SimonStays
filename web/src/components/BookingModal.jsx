@@ -11,6 +11,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   const [checkOut, setCheckOut] = useState(booking?.checkOut?.slice(0, 10) || '');
   const [cleaner, setCleaner] = useState(booking?.cleaner || '');
   const [comments, setComments] = useState(booking?.comments || '');
+  const [recommendedBy, setRecommendedBy] = useState(booking?.recommendedBy || '');
   const [allocateUnitId, setAllocateUnitId] = useState('');
   const [moveUnitId, setMoveUnitId] = useState(booking?.unitId || ''); // reassign an allocated booking to another unit
   const [groupId, setGroupId] = useState(booking?.pricingGroupId || '');
@@ -65,6 +66,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   function payload(extra = {}) {
     return {
       guestName, checkIn, checkOut, cleaner, comments,
+      recommendedBy: recommendedBy.trim() || null,
       paymentStatus,
       quotedCents: effQuotedCents,
       amountPaidCents: paymentStatus === 'partial' ? paidCents : null,
@@ -226,6 +228,9 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
             </div>
           ))}
         </fieldset>
+
+        <label>Recommended by <span className="muted small">(who referred this guest — so you can thank them)</span>
+          <input value={recommendedBy} onChange={(e) => setRecommendedBy(e.target.value)} placeholder="Name of the person who recommended you" /></label>
 
         <label>Comments<input value={comments} onChange={(e) => setComments(e.target.value)} placeholder="Anything else…" /></label>
 

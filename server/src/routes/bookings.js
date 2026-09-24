@@ -32,7 +32,7 @@ router.post('/units/:unitId/bookings', requireOwnedUnit, async (req, res) => {
   const booking = await prisma.booking.create({
     data: {
       unitId: req.unit.id, hostId: req.hostId, source: 'manual', status: 'confirmed',
-      guestName: b.guestName || null,
+      guestName: b.guestName || null, recommendedBy: b.recommendedBy || null,
       checkIn: dateOnly(b.checkIn), checkOut: dateOnly(b.checkOut),
       cleaner: b.cleaner || null, comments: b.comments || null,
       leavingEarly: !!b.leavingEarly,
@@ -53,7 +53,7 @@ router.post('/bookings/floating', async (req, res) => {
   const booking = await prisma.booking.create({
     data: {
       unitId: null, hostId: req.hostId, source: 'manual', status: 'floating',
-      guestName: b.guestName || null,
+      guestName: b.guestName || null, recommendedBy: b.recommendedBy || null,
       checkIn: dateOnly(b.checkIn), checkOut: dateOnly(b.checkOut),
       cleaner: b.cleaner || null, comments: b.comments || null,
       leavingEarly: !!b.leavingEarly,
@@ -168,7 +168,7 @@ router.patch('/bookings/:id', async (req, res) => {
   const booking = await loadOwned(req, res); if (!booking) return;
   const b = req.body || {};
   const data = {};
-  ['guestName', 'cleaner', 'comments', 'accessCode'].forEach((k) => { if (k in b) data[k] = b[k]; });
+  ['guestName', 'cleaner', 'comments', 'accessCode', 'recommendedBy'].forEach((k) => { if (k in b) data[k] = b[k]; });
   ['leavingEarly', 'earlyCheckIn', 'lateCheckOut', 'extraMattress', 'hairDryer']
     .forEach((k) => { if (k in b) data[k] = !!b[k]; });
   Object.assign(data, paymentFields(b));
