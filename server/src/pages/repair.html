@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a7a3a'/%3E%3Ctext x='16' y='23' font-family='Arial,Helvetica,sans-serif' font-size='22' font-weight='700' fill='white' text-anchor='middle'%3ES%3C/text%3E%3C/svg%3E">
+<title>Repair report · SimonStays</title>
+<style>
+  :root { --green:#1a7a3a; --green-d:#14622f; --ink:#1f2430; --muted:#6b7280; --line:#e3e6ea; --bg:#f4f6f4; --red:#cc2b2b; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; }
+  body { font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); line-height:1.5; }
+  .top { background:var(--green); color:#fff; padding:18px 16px; }
+  .brand { font-weight:800; font-size:20px; letter-spacing:-.3px; }
+  .brand span { color:#bfe6cd; }
+  .top p { margin:4px 0 0; font-size:13px; opacity:.9; }
+  .wrap { max-width:560px; margin:0 auto; padding:16px 14px 60px; }
+  label { display:block; font-size:13px; font-weight:600; color:var(--ink); margin:14px 0 5px; }
+  .req::after { content:" *"; color:var(--red); }
+  input,select,textarea { width:100%; font:inherit; font-size:16px; padding:11px 12px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+  input:focus,select:focus,textarea:focus { outline:none; border-color:var(--green); }
+  textarea { resize:vertical; min-height:90px; }
+  .hint { font-size:12px; color:var(--muted); margin:4px 0 0; }
+  .amount-row { position:relative; }
+  .amount-row .cur { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:16px; }
+  .amount-row input { padding-left:28px; }
+  .photos { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .thumb { position:relative; width:80px; height:80px; border-radius:9px; overflow:hidden; border:1px solid var(--line); }
+  .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .thumb button { position:absolute; top:2px; right:2px; width:20px; height:20px; border-radius:50%; border:0; background:rgba(0,0,0,.6); color:#fff; font-size:12px; line-height:1; cursor:pointer; }
+  .photo-btns { display:flex; gap:8px; margin-top:8px; }
+  .pbtn { flex:1; text-align:center; padding:12px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font-size:14px; font-weight:600; cursor:pointer; }
+  .pbtn:hover { border-color:var(--green); color:var(--green); }
+  .pbtn input { display:none; }
+  .submit { width:100%; margin-top:22px; padding:15px; background:var(--green); color:#fff; border:0; border-radius:12px; font-weight:700; font-size:16px; cursor:pointer; }
+  .submit:hover { background:var(--green-d); }
+  .submit:disabled { opacity:.6; }
+  .msg { margin-top:14px; font-size:14px; padding:10px 12px; border-radius:10px; }
+  .msg.err { background:#fdeaea; color:#a11; }
+  .done { background:#fff; border:1px solid var(--line); border-radius:14px; padding:28px 20px; text-align:center; margin-top:20px; }
+  .done .tick { font-size:46px; }
+  .done h2 { margin:8px 0 6px; }
+  .done p { color:var(--muted); margin:0 0 18px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="brand">Simon<span>Stays</span></div>
+    <p>Repair report — confirm the work and request payment</p>
+  </div>
+
+  <div class="wrap">
+    <form id="form">
+      <label class="req" for="unit">Which unit did you work on?</label>
+      <select id="unit" required><option value="">Loading units…</option></select>
+
+      <label id="resolveWrap" class="hidden" for="resolve">Which reported issue did this fix? (optional)</label>
+      <select id="resolve" class="hidden"><option value="">General repair / not from a report</option></select>
+
+      <label class="req" for="date">Date of the repair</label>
+      <input type="date" id="date" required>
+
+      <label class="req" for="name">Your name</label>
+      <input type="text" id="name" placeholder="Full name" required>
+
+      <label class="req" for="desc">What did you repair?</label>
+      <textarea id="desc" placeholder="e.g. Replaced the broken toilet cistern inlet valve in the main bathroom."></textarea>
+
+      <label>Photos of the completed repair</label>
+      <div class="photos" id="photos"></div>
+      <div class="photo-btns"><label class="pbtn">📷 Add photos<input type="file" id="photoInput" accept="image/*" multiple></label></div>
+
+      <label class="req" for="amount">Amount to be paid</label>
+      <div class="amount-row"><span class="cur">R</span><input type="number" id="amount" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></div>
+      <p class="hint">Enter the total you're charging for this repair.</p>
+
+      <div id="msg"></div>
+      <button type="submit" class="submit" id="submit">Submit repair report</button>
+    </form>
+
+    <div id="done" class="done hidden">
+      <div class="tick">✅</div>
+      <h2>Thank you</h2>
+      <p>Your repair report and payment request have been sent to the host.</p>
+      <button class="submit" onclick="location.reload()">Submit another repair</button>
+    </div>
+  </div>
+
+<script>
+  var files = [];            // File[] of the repair photos
+  var PROPS = [];
+
+  var DKEY = 'ss_repair_draft_v1', dTimer = null;
+  function saveDraft() {
+    try {
+      localStorage.setItem(DKEY, JSON.stringify({
+        unit: document.getElementById('unit').value,
+        resolve: document.getElementById('resolve').value,
+        date: document.getElementById('date').value,
+        name: document.getElementById('name').value,
+        desc: document.getElementById('desc').value,
+        amount: document.getElementById('amount').value
+      }));
+    } catch (e) {}
+  }
+  function scheduleSave() { if (dTimer) clearTimeout(dTimer); dTimer = setTimeout(saveDraft, 400); }
+  function clearDraft() { try { localStorage.removeItem(DKEY); } catch (e) {} }
+
+  function readRaw(file) {
+    return new Promise(function (resolve) {
+      var r = new FileReader();
+      r.onload = function () { resolve({ dataBase64: r.result, contentType: file.type || 'image/jpeg' }); };
+      r.onerror = function () { resolve(null); };
+      r.readAsDataURL(file);
+    });
+  }
+  // Shrink + re-encode to JPEG via canvas; fall back to the raw bytes if the
+  // browser can't decode/encode (HEIC, in-app webviews). Never drops a photo.
+  function prep(file, maxDim, quality) {
+    return new Promise(function (resolve) {
+      var done = false, img = new Image(), url = URL.createObjectURL(file);
+      var fallback = function () { if (done) return; done = true; try { URL.revokeObjectURL(url); } catch (e) {} readRaw(file).then(resolve); };
+      img.onload = function () {
+        try {
+          URL.revokeObjectURL(url);
+          var w = img.width, h = img.height; if (!w || !h) return fallback();
+          if (Math.max(w, h) > maxDim) { var s = maxDim / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
+          var c = document.createElement('canvas'); c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          var out = c.toDataURL('image/jpeg', quality);
+          if (!out || out.length < 100) return fallback();
+          done = true; resolve({ dataBase64: out, contentType: 'image/jpeg' });
+        } catch (e) { fallback(); }
+      };
+      img.onerror = fallback; img.src = url;
+    });
+  }
+
+  var photosEl = document.getElementById('photos');
+  function drawPhotos() {
+    photosEl.innerHTML = '';
+    files.forEach(function (f, i) {
+      var t = document.createElement('div'); t.className = 'thumb';
+      var im = document.createElement('img'); im.src = URL.createObjectURL(f); t.appendChild(im);
+      var x = document.createElement('button'); x.type = 'button'; x.textContent = '×';
+      x.onclick = function () { files.splice(i, 1); drawPhotos(); };
+      t.appendChild(x); photosEl.appendChild(t);
+    });
+  }
+  document.getElementById('photoInput').onchange = function (e) {
+    files = files.concat(Array.prototype.slice.call(e.target.files)); e.target.value = ''; drawPhotos();
+  };
+
+  // Load unresolved damage reports for the chosen unit, for the "which issue" picker.
+  function loadIssues(unitId) {
+    var sel = document.getElementById('resolve'), wrap = document.getElementById('resolveWrap');
+    sel.innerHTML = '<option value="">General repair / not from a report</option>';
+    if (!unitId) { sel.classList.add('hidden'); wrap.classList.add('hidden'); return; }
+    fetch('/public/forms/open-issues?unitId=' + encodeURIComponent(unitId)).then(function (r) { return r.json(); }).then(function (d) {
+      var issues = (d && d.issues) || [];
+      if (!issues.length) { sel.classList.add('hidden'); wrap.classList.add('hidden'); return; }
+      issues.forEach(function (it) {
+        var o = document.createElement('option'); o.value = it.id;
+        var when = (it.date || '').slice(0, 10);
+        var s = it.summary.length > 60 ? it.summary.slice(0, 57) + '…' : it.summary;
+        o.textContent = when + ' — ' + s;
+        sel.appendChild(o);
+      });
+      sel.classList.remove('hidden'); wrap.classList.remove('hidden');
+    }).catch(function () { sel.classList.add('hidden'); wrap.classList.add('hidden'); });
+  }
+
+  fetch('/public/forms/repair').then(function (r) { return r.json(); }).then(function (d) {
+    PROPS = d.properties || [];
+    var sel = document.getElementById('unit');
+    sel.innerHTML = '<option value="">Select the unit…</option>';
+    PROPS.forEach(function (p) {
+      (p.units || []).forEach(function (u) {
+        var o = document.createElement('option'); o.value = u.id; o.textContent = p.name + ' · ' + u.name; sel.appendChild(o);
+      });
+    });
+    // Restore a saved draft on this phone.
+    var d2 = null; try { d2 = JSON.parse(localStorage.getItem(DKEY) || 'null'); } catch (e) {}
+    if (d2) {
+      if (d2.unit) { sel.value = d2.unit; loadIssues(d2.unit); }
+      if (d2.name) document.getElementById('name').value = d2.name;
+      if (d2.desc) document.getElementById('desc').value = d2.desc;
+      if (d2.amount) document.getElementById('amount').value = d2.amount;
+      if (d2.date) document.getElementById('date').value = d2.date;
+      if (d2.resolve) setTimeout(function () { document.getElementById('resolve').value = d2.resolve; }, 400);
+    }
+  }).catch(function () { document.getElementById('unit').innerHTML = '<option value="">Could not load units</option>'; });
+
+  document.getElementById('unit').addEventListener('change', function () { loadIssues(this.value); });
+
+  var dateEl = document.getElementById('date');
+  if (!dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+
+  document.getElementById('form').addEventListener('input', scheduleSave);
+  document.getElementById('form').addEventListener('change', scheduleSave);
+
+  function showErr(t) { var m = document.getElementById('msg'); m.className = 'msg err'; m.textContent = t; window.scrollTo(0, document.body.scrollHeight); }
+
+  document.getElementById('form').onsubmit = function (e) {
+    e.preventDefault();
+    document.getElementById('msg').textContent = '';
+    var unitId = document.getElementById('unit').value;
+    var name = document.getElementById('name').value.trim();
+    var desc = document.getElementById('desc').value.trim();
+    var amount = document.getElementById('amount').value;
+    var date = document.getElementById('date').value;
+    if (!unitId) return showErr('Please choose the unit you worked on.');
+    if (!name) return showErr('Please enter your name.');
+    if (!desc) return showErr('Please describe what you repaired.');
+    if (amount === '' || isNaN(parseFloat(amount)) || parseFloat(amount) < 0) return showErr('Please enter the amount to be paid.');
+
+    var btn = document.getElementById('submit'); btn.disabled = true; btn.textContent = 'Sending…';
+    var payload = {
+      type: 'repair', unitId: unitId, submitterName: name,
+      resolvesSubmissionId: document.getElementById('resolve').value || null,
+      answers: { date: date, rp_desc: desc, rp_amount: parseFloat(amount).toFixed(2) }
+    };
+
+    fetch('/public/forms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res || !res.id) throw new Error('submit failed');
+        var failed = 0, jobs = [];
+        files.forEach(function (f) {
+          jobs.push(prep(f, 1600, 0.82).then(function (p) {
+            if (!p || !p.dataBase64) { failed++; return; }
+            return fetch('/public/forms/' + res.id + '/photos', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fieldId: 'rp_photos', dataBase64: p.dataBase64, contentType: p.contentType, filename: f.name })
+            }).then(function (r) { if (!r.ok) failed++; }, function () { failed++; });
+          }));
+        });
+        return Promise.all(jobs).then(function () { return failed; });
+      })
+      .then(function (failed) {
+        if (failed) alert(failed + ' photo(s) could not be uploaded, but your report was saved. Please try again from Safari or Chrome (not an in-app browser).');
+        clearDraft();
+        document.getElementById('form').classList.add('hidden');
+        document.getElementById('done').classList.remove('hidden');
+        window.scrollTo(0, 0);
+      })
+      .catch(function () { showErr('Sorry, something went wrong. Please try again.'); btn.disabled = false; btn.textContent = 'Submit repair report'; });
+  };
+</script>
+</body>
+</html>

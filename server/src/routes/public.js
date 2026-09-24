@@ -427,6 +427,32 @@ router.get('/forms/units', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /public/forms/open-issues?unitId=&propertyId= — unresolved damage reports a
+// contractor can mark their repair against. Scoped and read-only.
+router.get('/forms/open-issues', async (req, res, next) => {
+  try {
+    const hostId = await publicHostId();
+    if (!hostId) return res.json({ issues: [] });
+    const where = { hostId, type: 'damage', status: { notIn: ['resolved', 'incomplete'] } };
+    if (req.query.unitId) where.unitId = String(req.query.unitId);
+    else if (req.query.propertyId) where.propertyId = String(req.query.propertyId);
+    const subs = await prisma.formSubmission.findMany({
+      where, orderBy: { createdAt: 'desc' }, take: 30,
+      include: { property: { select: { name: true } }, unit: { select: { name: true } } },
+    });
+    const issues = subs.map((s) => {
+      const list = s.answers && Array.isArray(s.answers.issues) ? s.answers.issues : [];
+      const desc = list.map((i) => (i && i.description ? String(i.description) : '')).filter(Boolean).join('; ');
+      return {
+        id: s.id, date: s.createdAt,
+        where: `${s.property ? s.property.name : ''}${s.unit ? ' · ' + s.unit.name : ''}`.trim(),
+        summary: desc || '(no description)',
+      };
+    });
+    res.json({ issues });
+  } catch (e) { next(e); }
+});
+
 // POST /public/forms/analyze-invoice — read invoice photo(s) and return the
 // itemised receipt(s), WITHOUT storing anything. Lets the cleaner see a running
 // summary + what she's owed as she uploads. Lightly rate-limited per IP because
@@ -515,17 +541,29 @@ router.post('/forms', async (req, res, next) => {
       if (p) propertyId = p.id;
     }
 
+    // A repair report may say which damage report it resolves (the tie-up).
+    let resolvesSubmissionId = null;
+    if (b.type === 'repair' && b.resolvesSubmissionId) {
+      const dmg = await prisma.formSubmission.findFirst({ where: { id: b.resolvesSubmissionId, hostId, type: 'damage' }, select: { id: true } });
+      if (dmg) resolvesSubmissionId = dmg.id;
+    }
+
     const submission = await prisma.formSubmission.create({
       data: {
         hostId, type: b.type, templateId: b.templateId || null,
         propertyId, unitId,
         submitterName: b.submitterName || null, submitterContact: b.submitterContact || null,
         answers: b.answers && typeof b.answers === 'object' ? b.answers : {},
+        resolvesSubmissionId,
         // Clean reports start "incomplete" and are only promoted to "new" once the
         // finalize step confirms the required room photos actually uploaded.
         status: b.type === 'clean' ? 'incomplete' : 'new',
       },
     });
+    // Linking a repair to a damage report marks that report resolved.
+    if (resolvesSubmissionId) {
+      await prisma.formSubmission.update({ where: { id: resolvesSubmissionId }, data: { status: 'resolved' } }).catch(() => {});
+    }
     res.status(201).json({ ok: true, id: submission.id });
   } catch (e) { next(e); }
 });

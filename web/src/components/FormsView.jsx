@@ -21,6 +21,10 @@ function FormLinks() {
         <a className="fl-btn clean" href={formLink('clean')} target="_blank" rel="noreferrer">🧹 Cleaner report ↗</a>
         <button className="fl-copy" onClick={() => copy('clean')}>{copied === 'clean' ? 'Copied ✓' : 'Copy link'}</button>
       </span>
+      <span className="fl-group">
+        <a className="fl-btn repair" href={formLink('repair')} target="_blank" rel="noreferrer">🛠 Repair report ↗</a>
+        <button className="fl-copy" onClick={() => copy('repair')}>{copied === 'repair' ? 'Copied ✓' : 'Copy link'}</button>
+      </span>
     </div>
   );
 }
@@ -74,6 +78,7 @@ export default function FormsView({ onClose, properties = [], initialSubmissionI
     const m = {};
     if (forms) {
       (forms.damage?.fields || []).forEach((f) => { m[f.id] = f.label; });
+      (forms.repair?.fields || []).forEach((f) => { m[f.id] = f.label; });
       (forms.cleanForms || []).forEach((t) => (t.fields || []).forEach((f) => { m[f.id] = f.label; }));
     }
     return m;
@@ -184,6 +189,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
             <option value="">All forms</option>
             <option value="damage">Damage / issue</option>
             <option value="clean">Checkout clean</option>
+            <option value="repair">Repair</option>
           </select>
           <select value={propertyId} onChange={(e) => setPropertyId(e.target.value)}>
             <option value="">All properties</option>
@@ -216,7 +222,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
             {selMode && <input type="checkbox" className="fi-check" checked={picked.has(r.id)} onChange={() => togglePick(r.id)} />}
           <button className={`forms-item ${sel?.id === r.id ? 'active' : ''}`} onClick={() => (selMode ? togglePick(r.id) : open(r.id))}>
             <div className="fi-top">
-              <span className={`ftag ${r.type}`}>{r.type === 'damage' ? 'Issue' : 'Clean'}</span>
+              <span className={`ftag ${r.type}`}>{r.type === 'damage' ? 'Issue' : r.type === 'repair' ? 'Repair' : 'Clean'}</span>
               <span className={`fstatus ${r.status}`}>{r.status}</span>
             </div>
             <div className="fi-mid">{r.propertyName ? `${r.propertyName}${r.unitName ? ' · ' + r.unitName : ''}` : 'No property'}</div>
@@ -238,7 +244,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
           <div className="sub-card" ref={detailRef}>
             <div className="sub-head">
               <div>
-                <span className={`ftag ${sel.type}`}>{sel.type === 'damage' ? 'Damage / issue' : 'Checkout clean'}</span>
+                <span className={`ftag ${sel.type}`}>{sel.type === 'damage' ? 'Damage / issue' : sel.type === 'repair' ? 'Repair report' : 'Checkout clean'}</span>
                 <h3>{sel.propertyName ? `${sel.propertyName}${sel.unitName ? ' · ' + sel.unitName : ''}` : 'No property'}</h3>
                 <p className="muted small">{sel.submitterName || 'Anonymous'}{sel.submitterContact ? ` · ${sel.submitterContact}` : ''} · {fmtDate(sel.createdAt)}</p>
               </div>
@@ -253,6 +259,8 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
             <div id="secjump-purchases">
               <PurchaseSummaryCard sub={sel} onUpdate={(patch) => setSel((x) => (x ? { ...x, ...patch } : x))} />
             </div>
+
+            <ResolutionLink sub={sel} onOpen={open} onChanged={() => { open(sel.id); load(); }} />
 
             {(() => {
               const answers = sel.answers || {};
@@ -655,6 +663,69 @@ function DaySettlement({ sub, spentCents, onUpdate }) {
   );
 }
 
+// Damage↔repair tie-up. On a damage report: shows the repair that resolved it.
+// On a repair report: lets the host link it to a reported issue (which then marks
+// that damage report resolved).
+function ResolutionLink({ sub, onOpen, onChanged }) {
+  const [cands, setCands] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const isRepair = sub.type === 'repair';
+  const isDamage = sub.type === 'damage';
+  useEffect(() => {
+    if (!isRepair) return;
+    let live = true;
+    api.listFormSubmissions('?type=damage&limit=200').then((r) => { if (live) setCands(r.submissions || []); }).catch(() => { if (live) setCands([]); });
+    return () => { live = false; };
+  }, [isRepair, sub.id]);
+  if (!isRepair && !isDamage) return null;
+
+  const money = (c) => (c == null ? '' : 'R' + (Number(c) / 100).toFixed(2));
+  const box = { background: '#fff', border: '1px solid #e3e6ea', borderRadius: 12, padding: '12px 14px', margin: '12px 0' };
+  const link = { background: 'none', border: 0, color: '#14622f', fontWeight: 700, cursor: 'pointer', padding: 0, textDecoration: 'underline' };
+
+  if (isDamage) {
+    const rb = sub.resolvedBy;
+    return (
+      <div style={box}>
+        <strong>🔧 Resolution</strong>
+        {rb ? (
+          <div className="small" style={{ marginTop: 4 }}>
+            ✅ Resolved by a repair on {fmtDate(rb.date)}{rb.submitterName ? ` · ${rb.submitterName}` : ''}{rb.amountCents != null ? ` · ${money(rb.amountCents)}` : ''}{' '}
+            <button style={link} onClick={() => onOpen(rb.id)}>View repair →</button>
+          </div>
+        ) : <div className="muted small" style={{ marginTop: 4 }}>Not yet resolved — link a repair report from the repair’s page.</div>}
+      </div>
+    );
+  }
+
+  const options = (cands || []).filter((c) => c.status !== 'resolved' || c.id === sub.resolvesSubmissionId);
+  async function pick(id) {
+    setBusy(true);
+    try { await api.updateFormSubmission(sub.id, { resolvesSubmissionId: id || null }); onChanged && onChanged(); }
+    catch (e) { setBusy(false); }
+  }
+  return (
+    <div style={box}>
+      <strong>🔧 Resolves a reported issue</strong>
+      {sub.resolvesInfo && (
+        <div className="small" style={{ margin: '4px 0' }}>
+          Linked to: {sub.resolvesInfo.where || 'a report'} · {fmtDate(sub.resolvesInfo.date)} — {sub.resolvesInfo.summary}{' '}
+          <button style={link} onClick={() => onOpen(sub.resolvesInfo.id)}>View →</button>
+        </div>
+      )}
+      <select disabled={busy} value={sub.resolvesSubmissionId || ''} onChange={(e) => pick(e.target.value)} style={{ marginTop: 6, width: '100%' }}>
+        <option value="">— Not linked / general repair —</option>
+        {options.map((c) => (
+          <option key={c.id} value={c.id}>
+            {(c.propertyName || '?')}{c.unitName ? ` · ${c.unitName}` : ''} · {fmtDate(c.createdAt)} — {(c.issues && c.issues[0]) || '(no description)'}
+          </option>
+        ))}
+      </select>
+      <p className="muted small" style={{ margin: '4px 0 0' }}>Linking marks that damage report as resolved.</p>
+    </div>
+  );
+}
+
 // Field labels for answers/photos, resolving repeated per-room ids ("id__2").
 function labelFor(fid, labelById = {}) {
   const parts = String(fid).split('__');
@@ -675,6 +746,7 @@ function Design({ forms, properties, onReload, flash }) {
   return (
     <div className="design-wrap">
       <FormBuilder kind="damage" initial={forms.damage} properties={properties} onReload={onReload} flash={flash} />
+      {forms.repair && <FormBuilder kind="repair" initial={forms.repair} properties={properties} onReload={onReload} flash={flash} />}
       <div className="clean-forms-head">Checkout clean forms <span className="muted small">— the cleaner gets the one matching the unit they pick</span></div>
       {(forms.cleanForms || []).map((t) => (
         <FormBuilder key={t.id} kind="clean" initial={t} properties={properties} onReload={onReload} flash={flash} />
@@ -692,6 +764,7 @@ function FormBuilder({ kind, initial, properties, onReload, flash }) {
   const [unitIds, setUnitIds] = useState(Array.isArray(initial.unitIds) ? initial.unitIds : []);
   const [busy, setBusy] = useState(false);
   const isClean = kind === 'clean';
+  const isRepair = kind === 'repair';
 
   const setField = (i, patch) => setFields((fs) => fs.map((f, j) => (j === i ? { ...f, ...patch } : f)));
   const move = (i, d) => setFields((fs) => { const j = i + d; if (j < 0 || j >= fs.length) return fs; const c = [...fs]; [c[i], c[j]] = [c[j], c[i]]; return c; });
@@ -702,7 +775,8 @@ function FormBuilder({ kind, initial, properties, onReload, flash }) {
   async function save() {
     setBusy(true);
     try {
-      if (!isClean) await api.saveDamageForm({ title, description, fields });
+      if (isRepair) await api.saveRepairForm({ title, description, fields });
+      else if (!isClean) await api.saveDamageForm({ title, description, fields });
       else if (initial.id) await api.updateCleanForm(initial.id, { name, unitIds, title, description, fields });
       else await api.createCleanForm({ name, unitIds, title, description, fields });
       flash('Saved.'); onReload();
@@ -716,7 +790,7 @@ function FormBuilder({ kind, initial, properties, onReload, flash }) {
   return (
     <section className="builder-card">
       <div className="builder-head">
-        <span className={`ftag ${kind}`}>{isClean ? '🧹 Checkout clean' : '⚠️ Damage / issue (guests)'}</span>
+        <span className={`ftag ${kind}`}>{isClean ? '🧹 Checkout clean' : isRepair ? '🛠 Repair (contractors)' : '⚠️ Damage / issue (guests)'}</span>
         <span className="bh-actions">
           {isClean && initial.id && <button className="del" title="Delete this form" onClick={del}>🗑</button>}
           <button className="ghost save" disabled={busy} onClick={save}>{busy ? 'Saving…' : '💾 Save'}</button>

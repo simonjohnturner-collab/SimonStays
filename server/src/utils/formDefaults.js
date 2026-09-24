@@ -3,7 +3,7 @@
 // Field types the renderer understands:
 //   text | textarea | number | money | select | checkbox | date | rating | photos
 
-const TYPES = ['damage', 'clean'];
+const TYPES = ['damage', 'clean', 'repair'];
 
 const DEFAULTS = {
   damage: {
@@ -25,6 +25,15 @@ const DEFAULTS = {
       { id: 'c_electricity', label: 'Electricity balance left on the meter', type: 'text', required: false },
       { id: 'c_purchases', label: 'Items purchased (name & cost)', type: 'textarea', required: false },
       { id: 'c_photos', label: 'Photos & proof of purchase', type: 'photos', required: false },
+    ],
+  },
+  repair: {
+    title: 'Repair report',
+    description: 'For contractors: confirm the repair you completed, add photos, and request payment.',
+    fields: [
+      { id: 'rp_desc', label: 'What did you repair? (brief description)', type: 'textarea', required: true },
+      { id: 'rp_photos', label: 'Photos of the completed repair', type: 'photos', required: false },
+      { id: 'rp_amount', label: 'Amount to be paid (R)', type: 'money', required: true },
     ],
   },
 };

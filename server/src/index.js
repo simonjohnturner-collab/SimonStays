@@ -37,6 +37,7 @@ app.use('/public', require('./routes/public'));
 const FORMS_CSP = "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'";
 const reportHtml = fs.readFileSync(path.join(__dirname, 'pages/report.html'), 'utf8');
 const cleanHtml = fs.readFileSync(path.join(__dirname, 'pages/clean.html'), 'utf8');
+const repairHtml = fs.readFileSync(path.join(__dirname, 'pages/repair.html'), 'utf8');
 app.get(['/report', '/report/damage'], (req, res) => {
   res.setHeader('Content-Security-Policy', FORMS_CSP);
   res.setHeader('Cache-Control', 'no-cache, must-revalidate'); // cleaners always get the latest form logic
@@ -46,6 +47,11 @@ app.get(['/clean', '/report/clean'], (req, res) => {
   res.setHeader('Content-Security-Policy', FORMS_CSP);
   res.setHeader('Cache-Control', 'no-cache, must-revalidate');
   res.type('html').send(cleanHtml);
+});
+app.get(['/repair', '/report/repair'], (req, res) => {
+  res.setHeader('Content-Security-Policy', FORMS_CSP);
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  res.type('html').send(repairHtml);
 });
 
 // Public booking site (shopfront). Self-contained page; talks to /public API

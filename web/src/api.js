@@ -17,7 +17,7 @@ export function apiBaseUrl() { return BASE; }
 export function photoUrl(id) { return `${BASE}/photos/${id}`; }
 
 // Public, shareable URL of a form guests/cleaners fill in.
-export function formLink(type) { return `${BASE}/${type === 'clean' ? 'clean' : 'report'}`; }
+export function formLink(type) { return `${BASE}/${type === 'clean' ? 'clean' : type === 'repair' ? 'repair' : 'report'}`; }
 
 async function req(method, path, body) {
   const headers = { 'Content-Type': 'application/json' };
@@ -143,6 +143,7 @@ export const api = {
   // forms (admin): design templates + review submissions
   listFormTemplates: () => req('GET', '/forms/templates'), // { damage, cleanForms }
   saveDamageForm: (data) => req('PUT', '/forms/templates/damage', data),
+  saveRepairForm: (data) => req('PUT', '/forms/templates/repair', data),
   createCleanForm: (data) => req('POST', '/forms/clean-forms', data),
   updateCleanForm: (id, data) => req('PUT', `/forms/clean-forms/${id}`, data),
   deleteCleanForm: (id) => req('DELETE', `/forms/clean-forms/${id}`),

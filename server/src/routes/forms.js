@@ -15,8 +15,25 @@ router.use(authHost);
 router.get('/templates', async (req, res) => {
   const all = await prisma.formTemplate.findMany({ where: { hostId: req.hostId }, orderBy: { createdAt: 'asc' } });
   const damage = all.find((t) => t.type === 'damage') || { ...defaultTemplate('damage'), id: null, name: 'Damage report', unitIds: [], hostId: req.hostId, unsaved: true };
+  const repair = all.find((t) => t.type === 'repair') || { ...defaultTemplate('repair'), id: null, name: 'Repair report', unitIds: [], hostId: req.hostId, unsaved: true };
   const cleanForms = all.filter((t) => t.type === 'clean');
-  res.json({ damage, cleanForms });
+  res.json({ damage, repair, cleanForms });
+});
+
+// PUT /forms/templates/repair — upsert the single repair (contractor) form.
+router.put('/templates/repair', async (req, res) => {
+  const b = req.body || {};
+  const data = {
+    title: b.title || defaultTemplate('repair').title,
+    description: b.description || null,
+    fields: Array.isArray(b.fields) ? b.fields : [],
+    active: b.active !== false,
+  };
+  const existing = await prisma.formTemplate.findFirst({ where: { hostId: req.hostId, type: 'repair' } });
+  const template = existing
+    ? await prisma.formTemplate.update({ where: { id: existing.id }, data })
+    : await prisma.formTemplate.create({ data: { hostId: req.hostId, type: 'repair', name: 'Repair report', unitIds: [], ...data } });
+  res.json({ template });
 });
 
 // PUT /forms/templates/damage — upsert the single damage form.
@@ -112,11 +129,28 @@ router.get('/submissions/:id', async (req, res) => {
     },
   });
   if (!sub) return res.status(404).json({ error: 'not_found' });
+
+  // Damage↔repair tie-up: for a repair, the issue it resolves; for a damage, the
+  // repair (if any) that resolved it.
+  let resolvesInfo = null, resolvedBy = null;
+  if (sub.type === 'repair' && sub.resolvesSubmissionId) {
+    const d = await prisma.formSubmission.findFirst({
+      where: { id: sub.resolvesSubmissionId, hostId: req.hostId },
+      include: { property: { select: { name: true } }, unit: { select: { name: true } } },
+    });
+    if (d) resolvesInfo = { id: d.id, date: d.createdAt, where: fmtWhere(d), summary: firstIssueText(d) };
+  }
+  if (sub.type === 'damage') {
+    const rep = await prisma.formSubmission.findFirst({ where: { hostId: req.hostId, type: 'repair', resolvesSubmissionId: sub.id }, orderBy: { createdAt: 'desc' } });
+    if (rep) resolvedBy = { id: rep.id, date: rep.createdAt, submitterName: rep.submitterName, amountCents: moneyToCents(rep.answers && rep.answers.rp_amount) };
+  }
+
   res.json({ submission: {
     ...fmtSub(sub), answers: sub.answers, photos: sub.photos,
     purchaseSummary: sub.purchaseSummary, purchaseStatus: sub.purchaseStatus,
     reimbursedCents: sub.reimbursedCents, cleanerFeeCents: sub.cleanerFeeCents,
     propertyCleanRateCents: sub.property ? sub.property.cleanRateCents : null,
+    resolvesSubmissionId: sub.resolvesSubmissionId, resolvesInfo, resolvedBy,
   } });
 });
 
@@ -142,8 +176,21 @@ router.patch('/submissions/:id', async (req, res) => {
   const money = (v) => (v === '' || v == null ? null : Math.max(0, Math.round(Number(v))));
   if ('reimbursedCents' in b) data.reimbursedCents = money(b.reimbursedCents);
   if ('cleanerFeeCents' in b) data.cleanerFeeCents = money(b.cleanerFeeCents);
+
+  // Link/unlink a repair to the damage report it resolves (marks that damage resolved).
+  let linkDamageId = null;
+  if ('resolvesSubmissionId' in b) {
+    if (b.resolvesSubmissionId) {
+      const dmg = await prisma.formSubmission.findFirst({ where: { id: b.resolvesSubmissionId, hostId: req.hostId, type: 'damage' }, select: { id: true } });
+      data.resolvesSubmissionId = dmg ? dmg.id : null;
+      linkDamageId = dmg ? dmg.id : null;
+    } else {
+      data.resolvesSubmissionId = null;
+    }
+  }
   const updated = await prisma.formSubmission.update({ where: { id: sub.id }, data });
-  res.json({ submission: { id: updated.id, status: updated.status, reimbursedCents: updated.reimbursedCents, cleanerFeeCents: updated.cleanerFeeCents } });
+  if (linkDamageId) await prisma.formSubmission.update({ where: { id: linkDamageId }, data: { status: 'resolved' } }).catch(() => {});
+  res.json({ submission: { id: updated.id, status: updated.status, reimbursedCents: updated.reimbursedCents, cleanerFeeCents: updated.cleanerFeeCents, resolvesSubmissionId: updated.resolvesSubmissionId } });
 });
 
 router.delete('/submissions/:id', async (req, res) => {
@@ -152,6 +199,20 @@ router.delete('/submissions/:id', async (req, res) => {
   await prisma.formSubmission.delete({ where: { id: sub.id } });
   res.json({ ok: true });
 });
+
+function fmtWhere(s) {
+  return `${s.property ? s.property.name : ''}${s.unit ? ' · ' + s.unit.name : ''}`.trim() || null;
+}
+function firstIssueText(s) {
+  const list = s.answers && Array.isArray(s.answers.issues) ? s.answers.issues : [];
+  const desc = list.map((i) => (i && i.description ? String(i.description) : '')).filter(Boolean).join('; ');
+  return desc || (s.answers && (s.answers.d_what || '')) || '(no description)';
+}
+function moneyToCents(v) {
+  if (v == null || v === '') return null;
+  const n = parseFloat(String(v).replace(/[^\d.]/g, ''));
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
 
 function fmtSub(s) {
   return {

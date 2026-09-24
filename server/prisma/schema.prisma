@@ -366,6 +366,10 @@ model FormSubmission {
   reimbursedCents  Int?      // amount I've already paid the cleaner back for purchases
   cleanerFeeCents  Int?      // this clean's daily fee (defaults to the property's cleanRateCents)
 
+  // Repair reports: which damage report (if any) this repair resolves. Linking a
+  // repair marks that damage submission 'resolved' — the raised→resolved tie-up.
+  resolvesSubmissionId String?
+
   // AI receipt/till-slip analysis of any purchase photos on this submission.
   purchaseSummary  Json?     // { merchant, purchaseDate, currency, items[], totalCents, totalsMatch, summary, model, generatedAt }
   purchaseStatus   String?   // pending | done | failed | no_key | none
