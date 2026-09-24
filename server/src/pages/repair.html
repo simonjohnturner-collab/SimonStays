@@ -184,26 +184,13 @@
         var o = document.createElement('option'); o.value = u.id; o.textContent = p.name + ' · ' + u.name; sel.appendChild(o);
       });
     });
-    // Restore a saved draft on this phone.
-    var d2 = null; try { d2 = JSON.parse(localStorage.getItem(DKEY) || 'null'); } catch (e) {}
-    if (d2) {
-      if (d2.unit) { sel.value = d2.unit; loadIssues(d2.unit); }
-      if (d2.name) document.getElementById('name').value = d2.name;
-      if (d2.desc) document.getElementById('desc').value = d2.desc;
-      if (d2.amount) document.getElementById('amount').value = d2.amount;
-      if (d2.bank) document.getElementById('bank').value = d2.bank;
-      if (d2.date) document.getElementById('date').value = d2.date;
-      if (d2.resolve) setTimeout(function () { document.getElementById('resolve').value = d2.resolve; }, 400);
-    }
+    // The repair form always opens blank — no saved-draft restore.
   }).catch(function () { document.getElementById('unit').innerHTML = '<option value="">Could not load units</option>'; });
 
   document.getElementById('unit').addEventListener('change', function () { loadIssues(this.value); });
 
   var dateEl = document.getElementById('date');
   if (!dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
-
-  document.getElementById('form').addEventListener('input', scheduleSave);
-  document.getElementById('form').addEventListener('change', scheduleSave);
 
   function showErr(t) { var m = document.getElementById('msg'); m.className = 'msg err'; m.textContent = t; window.scrollTo(0, document.body.scrollHeight); }
 
