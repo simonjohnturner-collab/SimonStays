@@ -19,11 +19,17 @@
   .req::after { content:" *"; color:var(--red); }
   input,select,textarea { width:100%; font:inherit; font-size:16px; padding:11px 12px; border:1px solid var(--line); border-radius:10px; background:#fff; }
   input:focus,select:focus,textarea:focus { outline:none; border-color:var(--green); }
-  textarea { resize:vertical; min-height:90px; }
+  textarea { resize:vertical; min-height:80px; }
   .hint { font-size:12px; color:var(--muted); margin:4px 0 0; }
   .amount-row { position:relative; }
   .amount-row .cur { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:16px; }
   .amount-row input { padding-left:28px; }
+  .unit-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px; margin-top:14px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .unit-head { display:flex; justify-content:space-between; align-items:center; }
+  .unit-head h3 { margin:0; font-size:15px; }
+  .unit-card label:first-of-type { margin-top:8px; }
+  .rm { background:none; border:0; color:var(--muted); font-size:13px; cursor:pointer; text-decoration:underline; padding:0; }
+  .rm:hover { color:var(--red); }
   .photos { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
   .thumb { position:relative; width:80px; height:80px; border-radius:9px; overflow:hidden; border:1px solid var(--line); }
   .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
@@ -32,6 +38,8 @@
   .pbtn { flex:1; text-align:center; padding:12px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font-size:14px; font-weight:600; cursor:pointer; }
   .pbtn:hover { border-color:var(--green); color:var(--green); }
   .pbtn input { display:none; }
+  .add-unit { width:100%; margin-top:14px; padding:12px; background:#eafaf0; color:var(--green-d); border:1px solid #cdeede; border-radius:12px; font-weight:600; font-size:15px; cursor:pointer; }
+  .add-unit:hover { background:#dff5e8; }
   .submit { width:100%; margin-top:22px; padding:15px; background:var(--green); color:#fff; border:0; border-radius:12px; font-weight:700; font-size:16px; cursor:pointer; }
   .submit:hover { background:var(--green-d); }
   .submit:disabled { opacity:.6; }
@@ -52,40 +60,28 @@
 
   <div class="wrap">
     <form id="form">
-      <label class="req" for="unit">Which unit did you work on?</label>
-      <select id="unit" required><option value="">Loading units…</option></select>
-
-      <label id="resolveWrap" class="hidden" for="resolve">Which reported issue did this fix? (optional)</label>
-      <select id="resolve" class="hidden"><option value="">General repair / not from a report</option></select>
+      <label class="req" for="name">Your name</label>
+      <input type="text" id="name" placeholder="Full name" required>
 
       <label class="req" for="date">Date of the repair</label>
       <input type="date" id="date" required>
 
-      <label class="req" for="name">Your name</label>
-      <input type="text" id="name" placeholder="Full name" required>
+      <div id="units"></div>
+      <button type="button" class="add-unit" id="addUnit">＋ Add another unit</button>
 
-      <label class="req" for="desc">Brief description of repair</label>
-      <textarea id="desc" placeholder="e.g. Replaced the broken toilet cistern inlet valve in the main bathroom."></textarea>
-
-      <label>Photos of the completed repair</label>
-      <div class="photos" id="photos"></div>
-      <div class="photo-btns"><label class="pbtn">📷 Add photos<input type="file" id="photoInput" accept="image/*" multiple></label></div>
-
-      <label class="req" for="amount">Amount to be paid</label>
+      <label class="req" for="amount">Total amount to be paid</label>
       <div class="amount-row"><span class="cur">R</span><input type="number" id="amount" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></div>
-      <p class="hint">Enter the total you're charging for this repair.</p>
+      <p class="hint">The total you're charging for all the repairs above.</p>
 
       <label class="req" for="paymethod">How should we pay you?</label>
       <select id="paymethod">
         <option value="ewallet">E-wallet (send to a phone number)</option>
         <option value="bank">Bank account</option>
       </select>
-
       <div id="ewalletWrap">
         <label class="req" for="phone">E-wallet phone number</label>
         <input type="tel" id="phone" inputmode="tel" placeholder="e.g. 082 123 4567">
       </div>
-
       <div id="bankWrap" class="hidden">
         <label class="req" for="bank">Bank account details</label>
         <textarea id="bank" placeholder="Bank, account name, account number, branch code."></textarea>
@@ -104,25 +100,15 @@
   </div>
 
 <script>
-  var files = [];            // File[] of the repair photos
   var PROPS = [];
+  // Each entry is one unit's repair: { unitId, desc, files:[File], resolveId, issues }
+  var units = [{ unitId: '', desc: '', files: [], resolveId: '', issues: null }];
 
-  var DKEY = 'ss_repair_draft_v1', dTimer = null;
-  function saveDraft() {
-    try {
-      localStorage.setItem(DKEY, JSON.stringify({
-        unit: document.getElementById('unit').value,
-        resolve: document.getElementById('resolve').value,
-        date: document.getElementById('date').value,
-        name: document.getElementById('name').value,
-        desc: document.getElementById('desc').value,
-        amount: document.getElementById('amount').value,
-        bank: document.getElementById('bank').value
-      }));
-    } catch (e) {}
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function unitLabel(unitId) {
+    for (var i = 0; i < PROPS.length; i++) { var p = PROPS[i]; for (var j = 0; j < (p.units || []).length; j++) { if (p.units[j].id === unitId) return p.name + ' · ' + p.units[j].name; } }
+    return '';
   }
-  function scheduleSave() { if (dTimer) clearTimeout(dTimer); dTimer = setTimeout(saveDraft, 400); }
-  function clearDraft() { try { localStorage.removeItem(DKEY); } catch (e) {} }
 
   function readRaw(file) {
     return new Promise(function (resolve) {
@@ -132,8 +118,6 @@
       r.readAsDataURL(file);
     });
   }
-  // Shrink + re-encode to JPEG via canvas; fall back to the raw bytes if the
-  // browser can't decode/encode (HEIC, in-app webviews). Never drops a photo.
   function prep(file, maxDim, quality) {
     return new Promise(function (resolve) {
       var done = false, img = new Image(), url = URL.createObjectURL(file);
@@ -154,58 +138,73 @@
     });
   }
 
-  var photosEl = document.getElementById('photos');
-  function drawPhotos() {
-    photosEl.innerHTML = '';
-    files.forEach(function (f, i) {
-      var t = document.createElement('div'); t.className = 'thumb';
-      var im = document.createElement('img'); im.src = URL.createObjectURL(f); t.appendChild(im);
-      var x = document.createElement('button'); x.type = 'button'; x.textContent = '×';
-      x.onclick = function () { files.splice(i, 1); drawPhotos(); };
-      t.appendChild(x); photosEl.appendChild(t);
+  function loadBlockIssues(blk) {
+    if (!blk.unitId) { blk.issues = null; renderUnits(); return; }
+    fetch('/public/forms/open-issues?unitId=' + encodeURIComponent(blk.unitId))
+      .then(function (r) { return r.json(); })
+      .then(function (d) { blk.issues = (d && d.issues) || []; renderUnits(); })
+      .catch(function () { blk.issues = []; renderUnits(); });
+  }
+
+  function renderUnits() {
+    var wrap = document.getElementById('units'); wrap.innerHTML = '';
+    units.forEach(function (blk, idx) {
+      var card = el('div', 'unit-card');
+      var head = el('div', 'unit-head'); head.appendChild(el('h3', null, 'Unit repair ' + (idx + 1)));
+      if (units.length > 1) { var rm = el('button', 'rm', 'Remove'); rm.type = 'button'; rm.onclick = function () { units.splice(idx, 1); renderUnits(); }; head.appendChild(rm); }
+      card.appendChild(head);
+
+      var ul = el('label', 'req', 'Which unit?'); card.appendChild(ul);
+      var usel = el('select', 'unit-sel'); usel.innerHTML = '<option value="">Select the unit…</option>';
+      PROPS.forEach(function (p) { (p.units || []).forEach(function (u) { var o = el('option', null, p.name + ' · ' + u.name); o.value = u.id; usel.appendChild(o); }); });
+      usel.value = blk.unitId || '';
+      usel.onchange = function () { blk.unitId = usel.value; blk.resolveId = ''; blk.issues = null; loadBlockIssues(blk); };
+      card.appendChild(usel);
+
+      if (blk.issues && blk.issues.length) {
+        card.appendChild(el('label', null, 'Which reported issue did this fix? (optional)'));
+        var rsel = el('select', 'resolve-sel'); rsel.innerHTML = '<option value="">General repair / not from a report</option>';
+        blk.issues.forEach(function (it) {
+          var when = (it.date || '').slice(0, 10);
+          var s = it.summary.length > 60 ? it.summary.slice(0, 57) + '…' : it.summary;
+          var o = el('option', null, when + ' — ' + s); o.value = it.id; rsel.appendChild(o);
+        });
+        rsel.value = blk.resolveId || '';
+        rsel.onchange = function () { blk.resolveId = rsel.value; };
+        card.appendChild(rsel);
+      }
+
+      card.appendChild(el('label', 'req', 'Brief description of repair'));
+      var ta = el('textarea'); ta.placeholder = 'e.g. Replaced the broken toilet cistern inlet valve.'; ta.value = blk.desc || '';
+      ta.oninput = function () { blk.desc = ta.value; }; card.appendChild(ta);
+
+      card.appendChild(el('label', null, 'Photos of the completed repair'));
+      var photos = el('div', 'photos');
+      blk.files.forEach(function (f, fi) {
+        var t = el('div', 'thumb'); var im = el('img'); im.src = URL.createObjectURL(f); t.appendChild(im);
+        var x = el('button', null, '×'); x.type = 'button'; x.onclick = function () { blk.files.splice(fi, 1); renderUnits(); };
+        t.appendChild(x); photos.appendChild(t);
+      });
+      card.appendChild(photos);
+      var btns = el('div', 'photo-btns'); var lb = el('label', 'pbtn', '📷 Add photos');
+      var inp = el('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+      inp.onchange = function (e) { blk.files = blk.files.concat(Array.prototype.slice.call(e.target.files)); e.target.value = ''; renderUnits(); };
+      lb.appendChild(inp); btns.appendChild(lb); card.appendChild(btns);
+
+      wrap.appendChild(card);
     });
   }
-  document.getElementById('photoInput').onchange = function (e) {
-    files = files.concat(Array.prototype.slice.call(e.target.files)); e.target.value = ''; drawPhotos();
-  };
-
-  // Load unresolved damage reports for the chosen unit, for the "which issue" picker.
-  function loadIssues(unitId) {
-    var sel = document.getElementById('resolve'), wrap = document.getElementById('resolveWrap');
-    sel.innerHTML = '<option value="">General repair / not from a report</option>';
-    if (!unitId) { sel.classList.add('hidden'); wrap.classList.add('hidden'); return; }
-    fetch('/public/forms/open-issues?unitId=' + encodeURIComponent(unitId)).then(function (r) { return r.json(); }).then(function (d) {
-      var issues = (d && d.issues) || [];
-      if (!issues.length) { sel.classList.add('hidden'); wrap.classList.add('hidden'); return; }
-      issues.forEach(function (it) {
-        var o = document.createElement('option'); o.value = it.id;
-        var when = (it.date || '').slice(0, 10);
-        var s = it.summary.length > 60 ? it.summary.slice(0, 57) + '…' : it.summary;
-        o.textContent = when + ' — ' + s;
-        sel.appendChild(o);
-      });
-      sel.classList.remove('hidden'); wrap.classList.remove('hidden');
-    }).catch(function () { sel.classList.add('hidden'); wrap.classList.add('hidden'); });
-  }
+  document.getElementById('addUnit').onclick = function () { units.push({ unitId: '', desc: '', files: [], resolveId: '', issues: null }); renderUnits(); };
+  renderUnits();
 
   fetch('/public/forms/repair').then(function (r) { return r.json(); }).then(function (d) {
     PROPS = d.properties || [];
-    var sel = document.getElementById('unit');
-    sel.innerHTML = '<option value="">Select the unit…</option>';
-    PROPS.forEach(function (p) {
-      (p.units || []).forEach(function (u) {
-        var o = document.createElement('option'); o.value = u.id; o.textContent = p.name + ' · ' + u.name; sel.appendChild(o);
-      });
-    });
-    // The repair form always opens blank — no saved-draft restore.
-  }).catch(function () { document.getElementById('unit').innerHTML = '<option value="">Could not load units</option>'; });
-
-  document.getElementById('unit').addEventListener('change', function () { loadIssues(this.value); });
+    renderUnits(); // the form always opens blank — just fill the unit dropdowns
+  }).catch(function () {});
 
   var dateEl = document.getElementById('date');
   if (!dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
 
-  // Toggle the payment fields: e-wallet needs a phone number, bank needs details.
   var payMethodEl = document.getElementById('paymethod');
   function syncPayFields() {
     var m = payMethodEl.value;
@@ -220,28 +219,27 @@
   document.getElementById('form').onsubmit = function (e) {
     e.preventDefault();
     document.getElementById('msg').textContent = '';
-    var unitId = document.getElementById('unit').value;
     var name = document.getElementById('name').value.trim();
-    var desc = document.getElementById('desc').value.trim();
+    var date = document.getElementById('date').value;
     var amount = document.getElementById('amount').value;
     var method = payMethodEl.value;
     var phone = document.getElementById('phone').value.trim();
     var bank = document.getElementById('bank').value.trim();
-    var date = document.getElementById('date').value;
-    if (!unitId) return showErr('Please choose the unit you worked on.');
     if (!name) return showErr('Please enter your name.');
-    if (!desc) return showErr('Please give a brief description of the repair.');
-    if (amount === '' || isNaN(parseFloat(amount)) || parseFloat(amount) < 0) return showErr('Please enter the amount to be paid.');
+    var valid = units.filter(function (b) { return b.unitId && (b.desc || '').trim(); });
+    if (!valid.length) return showErr('Please add at least one unit with a description of the repair.');
+    if (amount === '' || isNaN(parseFloat(amount)) || parseFloat(amount) < 0) return showErr('Please enter the total amount to be paid.');
     if (method === 'ewallet' && !phone) return showErr('Please enter the e-wallet phone number for payment.');
     if (method === 'bank' && !bank) return showErr('Please enter your bank account details for payment.');
 
     var btn = document.getElementById('submit'); btn.disabled = true; btn.textContent = 'Sending…';
-    var ans = { date: date, rp_desc: desc, rp_amount: parseFloat(amount).toFixed(2), rp_pay_method: (method === 'ewallet' ? 'E-wallet' : 'Bank account') };
+    var resolveIds = valid.map(function (b) { return b.resolveId; }).filter(Boolean);
+    var unitsAns = valid.map(function (b) { return { unitId: b.unitId, unitLabel: unitLabel(b.unitId), desc: b.desc.trim(), resolveId: b.resolveId || null }; });
+    var ans = { date: date, rp_amount: parseFloat(amount).toFixed(2), rp_pay_method: (method === 'ewallet' ? 'E-wallet' : 'Bank account'), units: unitsAns };
     if (method === 'ewallet') ans.rp_pay_phone = phone; else ans.rp_bank = bank;
     var payload = {
-      type: 'repair', unitId: unitId, submitterName: name,
-      resolvesSubmissionId: document.getElementById('resolve').value || null,
-      answers: ans
+      type: 'repair', unitId: valid[0].unitId, submitterName: name,
+      resolvesSubmissionId: resolveIds[0] || null, resolveIds: resolveIds, answers: ans
     };
 
     fetch('/public/forms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -249,20 +247,21 @@
       .then(function (res) {
         if (!res || !res.id) throw new Error('submit failed');
         var failed = 0, jobs = [];
-        files.forEach(function (f) {
-          jobs.push(prep(f, 1600, 0.82).then(function (p) {
-            if (!p || !p.dataBase64) { failed++; return; }
-            return fetch('/public/forms/' + res.id + '/photos', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fieldId: 'rp_photos', dataBase64: p.dataBase64, contentType: p.contentType, filename: f.name })
-            }).then(function (r) { if (!r.ok) failed++; }, function () { failed++; });
-          }));
+        valid.forEach(function (b, i) {
+          (b.files || []).forEach(function (f) {
+            jobs.push(prep(f, 1600, 0.82).then(function (p) {
+              if (!p || !p.dataBase64) { failed++; return; }
+              return fetch('/public/forms/' + res.id + '/photos', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fieldId: 'rp_photos__' + (i + 1), dataBase64: p.dataBase64, contentType: p.contentType, filename: f.name })
+              }).then(function (r) { if (!r.ok) failed++; }, function () { failed++; });
+            }));
+          });
         });
         return Promise.all(jobs).then(function () { return failed; });
       })
       .then(function (failed) {
         if (failed) alert(failed + ' photo(s) could not be uploaded, but your report was saved. Please try again from Safari or Chrome (not an in-app browser).');
-        clearDraft();
         document.getElementById('form').classList.add('hidden');
         document.getElementById('done').classList.remove('hidden');
         window.scrollTo(0, 0);

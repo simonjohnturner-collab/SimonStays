@@ -309,6 +309,41 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
                 );
               }
 
+              // Repair reports: contractor details up top, then a block per unit
+              // (label · description · that unit's photos).
+              if (sel.type === 'repair') {
+                const topKeys = ['date', 'rp_amount', 'rp_pay_method', 'rp_pay_phone', 'rp_bank'];
+                const topRows = topKeys
+                  .filter((k) => answers[k] != null && answers[k] !== '')
+                  .map((k) => (
+                    <div key={k} className="ans-row"><div className="ans-label">{known[k] || labelFor(k, labelById)}</div><div className="ans-val">{formatAnswer(answers[k])}</div></div>
+                  ));
+                const unitsArr = Array.isArray(answers.units) ? answers.units : null;
+                const usedPh = new Set();
+                const blocks = [];
+                if (unitsArr) {
+                  unitsArr.forEach((u, i) => {
+                    const ph = (sel.photos || []).filter((p) => (p.fieldId || '') === `rp_photos__${i + 1}`);
+                    ph.forEach((p) => usedPh.add(p.id));
+                    blocks.push(
+                      <div key={`u${i}`}>
+                        <div className="ans-section-head" id={`secjump-u${i}`}>{u.unitLabel || u.unitId || `Unit ${i + 1}`}</div>
+                        {u.desc && <div className="ans-row"><div className="ans-label">Repair</div><div className="ans-val">{u.desc}</div></div>}
+                        <div className="sub-photos">
+                          <div className="ans-label">Photos{ph.length ? ` (${ph.length})` : ''}</div>
+                          {ph.length ? <Gallery photos={ph} /> : <span className="muted small">No photos.</span>}
+                        </div>
+                      </div>
+                    );
+                  });
+                } else if (answers.rp_desc) {
+                  // Legacy single-unit repair (before the multi-unit form).
+                  blocks.push(<div key="legacy" className="ans-row"><div className="ans-label">Repair</div><div className="ans-val">{answers.rp_desc}</div></div>);
+                }
+                const orphan = (sel.photos || []).filter((p) => !usedPh.has(p.id));
+                return (<><div className="sub-answers">{topRows}{blocks}</div>{orphan.length > 0 && groupPhotos(orphan)}</>);
+              }
+
               // Clean reports: render in the form's own order (sections + inline photos),
               // so each room's photos sit with that room's questions.
               const template = (forms && forms.cleanForms || []).find((t) => t.id === sel.templateId);

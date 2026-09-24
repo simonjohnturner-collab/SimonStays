@@ -541,11 +541,17 @@ router.post('/forms', async (req, res, next) => {
       if (p) propertyId = p.id;
     }
 
-    // A repair report may say which damage report it resolves (the tie-up).
-    let resolvesSubmissionId = null;
-    if (b.type === 'repair' && b.resolvesSubmissionId) {
-      const dmg = await prisma.formSubmission.findFirst({ where: { id: b.resolvesSubmissionId, hostId, type: 'damage' }, select: { id: true } });
-      if (dmg) resolvesSubmissionId = dmg.id;
+    // A repair report may say which damage report(s) it resolves (the tie-up).
+    // With multiple units, resolveIds carries one per unit; resolvesSubmissionId is
+    // the primary link the admin shows.
+    let resolvesSubmissionId = null, resolveIds = [];
+    if (b.type === 'repair') {
+      const want = [].concat(Array.isArray(b.resolveIds) ? b.resolveIds : [], b.resolvesSubmissionId ? [b.resolvesSubmissionId] : []).filter(Boolean);
+      if (want.length) {
+        const valid = await prisma.formSubmission.findMany({ where: { id: { in: want }, hostId, type: 'damage' }, select: { id: true } });
+        resolveIds = valid.map((v) => v.id);
+        resolvesSubmissionId = resolveIds[0] || null;
+      }
     }
 
     const submission = await prisma.formSubmission.create({
@@ -560,9 +566,9 @@ router.post('/forms', async (req, res, next) => {
         status: b.type === 'clean' ? 'incomplete' : 'new',
       },
     });
-    // Linking a repair to a damage report marks that report resolved.
-    if (resolvesSubmissionId) {
-      await prisma.formSubmission.update({ where: { id: resolvesSubmissionId }, data: { status: 'resolved' } }).catch(() => {});
+    // Linking a repair to damage report(s) marks them resolved.
+    if (resolveIds.length) {
+      await prisma.formSubmission.updateMany({ where: { id: { in: resolveIds }, hostId }, data: { status: 'resolved' } }).catch(() => {});
     }
     res.status(201).json({ ok: true, id: submission.id });
   } catch (e) { next(e); }
