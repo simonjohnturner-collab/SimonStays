@@ -502,8 +502,21 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .notif-bell { position:relative; font-size:16px; padding:6px 8px; }
 .notif-badge { position:absolute; top:-2px; right:-2px; background:var(--red); color:#fff; font-size:10px; font-weight:700; min-width:16px; height:16px; line-height:16px; text-align:center; border-radius:8px; padding:0 3px; }
 .notif-panel { position:absolute; top:calc(100% + 6px); right:0; width:330px; max-width:90vw; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 34px rgba(0,0,0,.18); z-index:40; overflow:hidden; }
-.notif-head { padding:10px 12px; font-weight:700; font-size:13px; border-bottom:1px solid var(--line); }
+.notif-head { padding:10px 12px; font-weight:700; font-size:13px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
+.notif-mute { margin-left:auto; background:none; border:0; font-size:15px; cursor:pointer; line-height:1; padding:0; opacity:.85; }
+.notif-mute:hover { opacity:1; }
 .notif-empty { padding:14px 12px; font-size:13px; color:var(--muted); line-height:1.4; }
+/* Ring animation on the bell + the pop-up toast when a new report lands. */
+.notif-bell.ringing { animation:notif-shake .5s ease-in-out 0s 3; transform-origin:50% 0; }
+@keyframes notif-shake { 0%,100%{ transform:rotate(0); } 20%{ transform:rotate(16deg); } 40%{ transform:rotate(-13deg); } 60%{ transform:rotate(9deg); } 80%{ transform:rotate(-6deg); } }
+.notif-toast { position:absolute; top:calc(100% + 6px); right:0; width:330px; max-width:90vw; display:flex; align-items:center; gap:10px; background:#0f2e1c; color:#eafaf0; border-radius:12px; padding:12px 12px; box-shadow:0 14px 40px rgba(0,0,0,.28); z-index:60; cursor:pointer; animation:notif-pop .22s ease-out; }
+@keyframes notif-pop { from{ opacity:0; transform:translateY(-6px); } to{ opacity:1; transform:translateY(0); } }
+.notif-toast .nt-emoji { font-size:22px; }
+.notif-toast .nt-body { display:flex; flex-direction:column; gap:1px; flex:1; min-width:0; }
+.notif-toast .nt-body b { font-size:14px; }
+.notif-toast .nt-sub { font-size:12px; color:#b9e3c8; }
+.notif-toast .nt-x { background:none; border:0; color:#b9e3c8; font-size:20px; line-height:1; cursor:pointer; padding:0 2px; }
+.notif-toast .nt-x:hover { color:#fff; }
 .notif-item { display:flex; align-items:stretch; background:#fff; border-bottom:1px solid #f0f2f5; }
 .notif-item.unseen { background:#f0f9f3; }
 .ni-main { flex:1; min-width:0; text-align:left; background:transparent; color:var(--ink); border:0; padding:9px 12px; cursor:pointer; }
