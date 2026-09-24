@@ -14,6 +14,7 @@ import ListingsView from './ListingsView.jsx';
 import BoardSearch from './BoardSearch.jsx';
 import FormsView from './FormsView.jsx';
 import NotificationsBell from './NotificationsBell.jsx';
+import FormChime from './FormChime.jsx';
 import ServiceProvidersView from './ServiceProvidersView.jsx';
 import GuestBookView from './GuestBookView.jsx';
 import PaymentHistoryView from './PaymentHistoryView.jsx';
@@ -183,6 +184,7 @@ export default function Main() {
   // one-click way back to their own account while signed in as another host.
   const withChrome = (el) => (
     <>
+      <FormChime onOpen={openFormsSubmission} />
       {impersonating && (
         <div className="imp-banner">
           <span>👁 Viewing as <b>{host?.name || host?.email}</b> — you are signed in as this host.</span>

@@ -34,7 +34,9 @@ const DEFAULTS = {
       { id: 'rp_desc', label: 'Brief description of repair', type: 'textarea', required: true },
       { id: 'rp_photos', label: 'Photos of the completed repair', type: 'photos', required: false },
       { id: 'rp_amount', label: 'Amount to be paid (R)', type: 'money', required: true },
-      { id: 'rp_bank', label: 'Bank details (for payment)', type: 'textarea', required: true },
+      { id: 'rp_pay_method', label: 'Payment method', type: 'text', required: true },
+      { id: 'rp_pay_phone', label: 'E-wallet phone number', type: 'text', required: false },
+      { id: 'rp_bank', label: 'Bank account details', type: 'textarea', required: false },
     ],
   },
 };

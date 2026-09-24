@@ -75,8 +75,21 @@
       <div class="amount-row"><span class="cur">R</span><input type="number" id="amount" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></div>
       <p class="hint">Enter the total you're charging for this repair.</p>
 
-      <label class="req" for="bank">Your bank details</label>
-      <textarea id="bank" placeholder="Bank, account name, account number, branch code — so the host can pay you."></textarea>
+      <label class="req" for="paymethod">How should we pay you?</label>
+      <select id="paymethod">
+        <option value="ewallet">E-wallet (send to a phone number)</option>
+        <option value="bank">Bank account</option>
+      </select>
+
+      <div id="ewalletWrap">
+        <label class="req" for="phone">E-wallet phone number</label>
+        <input type="tel" id="phone" inputmode="tel" placeholder="e.g. 082 123 4567">
+      </div>
+
+      <div id="bankWrap" class="hidden">
+        <label class="req" for="bank">Bank account details</label>
+        <textarea id="bank" placeholder="Bank, account name, account number, branch code."></textarea>
+      </div>
 
       <div id="msg"></div>
       <button type="submit" class="submit" id="submit">Submit repair report</button>
@@ -192,6 +205,16 @@
   var dateEl = document.getElementById('date');
   if (!dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
 
+  // Toggle the payment fields: e-wallet needs a phone number, bank needs details.
+  var payMethodEl = document.getElementById('paymethod');
+  function syncPayFields() {
+    var m = payMethodEl.value;
+    document.getElementById('ewalletWrap').classList.toggle('hidden', m !== 'ewallet');
+    document.getElementById('bankWrap').classList.toggle('hidden', m !== 'bank');
+  }
+  payMethodEl.addEventListener('change', syncPayFields);
+  syncPayFields();
+
   function showErr(t) { var m = document.getElementById('msg'); m.className = 'msg err'; m.textContent = t; window.scrollTo(0, document.body.scrollHeight); }
 
   document.getElementById('form').onsubmit = function (e) {
@@ -201,19 +224,24 @@
     var name = document.getElementById('name').value.trim();
     var desc = document.getElementById('desc').value.trim();
     var amount = document.getElementById('amount').value;
+    var method = payMethodEl.value;
+    var phone = document.getElementById('phone').value.trim();
     var bank = document.getElementById('bank').value.trim();
     var date = document.getElementById('date').value;
     if (!unitId) return showErr('Please choose the unit you worked on.');
     if (!name) return showErr('Please enter your name.');
     if (!desc) return showErr('Please give a brief description of the repair.');
     if (amount === '' || isNaN(parseFloat(amount)) || parseFloat(amount) < 0) return showErr('Please enter the amount to be paid.');
-    if (!bank) return showErr('Please enter your bank details for payment.');
+    if (method === 'ewallet' && !phone) return showErr('Please enter the e-wallet phone number for payment.');
+    if (method === 'bank' && !bank) return showErr('Please enter your bank account details for payment.');
 
     var btn = document.getElementById('submit'); btn.disabled = true; btn.textContent = 'Sending…';
+    var ans = { date: date, rp_desc: desc, rp_amount: parseFloat(amount).toFixed(2), rp_pay_method: (method === 'ewallet' ? 'E-wallet' : 'Bank account') };
+    if (method === 'ewallet') ans.rp_pay_phone = phone; else ans.rp_bank = bank;
     var payload = {
       type: 'repair', unitId: unitId, submitterName: name,
       resolvesSubmissionId: document.getElementById('resolve').value || null,
-      answers: { date: date, rp_desc: desc, rp_amount: parseFloat(amount).toFixed(2), rp_bank: bank }
+      answers: ans
     };
 
     fetch('/public/forms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })

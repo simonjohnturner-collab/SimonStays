@@ -517,6 +517,14 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .notif-toast .nt-sub { font-size:12px; color:#b9e3c8; }
 .notif-toast .nt-x { background:none; border:0; color:#b9e3c8; font-size:20px; line-height:1; cursor:pointer; padding:0 2px; }
 .notif-toast .nt-x:hover { color:#fff; }
+/* Global new-report toast (fixed, shown on any admin screen). */
+.form-chime-toast { position:fixed; top:64px; right:16px; width:330px; max-width:calc(100vw - 32px); display:flex; align-items:center; gap:10px; background:#0f2e1c; color:#eafaf0; border-radius:12px; padding:12px 12px; box-shadow:0 14px 40px rgba(0,0,0,.32); z-index:9000; cursor:pointer; animation:notif-pop .22s ease-out; }
+.form-chime-toast .fct-emoji { font-size:22px; }
+.form-chime-toast .fct-body { display:flex; flex-direction:column; gap:1px; flex:1; min-width:0; }
+.form-chime-toast .fct-body b { font-size:14px; }
+.form-chime-toast .fct-sub { font-size:12px; color:#b9e3c8; }
+.form-chime-toast .fct-x { background:none; border:0; color:#b9e3c8; font-size:20px; line-height:1; cursor:pointer; padding:0 2px; }
+.form-chime-toast .fct-x:hover { color:#fff; }
 .notif-item { display:flex; align-items:stretch; background:#fff; border-bottom:1px solid #f0f2f5; }
 .notif-item.unseen { background:#f0f9f3; }
 .ni-main { flex:1; min-width:0; text-align:left; background:transparent; color:var(--ink); border:0; padding:9px 12px; cursor:pointer; }
