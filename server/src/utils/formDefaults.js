@@ -31,9 +31,10 @@ const DEFAULTS = {
     title: 'Repair report',
     description: 'For contractors: confirm the repair you completed, add photos, and request payment.',
     fields: [
-      { id: 'rp_desc', label: 'What did you repair? (brief description)', type: 'textarea', required: true },
+      { id: 'rp_desc', label: 'Brief description of repair', type: 'textarea', required: true },
       { id: 'rp_photos', label: 'Photos of the completed repair', type: 'photos', required: false },
       { id: 'rp_amount', label: 'Amount to be paid (R)', type: 'money', required: true },
+      { id: 'rp_bank', label: 'Bank details (for payment)', type: 'textarea', required: true },
     ],
   },
 };
