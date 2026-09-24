@@ -453,6 +453,8 @@ model Booking {
   depositStatus String? // null (none) | 'held' | 'refunded' | 'forfeited'
   cleaner      String?
   comments     String?
+  checkoutNotes String? // notes for the checkout cleaner; included in the night-before WhatsApp reminder
+  checkoutReminderAt DateTime? // when the night-before cleaner reminder was sent (guards against double-send)
   accessCode   String? // smart-lock code for this stay
   leavingEarly Boolean       @default(false)
   // Guest requests / add-ons

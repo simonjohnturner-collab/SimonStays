@@ -34,7 +34,7 @@ router.post('/units/:unitId/bookings', requireOwnedUnit, async (req, res) => {
       unitId: req.unit.id, hostId: req.hostId, source: 'manual', status: 'confirmed',
       guestName: b.guestName || null, recommendedBy: b.recommendedBy || null,
       checkIn: dateOnly(b.checkIn), checkOut: dateOnly(b.checkOut),
-      cleaner: b.cleaner || null, comments: b.comments || null,
+      cleaner: b.cleaner || null, comments: b.comments || null, checkoutNotes: b.checkoutNotes || null,
       leavingEarly: !!b.leavingEarly,
       earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut,
       extraMattress: !!b.extraMattress, hairDryer: !!b.hairDryer,
@@ -55,7 +55,7 @@ router.post('/bookings/floating', async (req, res) => {
       unitId: null, hostId: req.hostId, source: 'manual', status: 'floating',
       guestName: b.guestName || null, recommendedBy: b.recommendedBy || null,
       checkIn: dateOnly(b.checkIn), checkOut: dateOnly(b.checkOut),
-      cleaner: b.cleaner || null, comments: b.comments || null,
+      cleaner: b.cleaner || null, comments: b.comments || null, checkoutNotes: b.checkoutNotes || null,
       leavingEarly: !!b.leavingEarly,
       earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut,
       extraMattress: !!b.extraMattress, hairDryer: !!b.hairDryer,
@@ -168,7 +168,7 @@ router.patch('/bookings/:id', async (req, res) => {
   const booking = await loadOwned(req, res); if (!booking) return;
   const b = req.body || {};
   const data = {};
-  ['guestName', 'cleaner', 'comments', 'accessCode', 'recommendedBy'].forEach((k) => { if (k in b) data[k] = b[k]; });
+  ['guestName', 'cleaner', 'comments', 'accessCode', 'recommendedBy', 'checkoutNotes'].forEach((k) => { if (k in b) data[k] = b[k]; });
   ['leavingEarly', 'earlyCheckIn', 'lateCheckOut', 'extraMattress', 'hairDryer']
     .forEach((k) => { if (k in b) data[k] = !!b[k]; });
   Object.assign(data, paymentFields(b));
@@ -188,6 +188,17 @@ router.patch('/bookings/:id', async (req, res) => {
   }
   const updated = await prisma.booking.update({ where: { id: booking.id }, data, include: { cleans: true } });
   res.json({ booking: updated });
+});
+
+// POST /bookings/:id/remind-cleaner — send the checkout cleaner's WhatsApp reminder
+// now (the same message the 19:00 job sends). Handy for testing / re-sending.
+router.post('/bookings/:id/remind-cleaner', async (req, res) => {
+  const booking = await loadOwned(req, res); if (!booking) return;
+  const reminders = require('../utils/checkoutReminders');
+  if (!reminders.enabled()) return res.status(400).json({ error: 'no_whatsapp', message: 'WhatsApp reminders are off — set TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM in the server environment.' });
+  const result = await reminders.remindForBooking(booking, { force: true });
+  if (!result.ok) return res.status(400).json({ error: result.reason || 'send_failed', message: result.error || result.reason, ...result });
+  res.json({ ok: true, ...result });
 });
 
 // GET /bookings/:id/quote — price this booking from its unit's rate card.

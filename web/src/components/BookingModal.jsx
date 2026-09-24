@@ -11,6 +11,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   const [checkOut, setCheckOut] = useState(booking?.checkOut?.slice(0, 10) || '');
   const [cleaner, setCleaner] = useState(booking?.cleaner || '');
   const [comments, setComments] = useState(booking?.comments || '');
+  const [checkoutNotes, setCheckoutNotes] = useState(booking?.checkoutNotes || '');
   const [recommendedBy, setRecommendedBy] = useState(booking?.recommendedBy || '');
   const [allocateUnitId, setAllocateUnitId] = useState('');
   const [moveUnitId, setMoveUnitId] = useState(booking?.unitId || ''); // reassign an allocated booking to another unit
@@ -66,6 +67,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   function payload(extra = {}) {
     return {
       guestName, checkIn, checkOut, cleaner, comments,
+      checkoutNotes: checkoutNotes.trim() || null,
       recommendedBy: recommendedBy.trim() || null,
       paymentStatus,
       quotedCents: effQuotedCents,
@@ -113,6 +115,19 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
     setBusy(true);
     try { await api.updateBooking(booking.id, { unitId: null }); onSaved(); }
     catch (e) { setMsg({ text: e.message, kind: 'err' }); setBusy(false); }
+  }
+
+  // Save the latest cleaner + checkout notes, then WhatsApp the reminder now
+  // (without closing the modal, so the host sees the result).
+  async function remindCleaner() {
+    setBusy(true); setMsg(null);
+    try {
+      await api.updateBooking(booking.id, { cleaner, checkoutNotes: checkoutNotes.trim() || null });
+      const r = await api.remindCleaner(booking.id);
+      setMsg({ text: `✅ WhatsApp reminder sent to ${r.cleaner || 'the cleaner'}${r.phone ? ` (${r.phone})` : ''}.`, kind: 'ok' });
+    } catch (e) {
+      setMsg({ text: (e.data && e.data.message) || e.message || 'Could not send the reminder.', kind: 'err' });
+    } finally { setBusy(false); }
   }
 
   const title = `${editing ? 'Edit' : 'New'} ${isFloating ? 'floating booking' : 'booking'}${unit ? ` · ${unit.name}` : ''}`;
@@ -211,6 +226,14 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
           <legend>Cleaning</legend>
           <label>Checkout cleaner<input list="cleaner-names" value={cleaner} onChange={(e) => setCleaner(e.target.value)} placeholder="Choose or type a cleaner" /></label>
           <datalist id="cleaner-names">{cleaners.map((c) => <option key={c} value={c} />)}</datalist>
+          <label>Checkout notes <span className="muted small">(sent to the cleaner in the 7pm night-before WhatsApp reminder)</span>
+            <textarea rows={2} value={checkoutNotes} onChange={(e) => setCheckoutNotes(e.target.value)} placeholder="e.g. Guest leaving a key in the lockbox · strip the sofa bed · extra bins out back" /></label>
+          {editing && booking.unitId && (
+            <div className="remind-row">
+              <button type="button" className="secondary" disabled={busy || !cleaner} onClick={remindCleaner}>📲 Send cleaner reminder now</button>
+              <span className="muted small">Otherwise it sends automatically at 7pm the night before checkout.</span>
+            </div>
+          )}
           <div className="insta-head">
             <span>In-stay cleans</span>
             <button type="button" className="mini" onClick={addClean}>+ Add in-stay clean</button>

@@ -145,6 +145,7 @@ td.cell.blue.late { background: #cdb4f0; }        /* late checkout (purple) */
 .booking-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 .booking-actions button { flex: 1 1 auto; min-width: 120px; white-space: nowrap; }
 .booking-actions .save { flex-basis: 100%; }
+.remind-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
 /* Collapsible "Requests & add-ons" block */
 .addons-block { border: 1px solid var(--line); border-radius: 8px; margin: 12px 0 0; }
 .addons-block > summary { cursor: pointer; list-style: none; padding: 8px 12px; font-size: 12px; color: var(--muted); font-weight: 700; }

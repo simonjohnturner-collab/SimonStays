@@ -166,6 +166,23 @@ if (require.main === module) {
     });
     console.log(`Market probe scheduled: ${marketExpr}`);
   }
+
+  // Night-before checkout reminders to the cleaner (WhatsApp), 19:00 SAST daily.
+  // Auto-on where Twilio WhatsApp creds are set; override the time with
+  // CHECKOUT_REMINDER_CRON. Dormant (no send) when creds are missing.
+  const checkoutReminders = require('./utils/checkoutReminders');
+  const remindExpr = process.env.CHECKOUT_REMINDER_CRON || '0 19 * * *';
+  if (checkoutReminders.enabled() && cron.validate(remindExpr)) {
+    cron.schedule(remindExpr, async () => {
+      try {
+        const s = await checkoutReminders.runDaily();
+        console.log('[checkout-reminder]', JSON.stringify(s));
+      } catch (e) { console.error('[checkout-reminder] failed', e.message); }
+    }, { timezone: 'Africa/Johannesburg' });
+    console.log(`Checkout cleaner reminders scheduled: ${remindExpr} (Africa/Johannesburg)`);
+  } else if (!checkoutReminders.enabled()) {
+    console.warn('[checkout-reminder] NOT scheduled — set TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM to enable WhatsApp reminders.');
+  }
 }
 
 module.exports = app;
