@@ -652,7 +652,10 @@ function DaySettlement({ sub, spentCents, onUpdate }) {
   const toCents = (str) => { const t = (str || '').trim(); if (t === '') return null; const n = Math.round(parseFloat(t) * 100); return Number.isFinite(n) ? Math.max(0, n) : null; };
   const reimbursedCents = toCents(reimbursed) || 0;
   const feeCents = toCents(fee) || 0;
-  const owedCents = Math.max(0, (spentCents || 0) - reimbursedCents) + feeCents;
+  // Net: spent − already reimbursed + the day's fee. If you've reimbursed MORE
+  // than was spent, that credit reduces the fee you owe (don't clamp it away).
+  // A negative result means the cleaner owes YOU (over-reimbursed past the fee).
+  const owedCents = (spentCents || 0) - reimbursedCents + feeCents;
 
   async function save(patch) {
     setSaving('…');
@@ -687,8 +690,8 @@ function DaySettlement({ sub, spentCents, onUpdate }) {
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
       </div>
       <div style={{ ...rowS, borderTop: '2px solid #e3e6ea', marginTop: 4, fontWeight: 700, fontSize: 15 }}>
-        <span style={{ flex: 1 }}>You owe the cleaner</span>
-        <span>{rand(owedCents)}</span>
+        <span style={{ flex: 1 }}>{owedCents < 0 ? 'Cleaner owes you' : 'You owe the cleaner'}</span>
+        <span>{rand(Math.abs(owedCents))}</span>
         {saving && <span className="muted small" style={{ marginLeft: 6 }}>{saving}</span>}
       </div>
       {sub.cleanerFeeCents == null && sub.propertyCleanRateCents == null && (
