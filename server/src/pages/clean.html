@@ -106,7 +106,7 @@
         <select id="cleaner" required><option value="">Select your name…</option></select>
         <input type="text" id="cleaner-other" placeholder="Type your name" style="display:none;margin-top:8px"></div>
 
-      <div class="q"><label for="date">Date</label>
+      <div class="q"><label for="date">Checkout day</label>
         <input type="date" id="date"></div>
 
       <div class="q"><label class="req" for="prop">Property</label>
@@ -114,6 +114,8 @@
 
       <div class="q"><label class="req" for="unit">Unit</label>
         <select id="unit" required><option value="">Select a property first</option></select></div>
+
+      <div id="dupbanner" class="hidden" style="margin:2px 0 12px;padding:11px 13px;border:1px solid #e6c67a;background:#fff8e8;border-radius:12px;font-size:13px;color:#8a5a00;line-height:1.4"></div>
 
       <p class="section-intro" id="intro"></p>
 
@@ -139,6 +141,8 @@
 <script>
   var PROPS = [], TEMPLATE = null, UNIT = null;
   var answers = {}, photoFiles = {}, rendered = [], SUBID = null;
+  // Duplicate-clean guard: an existing clean for this unit + checkout day + cleaner.
+  var DUP = null, DUP_CHOICE = null, EDITID = null;
   // Save-as-you-go state. SECTIONS describes each collapsible section (for the
   // completeness pills and the "sections still to complete" prompt at submit).
   // SETTERS/photoData/photoRedraw let a saved draft be restored into the form.
@@ -641,7 +645,8 @@
     var cSel = document.getElementById('cleaner');
     (d.cleaners || []).forEach(function (n) { var o = el('option', null, n); o.value = n; cSel.appendChild(o); });
     var other = el('option', null, 'Other (type name)'); other.value = '__other'; cSel.appendChild(other);
-    cSel.onchange = function () { document.getElementById('cleaner-other').style.display = this.value === '__other' ? 'block' : 'none'; };
+    cSel.onchange = function () { document.getElementById('cleaner-other').style.display = this.value === '__other' ? 'block' : 'none'; checkDup(); };
+    document.getElementById('cleaner-other').addEventListener('input', checkDup);
     var propSel = document.getElementById('prop'); propSel.innerHTML = '<option value="">Select a property…</option>';
     PROPS.forEach(function (p) { var o = el('option', null, p.name); o.value = p.id; propSel.appendChild(o); });
     propSel.onchange = function () {
@@ -652,11 +657,37 @@
       document.getElementById('fields').innerHTML = ''; TEMPLATE = null;
       renderLiveSummary();
     };
-    document.getElementById('unit').onchange = function () { if (this.value) loadForm(this.value); };
+    document.getElementById('unit').onchange = function () { if (this.value) loadForm(this.value); checkDup(); };
   }).catch(function () { document.getElementById('prop').innerHTML = '<option value="">Could not load</option>'; });
 
-  document.getElementById('date').value = new Date().toISOString().slice(0, 10);
-  document.getElementById('date').addEventListener('change', function () { renderLiveSummary(); });
+  // Default the checkout day to today (cleaners clean on the checkout day). Local
+  // date, not UTC, so it's right for SA time near midnight.
+  (function () { var d = new Date(); var p = function (n) { return (n < 10 ? '0' : '') + n; }; document.getElementById('date').value = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); })();
+  document.getElementById('date').addEventListener('change', function () { renderLiveSummary(); checkDup(); });
+
+  // ---- Duplicate-clean guard -------------------------------------------------
+  function currentCleaner() {
+    var cSel = document.getElementById('cleaner');
+    return (cSel.value === '__other' ? document.getElementById('cleaner-other').value : cSel.value).trim();
+  }
+  function hideDupUI() { var b = document.getElementById('dupbanner'); if (b) { b.className = 'hidden'; b.textContent = ''; } }
+  // On any change to unit / day / cleaner, re-check whether a matching clean exists.
+  function checkDup() {
+    DUP = null; DUP_CHOICE = null; EDITID = null;
+    var unitId = document.getElementById('unit').value;
+    var day = document.getElementById('date').value;
+    var cleaner = currentCleaner();
+    if (!unitId || !day || !cleaner) { hideDupUI(); return; }
+    fetch('/public/forms/clean-exists?unitId=' + encodeURIComponent(unitId) + '&checkoutDay=' + encodeURIComponent(day) + '&cleaner=' + encodeURIComponent(cleaner))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.exists) { hideDupUI(); return; }
+        DUP = { id: d.id, submitterName: d.submitterName, createdAt: d.createdAt };
+        var b = document.getElementById('dupbanner');
+        if (b) { b.className = ''; b.textContent = '⚠️ A checkout clean for this unit on this day was already submitted by ' + (d.submitterName || 'a cleaner') + '. When you submit you can add to that saved form instead of creating a duplicate.'; }
+      })
+      .catch(function () { hideDupUI(); });
+  }
   function showErr(t) { var m = document.getElementById('msg'); m.className = 'msg err'; m.textContent = t; window.scrollTo(0, document.body.scrollHeight); }
 
   // Autosave: any typing/selection saves the draft (debounced) and updates pills.
@@ -670,8 +701,7 @@
   document.getElementById('form').onsubmit = function (e) {
     e.preventDefault();
     document.getElementById('msg').textContent = '';
-    var cSel = document.getElementById('cleaner');
-    var cleaner = (cSel.value === '__other' ? document.getElementById('cleaner-other').value : cSel.value).trim();
+    var cleaner = currentCleaner();
     var unitId = document.getElementById('unit').value;
     if (!cleaner) return showErr('Please enter your name.');
     if (!document.getElementById('prop').value) return showErr('Please choose the property.');
@@ -687,15 +717,46 @@
       if (INVOICE_DATEBOX) { INVOICE_DATEBOX.scrollIntoView({ behavior: 'smooth', block: 'center' }); var t = INVOICE_DATEBOX.querySelector('textarea'); if (t) t.focus(); }
       return showErr('One of your invoices is dated before today’s clean — please add a short note explaining why.');
     }
+    // Duplicate guard: a matching clean already exists → ask before writing anything.
+    if (DUP && !DUP_CHOICE && !SUBID) { showDupPrompt(); return; }
+    proceed();
+  };
 
+  // Ask the cleaner whether to add to the saved clean or create a separate one.
+  function showDupPrompt() {
+    var when = ''; try { when = DUP && DUP.createdAt ? new Date(DUP.createdAt).toLocaleString() : ''; } catch (e) {}
+    var box = document.getElementById('msg'); box.className = 'msg'; box.innerHTML = '';
+    var card = el('div'); card.style.cssText = 'border:1px solid #e6c67a;background:#fff8e8;border-radius:12px;padding:13px;color:#8a5a00';
+    var p = el('p', null, 'This unit already has a checkout clean submitted by ' + ((DUP && DUP.submitterName) || 'a cleaner') + (when ? ' on ' + when : '') + '. Add what you entered to that saved form, or create a separate clean?');
+    p.style.cssText = 'margin:0 0 10px;font-size:14px;line-height:1.4'; card.appendChild(p);
+    var row = el('div'); row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+    var upd = el('button', null, 'Add to the saved form'); upd.type = 'button';
+    upd.style.cssText = 'flex:1;min-width:150px;background:#1a7a3a;color:#fff;border:none;border-radius:10px;padding:11px;font-weight:700;cursor:pointer';
+    upd.onclick = function () { DUP_CHOICE = 'update'; EDITID = DUP.id; box.textContent = ''; proceed(); };
+    var sep = el('button', null, 'Create a separate clean'); sep.type = 'button';
+    sep.style.cssText = 'flex:1;min-width:150px;background:#fff;color:#1a7a3a;border:1px solid #1a7a3a;border-radius:10px;padding:11px;font-weight:700;cursor:pointer';
+    sep.onclick = function () { DUP_CHOICE = 'separate'; EDITID = null; box.textContent = ''; proceed(); };
+    row.appendChild(upd); row.appendChild(sep); card.appendChild(row); box.appendChild(card);
+    try { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+  }
+
+  // Create the submission (or PUT-merge into the saved one), upload photos, finalize.
+  function proceed() {
+    var cleaner = currentCleaner();
+    var unitId = document.getElementById('unit').value;
     var btn = document.getElementById('submit'); btn.disabled = true; btn.textContent = 'Sending…';
     var body = { type: 'clean', unitId: unitId, submitterName: cleaner, templateId: TEMPLATE.id || null, answers: Object.assign({ date: document.getElementById('date').value }, answers) };
 
-    // Create the submission once; reuse it on retry so re-uploaded photos add to it.
-    var ensure = SUBID ? Promise.resolve(SUBID)
-      : fetch('/public/forms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-          .then(function (r) { return r.json(); })
-          .then(function (res) { if (!res || !res.id) throw new Error('submit failed'); SUBID = res.id; return SUBID; });
+    // Adding to a saved form → PUT (merge answers). Otherwise create once and reuse
+    // the id on retry so re-uploaded photos add to it.
+    var ensure;
+    if (SUBID) ensure = Promise.resolve(SUBID);
+    else if (EDITID) ensure = fetch('/public/forms/' + EDITID, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers: body.answers }) })
+        .then(function (r) { return r.json(); })
+        .then(function (res) { if (!res || !res.ok) throw new Error('update failed'); SUBID = EDITID; return SUBID; });
+    else ensure = fetch('/public/forms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        .then(function (r) { return r.json(); })
+        .then(function (res) { if (!res || !res.id) throw new Error('submit failed'); SUBID = res.id; return SUBID; });
 
     ensure.then(function (id) {
         var jobs = [];

@@ -644,24 +644,46 @@ function PurchaseSummaryCard({ sub, onUpdate }) {
 // the day's fee (pre-filled from the property's per-clean rate, editable per clean).
 function DaySettlement({ sub, spentCents, onUpdate }) {
   const centsToStr = (c) => (c == null ? '' : (Number(c) / 100).toFixed(2));
+  const toCents = (str) => { const t = (str || '').trim(); if (t === '') return null; const n = Math.round(parseFloat(t) * 100); return Number.isFinite(n) ? Math.max(0, n) : null; };
   const feeDefault = sub.cleanerFeeCents != null ? sub.cleanerFeeCents : sub.propertyCleanRateCents;
-  const [reimbursed, setReimbursed] = useState(centsToStr(sub.reimbursedCents));
+
+  // Reimbursements are a list of part-payments made across the day. Seed from the
+  // list, falling back to the single legacy value for older submissions.
+  const seed = () => {
+    if (Array.isArray(sub.reimbursements) && sub.reimbursements.length) {
+      return sub.reimbursements.map((r) => ({ amount: centsToStr(r.amountCents), note: r.note || '', at: r.at || null }));
+    }
+    if (sub.reimbursedCents != null) return [{ amount: centsToStr(sub.reimbursedCents), note: '', at: null }];
+    return [];
+  };
+  const [lines, setLines] = useState(seed);
   const [fee, setFee] = useState(centsToStr(feeDefault));
   const [saving, setSaving] = useState('');
 
-  const toCents = (str) => { const t = (str || '').trim(); if (t === '') return null; const n = Math.round(parseFloat(t) * 100); return Number.isFinite(n) ? Math.max(0, n) : null; };
-  const reimbursedCents = toCents(reimbursed) || 0;
+  const reimbursedCents = lines.reduce((a, l) => a + (toCents(l.amount) || 0), 0);
   const feeCents = toCents(fee) || 0;
-  // Net: spent − already reimbursed + the day's fee. If you've reimbursed MORE
-  // than was spent, that credit reduces the fee you owe (don't clamp it away).
-  // A negative result means the cleaner owes YOU (over-reimbursed past the fee).
+  // Net: spent − total reimbursed + the day's fee. Over-reimbursing reduces the fee
+  // owed (not clamped); a negative result means the cleaner owes YOU.
   const owedCents = (spentCents || 0) - reimbursedCents + feeCents;
 
-  async function save(patch) {
+  async function flash(fn) {
     setSaving('…');
-    try { await api.updateFormSubmission(sub.id, patch); onUpdate && onUpdate(patch); setSaving('✓'); setTimeout(() => setSaving(''), 900); }
-    catch (e) { setSaving('!'); }
+    try { await fn(); setSaving('✓'); setTimeout(() => setSaving(''), 900); } catch (e) { setSaving('!'); }
   }
+  function saveLines(next) {
+    const payload = next
+      .map((l) => ({ amountCents: toCents(l.amount), note: (l.note || '').trim() || null, at: l.at || new Date().toISOString() }))
+      .filter((l) => l.amountCents != null && l.amountCents > 0);
+    return flash(async () => {
+      await api.updateFormSubmission(sub.id, { reimbursements: payload });
+      onUpdate && onUpdate({ reimbursements: payload, reimbursedCents: payload.reduce((a, r) => a + r.amountCents, 0) });
+    });
+  }
+  function saveFee() { return flash(async () => { await api.updateFormSubmission(sub.id, { cleanerFeeCents: toCents(fee) }); onUpdate && onUpdate({ cleanerFeeCents: toCents(fee) }); }); }
+
+  const updateLine = (i, patch) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const addLine = () => setLines((ls) => [...ls, { amount: '', note: '', at: null }]);
+  const removeLine = (i) => setLines((ls) => { const next = ls.filter((_, j) => j !== i); saveLines(next); return next; });
 
   const rowS = { display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' };
   const lbl = { flex: 1, color: '#374151' };
@@ -673,20 +695,36 @@ function DaySettlement({ sub, spentCents, onUpdate }) {
         <span style={lbl}>Spent on purchases</span>
         <span>{rand(spentCents || 0)}</span>
       </div>
-      <div style={rowS}>
-        <span style={lbl}>Reimbursed to cleaner</span>
-        <span className="muted">R</span>
-        <input style={{ width: 90, textAlign: 'right' }} inputMode="decimal" placeholder="0.00"
-          value={reimbursed} onChange={(e) => setReimbursed(e.target.value)}
-          onBlur={() => save({ reimbursedCents: toCents(reimbursed) })}
-          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
+
+      <div style={{ padding: '5px 0' }}>
+        <div style={{ ...rowS, padding: 0 }}>
+          <span style={lbl}>Reimbursed to cleaner{lines.length > 1 ? ` · total ${rand(reimbursedCents)}` : ''}</span>
+        </div>
+        {lines.map((l, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0' }}>
+            <input style={{ flex: 1, minWidth: 0 }} placeholder="What for (optional)"
+              value={l.note} onChange={(e) => updateLine(i, { note: e.target.value })}
+              onBlur={() => saveLines(lines)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
+            <span className="muted">R</span>
+            <input style={{ width: 84, textAlign: 'right' }} inputMode="decimal" placeholder="0.00"
+              value={l.amount} onChange={(e) => updateLine(i, { amount: e.target.value })}
+              onBlur={() => saveLines(lines)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
+            <button type="button" title="Remove" onClick={() => removeLine(i)}
+              style={{ border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '0 4px' }}>×</button>
+          </div>
+        ))}
+        <button type="button" onClick={addLine}
+          style={{ marginTop: 4, border: '1px dashed #bcd3c2', background: '#f6faf7', color: '#1a7a3a', borderRadius: 8, padding: '5px 10px', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>
+          + Add reimbursement
+        </button>
       </div>
+
       <div style={rowS}>
         <span style={lbl}>Daily fee</span>
         <span className="muted">R</span>
         <input style={{ width: 90, textAlign: 'right' }} inputMode="decimal" placeholder="0.00"
           value={fee} onChange={(e) => setFee(e.target.value)}
-          onBlur={() => save({ cleanerFeeCents: toCents(fee) })}
+          onBlur={saveFee}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
       </div>
       <div style={{ ...rowS, borderTop: '2px solid #e3e6ea', marginTop: 4, fontWeight: 700, fontSize: 15 }}>

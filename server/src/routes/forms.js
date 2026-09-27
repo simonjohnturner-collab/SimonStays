@@ -148,7 +148,7 @@ router.get('/submissions/:id', async (req, res) => {
   res.json({ submission: {
     ...fmtSub(sub), answers: sub.answers, photos: sub.photos,
     purchaseSummary: sub.purchaseSummary, purchaseStatus: sub.purchaseStatus,
-    reimbursedCents: sub.reimbursedCents, cleanerFeeCents: sub.cleanerFeeCents,
+    reimbursedCents: sub.reimbursedCents, reimbursements: sub.reimbursements, cleanerFeeCents: sub.cleanerFeeCents,
     propertyCleanRateCents: sub.property ? sub.property.cleanRateCents : null,
     resolvesSubmissionId: sub.resolvesSubmissionId, resolvesInfo, resolvedBy,
   } });
@@ -176,6 +176,20 @@ router.patch('/submissions/:id', async (req, res) => {
   const money = (v) => (v === '' || v == null ? null : Math.max(0, Math.round(Number(v))));
   if ('reimbursedCents' in b) data.reimbursedCents = money(b.reimbursedCents);
   if ('cleanerFeeCents' in b) data.cleanerFeeCents = money(b.cleanerFeeCents);
+  // Several part-payments across the day. Store the list and keep reimbursedCents
+  // as the running sum so all the existing settlement maths still works.
+  if ('reimbursements' in b) {
+    const list = Array.isArray(b.reimbursements) ? b.reimbursements : [];
+    const clean = list
+      .map((r) => ({
+        amountCents: money(r && r.amountCents),
+        note: (r && typeof r.note === 'string') ? r.note.trim().slice(0, 200) : null,
+        at: (r && r.at) || new Date().toISOString(),
+      }))
+      .filter((r) => r.amountCents != null && r.amountCents > 0);
+    data.reimbursements = clean;
+    data.reimbursedCents = clean.reduce((a, r) => a + r.amountCents, 0);
+  }
 
   // Link/unlink a repair to the damage report it resolves (marks that damage resolved).
   let linkDamageId = null;
@@ -190,7 +204,7 @@ router.patch('/submissions/:id', async (req, res) => {
   }
   const updated = await prisma.formSubmission.update({ where: { id: sub.id }, data });
   if (linkDamageId) await prisma.formSubmission.update({ where: { id: linkDamageId }, data: { status: 'resolved' } }).catch(() => {});
-  res.json({ submission: { id: updated.id, status: updated.status, reimbursedCents: updated.reimbursedCents, cleanerFeeCents: updated.cleanerFeeCents, resolvesSubmissionId: updated.resolvesSubmissionId } });
+  res.json({ submission: { id: updated.id, status: updated.status, reimbursedCents: updated.reimbursedCents, reimbursements: updated.reimbursements, cleanerFeeCents: updated.cleanerFeeCents, resolvesSubmissionId: updated.resolvesSubmissionId } });
 });
 
 router.delete('/submissions/:id', async (req, res) => {

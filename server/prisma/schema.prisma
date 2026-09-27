@@ -363,7 +363,8 @@ model FormSubmission {
   createdAt        DateTime  @default(now())
 
   // Cleaner day-settlement (checkout cleans): what I still owe the cleaner.
-  reimbursedCents  Int?      // amount I've already paid the cleaner back for purchases
+  reimbursedCents  Int?      // total reimbursed to the cleaner (kept as the sum of `reimbursements`)
+  reimbursements   Json?     // [{ amountCents, note?, at }] — several part-payments across the day
   cleanerFeeCents  Int?      // this clean's daily fee (defaults to the property's cleanRateCents)
 
   // Repair reports: which damage report (if any) this repair resolves. Linking a

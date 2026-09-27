@@ -627,6 +627,55 @@ router.post('/forms/:id/photos', async (req, res, next) => {
 
 // Recognise real image bytes by their magic number, so we never store a
 // corrupt blob (e.g. an empty "data:," canvas result that decodes to 3 bytes).
+// GET /public/forms/clean-exists — has this cleaner already submitted a checkout
+// clean for this unit on this checkout day? Used to stop duplicate forms: the
+// cleaner is offered to update the saved form instead of creating a new one.
+router.get('/forms/clean-exists', async (req, res, next) => {
+  try {
+    const hostId = await publicHostId();
+    if (!hostId) return res.json({ exists: false });
+    const unitId = String(req.query.unitId || '');
+    const checkoutDay = String(req.query.checkoutDay || '');
+    const cleaner = String(req.query.cleaner || '').trim();
+    if (!unitId || !checkoutDay || !cleaner) return res.json({ exists: false });
+    const existing = await prisma.formSubmission.findFirst({
+      where: {
+        hostId, type: 'clean', unitId,
+        status: { not: 'incomplete' },
+        submitterName: { equals: cleaner, mode: 'insensitive' },
+        answers: { path: ['date'], equals: checkoutDay },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, submitterName: true, createdAt: true },
+    });
+    if (!existing) return res.json({ exists: false });
+    res.json({ exists: true, id: existing.id, submitterName: existing.submitterName, createdAt: existing.createdAt });
+  } catch (e) { next(e); }
+});
+
+// PUT /public/forms/:id — update an existing clean's answers (used when a cleaner
+// chooses to add to the saved form rather than create a duplicate). Existing
+// answers are kept; only non-empty incoming values overwrite. New photos are
+// appended via the normal /photos route; status returns to "new" so the host
+// sees the update.
+router.put('/forms/:id', async (req, res, next) => {
+  try {
+    const hostId = await publicHostId();
+    if (!hostId) return res.status(404).json({ error: 'not_available' });
+    const sub = await prisma.formSubmission.findFirst({ where: { id: req.params.id, hostId, type: 'clean' }, select: { id: true, answers: true } });
+    if (!sub) return res.status(404).json({ error: 'not_found' });
+    const incoming = (req.body && typeof req.body.answers === 'object' && req.body.answers) || {};
+    const merged = Object.assign({}, sub.answers || {});
+    for (const k of Object.keys(incoming)) {
+      const v = incoming[k];
+      const empty = v == null || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && v.length === 0);
+      if (!empty) merged[k] = v;
+    }
+    await prisma.formSubmission.update({ where: { id: sub.id }, data: { answers: merged, status: 'new' } });
+    res.json({ ok: true, id: sub.id });
+  } catch (e) { next(e); }
+});
+
 function sniffImage(buf) {
   if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
   if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png';
