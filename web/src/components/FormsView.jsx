@@ -654,7 +654,7 @@ function DaySettlement({ sub, spentCents, onUpdate }) {
       return sub.reimbursements.map((r) => ({ amount: centsToStr(r.amountCents), note: r.note || '', at: r.at || null }));
     }
     if (sub.reimbursedCents != null) return [{ amount: centsToStr(sub.reimbursedCents), note: '', at: null }];
-    return [];
+    return [{ amount: '', note: '', at: null }]; // always show one amount box
   };
   const [lines, setLines] = useState(seed);
   const [fee, setFee] = useState(centsToStr(feeDefault));
@@ -682,8 +682,8 @@ function DaySettlement({ sub, spentCents, onUpdate }) {
   function saveFee() { return flash(async () => { await api.updateFormSubmission(sub.id, { cleanerFeeCents: toCents(fee) }); onUpdate && onUpdate({ cleanerFeeCents: toCents(fee) }); }); }
 
   const updateLine = (i, patch) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
-  const addLine = () => setLines((ls) => [...ls, { amount: '', note: '', at: null }]);
-  const removeLine = (i) => setLines((ls) => { const next = ls.filter((_, j) => j !== i); saveLines(next); return next; });
+  const addLine = () => setLines((ls) => [...ls, { amount: '', note: '', at: null, fresh: true }]);
+  const removeLine = (i) => { const next = lines.filter((_, j) => j !== i); setLines(next); saveLines(next); };
 
   const rowS = { display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' };
   const lbl = { flex: 1, color: '#374151' };
@@ -696,28 +696,34 @@ function DaySettlement({ sub, spentCents, onUpdate }) {
         <span>{rand(spentCents || 0)}</span>
       </div>
 
-      <div style={{ padding: '5px 0' }}>
-        <div style={{ ...rowS, padding: 0 }}>
-          <span style={lbl}>Reimbursed to cleaner{lines.length > 1 ? ` · total ${rand(reimbursedCents)}` : ''}</span>
-        </div>
-        {lines.map((l, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0' }}>
-            <input style={{ flex: 1, minWidth: 0 }} placeholder="What for (optional)"
-              value={l.note} onChange={(e) => updateLine(i, { note: e.target.value })}
-              onBlur={() => saveLines(lines)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
+      {/* One amount box per reimbursement; the + beside the last box opens another. */}
+      {lines.map((l, i) => {
+        const last = i === lines.length - 1;
+        const iconBtn = { width: 26, height: 26, flex: '0 0 26px', borderRadius: 6, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0, fontWeight: 700 };
+        return (
+          <div key={i} style={rowS}>
+            <span style={lbl}>{i === 0 ? 'Reimbursed to cleaner' : `Reimbursement ${i + 1}`}</span>
             <span className="muted">R</span>
-            <input style={{ width: 84, textAlign: 'right' }} inputMode="decimal" placeholder="0.00"
+            <input style={{ width: 90, textAlign: 'right' }} inputMode="decimal" placeholder="0.00" autoFocus={!!l.fresh}
               value={l.amount} onChange={(e) => updateLine(i, { amount: e.target.value })}
               onBlur={() => saveLines(lines)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
-            <button type="button" title="Remove" onClick={() => removeLine(i)}
-              style={{ border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '0 4px' }}>×</button>
+            {last ? (
+              <button type="button" title="Add another reimbursement" onClick={addLine}
+                style={{ ...iconBtn, border: '1px solid #bcd3c2', background: '#f6faf7', color: '#1a7a3a' }}>+</button>
+            ) : <span style={{ width: 26, flex: '0 0 26px' }} />}
+            {lines.length > 1 ? (
+              <button type="button" title="Remove this reimbursement" onClick={() => removeLine(i)}
+                style={{ ...iconBtn, border: 'none', background: 'transparent', color: '#b91c1c' }}>×</button>
+            ) : null}
           </div>
-        ))}
-        <button type="button" onClick={addLine}
-          style={{ marginTop: 4, border: '1px dashed #bcd3c2', background: '#f6faf7', color: '#1a7a3a', borderRadius: 8, padding: '5px 10px', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>
-          + Add reimbursement
-        </button>
-      </div>
+        );
+      })}
+      {lines.length > 1 && (
+        <div style={{ ...rowS, color: '#6b7280', fontSize: 13 }}>
+          <span style={lbl}>Total reimbursed</span>
+          <span>{rand(reimbursedCents)}</span>
+        </div>
+      )}
 
       <div style={rowS}>
         <span style={lbl}>Daily fee</span>
