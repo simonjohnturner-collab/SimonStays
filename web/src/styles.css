@@ -860,3 +860,12 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .mk-units-in:focus { outline:none; border-color:#2a78d6; }
 .mk-note { margin-top:12px; }
 @media (max-width:640px) { .mk-tiles { grid-template-columns:repeat(2,1fr); } }
+
+/* Forms: choose photos to download / share */
+.photo-pick-bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0 12px; padding:8px 10px; border:1px solid #bcd3c2; background:#f6faf7; border-radius:10px; position:sticky; top:0; z-index:5; }
+.thumb-btn { position:relative; }
+.thumb-btn.picking { cursor:pointer; }
+.thumb-btn.picking img { opacity:.85; }
+.thumb-btn.picked img { opacity:1; outline:3px solid var(--green); outline-offset:-3px; }
+.thumb-tick { position:absolute; top:6px; right:6px; width:22px; height:22px; border-radius:50%; border:2px solid #fff; background:rgba(0,0,0,.35); color:#fff; font-weight:800; font-size:13px; line-height:18px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+.thumb-btn.picked .thumb-tick { background:var(--green); }

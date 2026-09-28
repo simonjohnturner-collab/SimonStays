@@ -40,7 +40,7 @@ const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString() : '');
 // One photo thumbnail. If the image bytes are missing/corrupt (older uploads
 // that failed to encode on the phone), show a clear placeholder instead of the
 // browser's broken-image icon.
-function Thumb({ ph, onOpen }) {
+function Thumb({ ph, onOpen, picking, picked, onPick }) {
   // ?v=2 busts the year-long "immutable" cache of the old broken HEIC bytes,
   // forcing one fresh fetch that the server transcodes to JPEG.
   const base = photoUrl(ph.id) + '?v=2';
@@ -54,12 +54,30 @@ function Thumb({ ph, onOpen }) {
     else setErr(true);
   }
   if (err) return <div className="thumb-btn thumb-broken" title={ph.filename || 'photo'}>⚠️<span>didn’t upload</span></div>;
+  // In pick mode (choosing photos to download/share) a tap ticks the photo instead of zooming.
   return (
-    <button type="button" className="thumb-btn" title={ph.filename || 'photo'} onClick={() => onOpen(src)}>
+    <button type="button" className={`thumb-btn${picking ? ' picking' : ''}${picked ? ' picked' : ''}`} title={ph.filename || 'photo'}
+      onClick={() => (picking ? onPick(ph.id) : onOpen(src))}>
       <img src={src} alt={ph.filename || 'photo'} loading="lazy" onError={onError} />
+      {picking && <span className="thumb-tick">{picked ? '✓' : ''}</span>}
     </button>
   );
 }
+
+// Fetch a photo's bytes as a File with a readable name (property-unit-type-date-N.jpg).
+async function photoFile(sub, ph, n) {
+  const res = await fetch(photoUrl(ph.id) + '?v=2');
+  if (!res.ok) throw new Error('Could not fetch a photo');
+  const blob = await res.blob();
+  const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+  const slug = (s) => String(s || '').trim().replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const day = (sub.createdAt || '').slice(0, 10);
+  const name = [slug(sub.propertyName), slug(sub.unitName), sub.type, day, n].filter(Boolean).join('-') + '.' + ext;
+  return new File([blob], name, { type: blob.type || 'image/jpeg' });
+}
+const canShareFiles = () => {
+  try { return !!(navigator.canShare && navigator.canShare({ files: [new File([''], 'x.jpg', { type: 'image/jpeg' })] })); } catch { return false; }
+};
 
 export default function FormsView({ onClose, properties = [], initialSubmissionId = null }) {
   const [tab, setTab] = useState('submissions'); // 'submissions' | 'summary' | 'design'
@@ -126,6 +144,49 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
   const [busy, setBusy] = useState(false);
   const [toc, setToc] = useState([]); // side "jump to" index for the open submission
   const detailRef = useRef(null);
+  // Choosing photos of the open submission to download / share: null = off, else a Set of photo ids.
+  const [photoPick, setPhotoPick] = useState(null);
+  const [photoBusy, setPhotoBusy] = useState('');
+  const fileCache = useRef(new Map()); // photo id → File, so a second Share tap is instant
+  useEffect(() => { setPhotoPick(null); setPhotoBusy(''); }, [sel?.id]);
+
+  const togglePhoto = (id) => setPhotoPick((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  async function pickedFiles() {
+    const list = (sel.photos || []).filter((ph) => photoPick.has(ph.id));
+    const out = [];
+    for (let i = 0; i < list.length; i++) {
+      const ph = list[i];
+      if (!fileCache.current.has(ph.id)) fileCache.current.set(ph.id, await photoFile(sel, ph, i + 1));
+      out.push(fileCache.current.get(ph.id));
+    }
+    return out;
+  }
+  async function downloadPhotos() {
+    setPhotoBusy('Preparing…');
+    try {
+      const files = await pickedFiles();
+      for (const f of files) {
+        const url = URL.createObjectURL(f);
+        const a = document.createElement('a');
+        a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        await new Promise((r) => setTimeout(r, 350)); // browsers drop rapid-fire downloads
+      }
+      setPhotoBusy(`✓ ${files.length} downloaded`);
+    } catch (e) { setPhotoBusy('⚠️ ' + (e.message || 'Download failed')); }
+  }
+  async function sharePhotos() {
+    setPhotoBusy('Preparing…');
+    try {
+      const files = await pickedFiles();
+      await navigator.share({ files, title: `${sel.propertyName || 'Photos'}${sel.unitName ? ' · ' + sel.unitName : ''}` });
+      setPhotoBusy('');
+    } catch (e) {
+      if (e.name === 'AbortError') setPhotoBusy('');
+      else if (e.name === 'NotAllowedError') setPhotoBusy('Photos ready — tap Share again');
+      else setPhotoBusy('⚠️ ' + (e.message || 'Share failed'));
+    }
+  }
 
   useEffect(() => {
     if (!zoom) return;
@@ -252,9 +313,30 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
                 {['new', 'reviewed', 'resolved'].map((s) => (
                   <button key={s} className={`chip ${sel.status === s ? 'on' : ''}`} onClick={() => setStatusOf(sel.id, s)}>{s}</button>
                 ))}
+                {(sel.photos || []).length > 0 && (
+                  <button className={`chip ${photoPick ? 'on' : ''}`} title="Choose photos to download or share"
+                    onClick={() => setPhotoPick((s) => (s ? null : new Set()))}>⬇ Photos</button>
+                )}
                 <button className="del" title="Delete" onClick={() => del(sel.id)}>🗑</button>
               </div>
             </div>
+
+            {photoPick && (() => {
+              const total = (sel.photos || []).length;
+              const n = photoPick.size;
+              return (
+                <div className="photo-pick-bar">
+                  <span className="muted small">{n ? `${n} of ${total} selected` : 'Tap photos to select them'}</span>
+                  <button className="mini" onClick={() => setPhotoPick(new Set((sel.photos || []).map((p) => p.id)))}>Select all ({total})</button>
+                  {n > 0 && <button className="mini" onClick={() => setPhotoPick(new Set())}>Clear</button>}
+                  <span style={{ flex: 1 }} />
+                  {photoBusy && <span className="muted small">{photoBusy}</span>}
+                  {canShareFiles() && <button className="secondary" disabled={!n || photoBusy === 'Preparing…'} onClick={sharePhotos}>Share {n || ''}</button>}
+                  <button className="save" disabled={!n || photoBusy === 'Preparing…'} onClick={downloadPhotos}>⬇ Download {n || ''}</button>
+                  <button className="mini" onClick={() => setPhotoPick(null)}>Done</button>
+                </div>
+              );
+            })()}
 
             <div id="secjump-purchases">
               <PurchaseSummaryCard sub={sel} onUpdate={(patch) => setSel((x) => (x ? { ...x, ...patch } : x))} />
@@ -270,7 +352,8 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
               (sel.photos || []).forEach((ph) => { const k = ph.fieldId || ''; (byField[k] = byField[k] || []).push(ph); });
               const Gallery = ({ photos }) => (
                 <div className="sub-photo-grid">
-                  {photos.map((ph) => <Thumb key={ph.id} ph={ph} onOpen={(u) => setZoom(u || photoUrl(ph.id))} />)}
+                  {photos.map((ph) => <Thumb key={ph.id} ph={ph} onOpen={(u) => setZoom(u || photoUrl(ph.id))}
+                    picking={!!photoPick} picked={!!photoPick?.has(ph.id)} onPick={togglePhoto} />)}
                 </div>
               );
               const groupPhotos = (list) => {
