@@ -19,8 +19,9 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
 
   // Payment: paid / partial / unpaid, plus the quoted amount and what's been paid.
   const [paymentStatus, setPaymentStatus] = useState(booking?.paymentStatus || (booking?.paid ? 'paid' : 'unpaid'));
-  const [quoted, setQuoted] = useState(booking?.quotedCents != null ? centsToRand(booking.quotedCents) : '');
-  const [amountPaid, setAmountPaid] = useState(booking?.amountPaidCents != null ? centsToRand(booking.amountPaidCents) : '');
+  // Kept as text (the inputs' value) — centsToRand returns a number, and .trim() below needs a string.
+  const [quoted, setQuoted] = useState(booking?.quotedCents != null ? centsToRand(booking.quotedCents).toFixed(2) : '');
+  const [amountPaid, setAmountPaid] = useState(booking?.amountPaidCents != null ? centsToRand(booking.amountPaidCents).toFixed(2) : '');
 
   const [earlyCheckIn, setEarlyCheckIn] = useState(booking?.earlyCheckIn || false);
   const [lateCheckOut, setLateCheckOut] = useState(booking?.lateCheckOut || false);
@@ -57,8 +58,8 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   // Three amounts: what the pricing schedule calculates, what we actually quoted,
   // and what's been paid. Outstanding = quoted − paid (only shown when there's a balance).
   const calcCents = quote ? quote.totalCents : null;
-  const effQuotedCents = quoted.trim() ? randToCents(quoted) : calcCents; // typed quote, else the calc
-  const paidCents = paymentStatus === 'partial' ? (amountPaid.trim() ? randToCents(amountPaid) : 0) : 0;
+  const effQuotedCents = String(quoted).trim() ? randToCents(quoted) : calcCents; // typed quote, else the calc
+  const paidCents = paymentStatus === 'partial' ? (String(amountPaid).trim() ? randToCents(amountPaid) : 0) : 0;
   const outstandingCents = effQuotedCents == null ? null
     : paymentStatus === 'paid' ? 0
     : paymentStatus === 'unpaid' ? effQuotedCents
