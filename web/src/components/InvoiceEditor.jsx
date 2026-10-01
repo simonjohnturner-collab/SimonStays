@@ -9,6 +9,28 @@ function nightsBetween(a, b) {
   return n > 0 ? n : null;
 }
 
+// A line is either a 'stay' (In/Out dates x nightly rate) or a once-off 'charge'
+// (deposit, cleaning, ...) with just an amount. Older invoices have no kind stored:
+// a line with dates (or the first line) is a stay, anything else a charge.
+function lineKind(l, i) {
+  if (l.kind === 'stay' || l.kind === 'charge') return l.kind;
+  return l.dateIn || l.dateOut || i === 0 ? 'stay' : 'charge';
+}
+
+// Rand amount input: shows "R 52 500.00" until focused, then the plain number for editing.
+function MoneyInput({ value, onChange, className = 'num' }) {
+  const [editing, setEditing] = useState(false);
+  const shown = editing || value === '' || value == null ? value : fmtR(randToCents(value));
+  return (
+    <input className={className} value={shown} placeholder="R 0.00"
+      onFocus={() => setEditing(true)} onBlur={() => setEditing(false)}
+      onChange={(e) => onChange(e.target.value)} />
+  );
+}
+
+// Description grows to fit its text so long descriptions are never cut off.
+const autoGrow = (el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } };
+
 // Editable, printable invoice document. Inputs look like plain text and lose
 // their borders when printed, so the same view edits and prints cleanly.
 export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onDuplicated, onEditBiller }) {
@@ -19,10 +41,13 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
     name: invoice.billToName || '', address: invoice.billToAddress || '',
     attention: invoice.billToAttention || '', email: invoice.billToEmail || '', phone: invoice.billToPhone || '',
   });
-  const [lines, setLines] = useState((invoice.lineItems || []).map((l) => ({
-    description: l.description || '', dateIn: l.dateIn || '', dateOut: l.dateOut || '',
-    qty: l.qty ?? '', nightly: centsToRand(l.nightlyCents), amount: centsToRand(l.amountCents),
-  })));
+  const [lines, setLines] = useState((invoice.lineItems || []).map((l, i) => {
+    const kind = lineKind(l, i);
+    return kind === 'stay'
+      ? { kind, description: l.description || '', dateIn: l.dateIn || '', dateOut: l.dateOut || '',
+          qty: l.qty ?? '', nightly: centsToRand(l.nightlyCents), amount: centsToRand(l.amountCents) }
+      : { kind, description: l.description || '', dateIn: '', dateOut: '', qty: '', nightly: '', amount: centsToRand(l.amountCents) };
+  }));
   const [discountPercent, setDiscountPercent] = useState(invoice.discountPercent || 0);
   const [dueNow, setDueNow] = useState(centsToRand(invoice.dueNowCents));
   const [paid, setPaid] = useState(invoice.paidCents ? centsToRand(invoice.paidCents) : '');
@@ -30,7 +55,7 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
-  const lineCents = (l) => (Number(l.nightly) > 0 ? Math.round((Number(l.qty) || 0) * Number(l.nightly) * 100) : randToCents(l.amount));
+  const lineCents = (l) => (l.kind === 'stay' && Number(l.nightly) > 0 ? Math.round((Number(l.qty) || 0) * Number(l.nightly) * 100) : randToCents(l.amount));
   const subtotal = lines.reduce((s, l) => s + lineCents(l), 0);
   const discountCents = Math.round(subtotal * (Number(discountPercent) || 0) / 100);
   const totalCents = subtotal - discountCents;
@@ -44,7 +69,7 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
     if (k === 'dateIn' || k === 'dateOut') { const n = nightsBetween(nl.dateIn, nl.dateOut); if (n != null) nl.qty = n; }
     return nl;
   }));
-  const addLine = () => setLines([...lines, { description: '', dateIn: '', dateOut: '', qty: '', nightly: '', amount: '' }]);
+  const addLine = (kind) => setLines([...lines, { kind, description: '', dateIn: '', dateOut: '', qty: '', nightly: '', amount: '' }]);
   const removeLine = (i) => setLines(lines.filter((_, j) => j !== i));
 
   async function applyRateCard() {
@@ -53,12 +78,12 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
       if (!q) return;
       const nightly = q.nights ? Math.round((q.accommodationCents - q.discountCents) / q.nights) / 100 : 0;
       setLines((prev) => {
-        const next = prev.map((l, i) => (i === 0 ? { ...l, qty: q.nights, nightly, amount: '' } : { ...l }));
+        const next = prev.map((l, i) => (i === 0 ? { ...l, kind: 'stay', qty: q.nights, nightly, amount: '' } : { ...l }));
         const setSvc = (kw, label, cents) => {
           if (cents <= 0) return;
           const idx = next.findIndex((l) => l.description.toLowerCase().includes(kw));
-          if (idx >= 0) next[idx] = { ...next[idx], nightly: '', amount: cents / 100 };
-          else next.push({ description: label, dateIn: '', dateOut: '', qty: 1, nightly: '', amount: cents / 100 });
+          if (idx >= 0) next[idx] = { ...next[idx], kind: 'charge', dateIn: '', dateOut: '', qty: '', nightly: '', amount: cents / 100 };
+          else next.push({ kind: 'charge', description: label, dateIn: '', dateOut: '', qty: '', nightly: '', amount: cents / 100 });
         };
         setSvc('clean', 'Cleaning', q.cleaningCents);
         setSvc('early', 'Early check-in', q.earlyCents);
@@ -82,10 +107,11 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
         date, invoiceType,
         billToName: bill.name, billToAddress: bill.address, billToAttention: bill.attention,
         billToEmail: bill.email, billToPhone: bill.phone,
-        lineItems: lines.map((l) => ({
-          description: l.description, dateIn: l.dateIn, dateOut: l.dateOut,
-          qty: Number(l.qty) || 0, nightlyCents: randToCents(l.nightly), amountCents: lineCents(l),
-        })),
+        lineItems: lines.map((l) => (l.kind === 'stay'
+          ? { kind: 'stay', description: l.description, dateIn: l.dateIn, dateOut: l.dateOut,
+              qty: Number(l.qty) || 0, nightlyCents: randToCents(l.nightly), amountCents: lineCents(l) }
+          : { kind: 'charge', description: l.description, dateIn: '', dateOut: '',
+              qty: 1, nightlyCents: 0, amountCents: lineCents(l) })),
         discountPercent: Number(discountPercent) || 0,
         totalCents, dueNowCents: randToCents(dueNow), paidCents,
         specialConditions: special,
@@ -147,24 +173,38 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
         </div>
 
         <table className="inv-table">
+          <colgroup>
+            <col /><col className="c-date" /><col className="c-date" /><col className="c-qty" />
+            <col className="c-nightly" /><col className="c-amount" /><col className="c-del no-print" />
+          </colgroup>
           <thead>
             <tr><th className="ld">Description</th><th>In</th><th>Out</th><th>Qty</th><th className="rt">Nightly</th><th className="rt">Amount</th><th className="no-print" /></tr>
           </thead>
           <tbody>
             {lines.map((l, i) => (
               <tr key={i}>
-                <td><input value={l.description} onChange={(e) => setLine(i, 'description', e.target.value)} placeholder="Item" /></td>
-                <td><input className="sm" type="date" value={l.dateIn} onChange={(e) => setLine(i, 'dateIn', e.target.value)} /></td>
-                <td><input className="sm" type="date" value={l.dateOut} onChange={(e) => setLine(i, 'dateOut', e.target.value)} /></td>
-                <td><input className="xs" value={l.qty} onChange={(e) => setLine(i, 'qty', e.target.value)} placeholder="—" title="Auto-calculated from In/Out" /></td>
-                <td className="rt"><input className="num" value={l.nightly} onChange={(e) => setLine(i, 'nightly', e.target.value)} placeholder="0.00" /></td>
-                <td className="rt">{Number(l.nightly) > 0 ? fmtR(lineCents(l)) : <input className="num" value={l.amount} onChange={(e) => setLine(i, 'amount', e.target.value)} placeholder="0.00" />}</td>
+                <td><textarea className="desc" rows={1} ref={autoGrow} value={l.description}
+                  onChange={(e) => { setLine(i, 'description', e.target.value); autoGrow(e.target); }}
+                  placeholder={l.kind === 'stay' ? 'Accommodation' : 'Deposit / once-off charge'} /></td>
+                {l.kind === 'stay' ? (<>
+                  <td><input className="date" type="date" value={l.dateIn} onChange={(e) => setLine(i, 'dateIn', e.target.value)} /></td>
+                  <td><input className="date" type="date" value={l.dateOut} onChange={(e) => setLine(i, 'dateOut', e.target.value)} /></td>
+                  <td><input className="xs" value={l.qty} onChange={(e) => setLine(i, 'qty', e.target.value)} placeholder="—" title="Auto-calculated from In/Out" /></td>
+                  <td className="rt"><input className="num" value={l.nightly} onChange={(e) => setLine(i, 'nightly', e.target.value)} placeholder="0.00" /></td>
+                  <td className="rt">{Number(l.nightly) > 0 ? fmtR(lineCents(l)) : <MoneyInput value={l.amount} onChange={(v) => setLine(i, 'amount', v)} />}</td>
+                </>) : (<>
+                  <td colSpan={4} />
+                  <td className="rt"><MoneyInput value={l.amount} onChange={(v) => setLine(i, 'amount', v)} /></td>
+                </>)}
                 <td className="no-print"><button className="del sm" onClick={() => removeLine(i)}>×</button></td>
               </tr>
             ))}
           </tbody>
         </table>
-        <button className="mini no-print add-line" onClick={addLine}>+ Add line</button>
+        <div className="add-line no-print">
+          <button className="mini" onClick={() => addLine('stay')}>+ Stay line</button>
+          <button className="mini" onClick={() => addLine('charge')}>+ Deposit / once-off</button>
+        </div>
 
         <div className="inv-totals">
           <div className="inv-trow"><span>Subtotal</span><b>{fmtR(subtotal)}</b></div>
@@ -175,19 +215,19 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
           <div className="inv-trow sub"><span>Invoice total</span><b>{fmtR(totalCents)}</b></div>
           <div className={'inv-trow paid' + (paidCents ? '' : ' no-print')}>
             <span>Less: amount paid</span>
-            <b>−<input className="num" value={paid} onChange={(e) => setPaid(e.target.value)} placeholder="0.00" /></b>
+            <b>−<MoneyInput value={paid} onChange={setPaid} /></b>
           </div>
           <div className="inv-trow total"><span>Outstanding amount</span><b>{fmtR(outstandingCents)}</b></div>
           <div className="inv-trow due">
             <span>Due now <button className="mini no-print" onClick={() => setDueNow(centsToRand(Math.max(0, Math.min(Math.round(totalCents / 2), outstandingCents))))}>50%</button>
               {paidCents > 0 && <button className="mini no-print" onClick={() => setDueNow(centsToRand(Math.max(0, outstandingCents)))}>Balance</button>}</span>
-            <b><input className="num" value={dueNow} onChange={(e) => setDueNow(e.target.value)} placeholder="0.00" /></b>
+            <b><MoneyInput value={dueNow} onChange={setDueNow} /></b>
           </div>
         </div>
 
-        <div className="inv-conditions">
+        <div className={'inv-conditions' + (special.trim() ? '' : ' no-print')}>
           <div className="inv-label">Special conditions</div>
-          <textarea rows={2} value={special} onChange={(e) => setSpecial(e.target.value)} placeholder="e.g. 50% deposit to confirm, 50% on arrival · Weekly clean included" />
+          <textarea rows={2} value={special} onChange={(e) => setSpecial(e.target.value)} placeholder="Optional — add conditions for this invoice only" />
         </div>
 
         <div className="inv-pay">

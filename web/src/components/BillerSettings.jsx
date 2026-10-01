@@ -46,8 +46,6 @@ export default function BillerSettings({ biller, onClose, onSaved }) {
           <label>Payment instruction<input value={f.paymentInstruction} onChange={(e) => set('paymentInstruction', e.target.value)} placeholder="Pls Pay …" /></label>
         </fieldset>
 
-        <label>Default special conditions<textarea rows={2} value={f.specialConditions} onChange={(e) => set('specialConditions', e.target.value)} /></label>
-
         <div className="modal-actions">
           <div className="spacer" />
           <button className="secondary" onClick={onClose}>Cancel</button>

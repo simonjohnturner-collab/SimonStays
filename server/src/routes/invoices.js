@@ -39,7 +39,6 @@ router.post('/', async (req, res) => {
     number,
     invoiceType: 'Accommodation',
     lineItems: [],
-    specialConditions: biller?.specialConditions || null,
     billerSnapshot: snapshot(biller),
     ...prefill,
   };
@@ -126,11 +125,12 @@ async function buildFromBooking(hostId, bookingId, biller) {
   // Accommodation line — nightly is the discount-net average so the total matches the quote.
   const nightlyCents = q ? Math.round((q.accommodationCents - q.discountCents) / q.nights) : 0;
   const lineItems = [{
+    kind: 'stay',
     description: booking.unit ? `${booking.unit.property.name} · ${booking.unit.name}` : 'Accommodation',
     dateIn: iso(booking.checkIn), dateOut: iso(booking.checkOut),
     qty: q ? q.nights : nights, nightlyCents, amountCents: 0,
   }];
-  const line = (label, amountCents) => lineItems.push({ description: label, dateIn: '', dateOut: '', qty: 1, nightlyCents: 0, amountCents: amountCents || 0 });
+  const line = (label, amountCents) => lineItems.push({ kind: 'charge', description: label, dateIn: '', dateOut: '', qty: 1, nightlyCents: 0, amountCents: amountCents || 0 });
 
   line(`Cleaning${prepaidCleans ? ` (${1 + prepaidCleans} cleans)` : ''}`, q ? q.cleaningCents : 0);
   if (booking.earlyCheckIn) line('Early check-in', q ? q.earlyCents : 0);
@@ -145,7 +145,6 @@ async function buildFromBooking(hostId, bookingId, biller) {
     bookingId,
     billToName: booking.guestName || '',
     lineItems,
-    specialConditions: biller?.specialConditions || null,
   };
   // Carry over what the guest has already paid on the booking, so the invoice shows the balance.
   const paidCents = booking.paymentStatus === 'paid'
