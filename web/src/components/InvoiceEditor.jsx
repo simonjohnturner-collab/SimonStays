@@ -25,6 +25,7 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
   })));
   const [discountPercent, setDiscountPercent] = useState(invoice.discountPercent || 0);
   const [dueNow, setDueNow] = useState(centsToRand(invoice.dueNowCents));
+  const [paid, setPaid] = useState(invoice.paidCents ? centsToRand(invoice.paidCents) : '');
   const [special, setSpecial] = useState(invoice.specialConditions || '');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -33,6 +34,8 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
   const subtotal = lines.reduce((s, l) => s + lineCents(l), 0);
   const discountCents = Math.round(subtotal * (Number(discountPercent) || 0) / 100);
   const totalCents = subtotal - discountCents;
+  const paidCents = randToCents(paid);
+  const outstandingCents = totalCents - paidCents;
 
   const setB = (k, v) => setBill({ ...bill, [k]: v });
   const setLine = (i, k, v) => setLines(lines.map((l, j) => {
@@ -65,7 +68,7 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
         return next;
       });
       setDiscountPercent(0);
-      setDueNow(centsToRand(Math.round(q.totalCents / 2)));
+      setDueNow(centsToRand(Math.max(0, Math.min(Math.round(q.totalCents / 2), q.totalCents - paidCents))));
       setMsg(`Applied rate card · ${q.nights} nights` + (q.discountPercent ? ` · ${q.discountPercent}% length discount` : ''));
     } catch (e) {
       setMsg(e.message === 'no_rate_card' ? 'No rate card for this property yet — set one via ☰ → property → $ Pricing.' : e.message);
@@ -84,7 +87,7 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
           qty: Number(l.qty) || 0, nightlyCents: randToCents(l.nightly), amountCents: lineCents(l),
         })),
         discountPercent: Number(discountPercent) || 0,
-        totalCents, dueNowCents: randToCents(dueNow),
+        totalCents, dueNowCents: randToCents(dueNow), paidCents,
         specialConditions: special,
       });
       setMsg('Saved.'); onSaved && onSaved(r.invoice);
@@ -169,9 +172,15 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
             <span>Discount <input className="pct no-print" value={discountPercent} onChange={(e) => setDiscountPercent(e.target.value)} />% </span>
             <b>−{fmtR(discountCents)}</b>
           </div>
-          <div className="inv-trow total"><span>Outstanding amount</span><b>{fmtR(totalCents)}</b></div>
+          <div className="inv-trow sub"><span>Invoice total</span><b>{fmtR(totalCents)}</b></div>
+          <div className={'inv-trow paid' + (paidCents ? '' : ' no-print')}>
+            <span>Less: amount paid</span>
+            <b>−<input className="num" value={paid} onChange={(e) => setPaid(e.target.value)} placeholder="0.00" /></b>
+          </div>
+          <div className="inv-trow total"><span>Outstanding amount</span><b>{fmtR(outstandingCents)}</b></div>
           <div className="inv-trow due">
-            <span>Due now <button className="mini no-print" onClick={() => setDueNow(centsToRand(Math.round(totalCents / 2)))}>50%</button></span>
+            <span>Due now <button className="mini no-print" onClick={() => setDueNow(centsToRand(Math.max(0, Math.min(Math.round(totalCents / 2), outstandingCents))))}>50%</button>
+              {paidCents > 0 && <button className="mini no-print" onClick={() => setDueNow(centsToRand(Math.max(0, outstandingCents)))}>Balance</button>}</span>
             <b><input className="num" value={dueNow} onChange={(e) => setDueNow(e.target.value)} placeholder="0.00" /></b>
           </div>
         </div>

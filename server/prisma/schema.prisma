@@ -150,6 +150,7 @@ model Invoice {
   discountPercent Float    @default(0)
   totalCents      Int      @default(0)
   dueNowCents     Int      @default(0)
+  paidCents       Int      @default(0) // amount already paid; outstanding = total - paid
   specialConditions String?
   billerSnapshot  Json?
   status          String   @default("draft")

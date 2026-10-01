@@ -237,6 +237,8 @@ td.cell.blue.late { background: #cdb4f0; }        /* late checkout (purple) */
 .inv-trow { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
 .inv-trow.total { border-top: 2px solid #e6e9ed; margin-top: 4px; padding-top: 8px; font-size: 16px; font-weight: 700; }
 .inv-trow.due { color: var(--green); font-weight: 700; }
+.inv-trow.sub { border-top: 1px solid #e6e9ed; margin-top: 4px; padding-top: 6px; }
+.inv-trow.paid input { width: 110px; text-align: right; font-weight: 700; }
 .inv-trow.due input { width: 120px; text-align: right; color: var(--green); font-weight: 700; }
 .inv-trow .pct { width: 42px; text-align: center; }
 

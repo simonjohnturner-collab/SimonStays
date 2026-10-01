@@ -7,7 +7,7 @@ const router = express.Router();
 router.use(authHost);
 
 const SETTABLE = ['date', 'invoiceType', 'billToName', 'billToAddress', 'billToAttention',
-  'billToEmail', 'billToPhone', 'lineItems', 'discountPercent', 'totalCents', 'dueNowCents',
+  'billToEmail', 'billToPhone', 'lineItems', 'discountPercent', 'totalCents', 'dueNowCents', 'paidCents',
   'specialConditions', 'status', 'bookingId'];
 
 // GET /invoices — list (newest first).
@@ -147,7 +147,12 @@ async function buildFromBooking(hostId, bookingId, biller) {
     lineItems,
     specialConditions: biller?.specialConditions || null,
   };
-  if (q) out.dueNowCents = Math.round(q.totalCents / 2); // 50% deposit default
+  // Carry over what the guest has already paid on the booking, so the invoice shows the balance.
+  const paidCents = booking.paymentStatus === 'paid'
+    ? (booking.quotedCents ?? booking.amountPaidCents ?? (q ? q.totalCents : 0))
+    : (booking.amountPaidCents || 0);
+  if (paidCents > 0) out.paidCents = paidCents;
+  if (q) out.dueNowCents = Math.max(0, Math.min(Math.round(q.totalCents / 2), q.totalCents - paidCents)); // 50% deposit default
   return out;
 }
 
