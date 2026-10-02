@@ -588,7 +588,15 @@ router.post('/forms/:id/finalize', async (req, res, next) => {
     });
     if (!sub) return res.status(404).json({ error: 'not_found' });
     const tpl = sub.templateId ? await prisma.formTemplate.findFirst({ where: { id: sub.templateId, hostId } }) : null;
-    const reqPhotoFields = tpl && Array.isArray(tpl.fields) ? tpl.fields.filter((f) => f && f.type === 'photos' && f.required) : [];
+    // Photos in an on-demand section (Damaged items) are optional — a clean with no
+    // damage must still go through — so only fixed sections' required photos count.
+    const reqPhotoFields = [];
+    let inOnDemand = false;
+    (tpl && Array.isArray(tpl.fields) ? tpl.fields : []).forEach((f) => {
+      if (!f) return;
+      if (f.type === 'section') { inOnDemand = f.repeat === 'ondemand'; return; }
+      if (f.type === 'photos' && f.required && !inOnDemand) reqPhotoFields.push(f);
+    });
     const have = sub.photos.map((p) => p.fieldId || '');
     const hasFor = (baseId) => have.some((fid) => fid === baseId || fid.startsWith(baseId + '__'));
     const missing = reqPhotoFields.filter((f) => !hasFor(f.id)).map((f) => f.label);
