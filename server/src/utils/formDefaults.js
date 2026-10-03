@@ -33,7 +33,9 @@ const DEFAULTS = {
     fields: [
       { id: 'rp_desc', label: 'Brief description of repair', type: 'textarea', required: true },
       { id: 'rp_photos', label: 'Photos of the completed repair', type: 'photos', required: false },
-      { id: 'rp_amount', label: 'Amount to be paid (R)', type: 'money', required: true },
+      { id: 'rp_invoice', label: 'Photos of invoices & purchases', type: 'photos', required: false },
+      { id: 'rp_labour', label: 'Labour & call-out charge (R)', type: 'money', required: true },
+      { id: 'rp_amount', label: 'Total amount to be paid (R)', type: 'money', required: true },
       { id: 'rp_pay_method', label: 'Payment method', type: 'text', required: true },
       { id: 'rp_pay_phone', label: 'E-wallet phone number', type: 'text', required: false },
       { id: 'rp_bank', label: 'Bank account details', type: 'textarea', required: false },

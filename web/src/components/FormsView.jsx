@@ -395,11 +395,16 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
               // Repair reports: contractor details up top, then a block per unit
               // (label · description · that unit's photos).
               if (sel.type === 'repair') {
-                const topKeys = ['date', 'rp_amount', 'rp_pay_method', 'rp_pay_phone', 'rp_bank'];
+                const repLabels = {
+                  rp_invoices_total: 'Invoices & purchases (R)',
+                  rp_labour: 'Labour & call-out charge (R)',
+                  rp_amount: answers.rp_labour != null ? 'Total amount to be paid (R)' : 'Amount to be paid (R)',
+                };
+                const topKeys = ['date', 'rp_invoices_total', 'rp_labour', 'rp_amount', 'rp_pay_method', 'rp_pay_phone', 'rp_bank'];
                 const topRows = topKeys
                   .filter((k) => answers[k] != null && answers[k] !== '')
                   .map((k) => (
-                    <div key={k} className="ans-row"><div className="ans-label">{known[k] || labelFor(k, labelById)}</div><div className="ans-val">{formatAnswer(answers[k])}</div></div>
+                    <div key={k} className="ans-row"><div className="ans-label">{repLabels[k] || known[k] || labelFor(k, labelById)}</div><div className="ans-val">{k === 'rp_amount' ? <strong>{formatAnswer(answers[k])}</strong> : formatAnswer(answers[k])}</div></div>
                   ));
                 const unitsArr = Array.isArray(answers.units) ? answers.units : null;
                 const usedPh = new Set();
@@ -422,6 +427,39 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
                 } else if (answers.rp_desc) {
                   // Legacy single-unit repair (before the multi-unit form).
                   blocks.push(<div key="legacy" className="ans-row"><div className="ans-label">Repair</div><div className="ans-val">{answers.rp_desc}</div></div>);
+                }
+                // Invoices the contractor photographed, itemised by the AI reader.
+                const invs = Array.isArray(answers.rp_invoices) ? answers.rp_invoices : [];
+                const invPh = (sel.photos || []).filter((p) => (p.fieldId || '') === 'rp_invoice');
+                invPh.forEach((p) => usedPh.add(p.id));
+                if (invs.length || invPh.length) {
+                  const r = (c) => (c == null ? '—' : 'R' + (Number(c) / 100).toFixed(2));
+                  const td = { padding: '5px 6px' }, num = { ...td, textAlign: 'right' };
+                  blocks.push(
+                    <div key="invoices">
+                      <div className="ans-section-head" id="secjump-invoices">🧾 Invoices &amp; purchases</div>
+                      {invs.map((iv, ii) => (
+                        <div key={ii} style={{ margin: '8px 0 12px' }}>
+                          <strong style={{ fontSize: 13 }}>
+                            {iv.manual ? `Invoice ${ii + 1} · not readable — total typed by contractor` : `Invoice ${ii + 1}${iv.merchant ? ` · ${iv.merchant}` : ''}`}
+                          </strong>
+                          {!iv.manual && <div className="muted small">{[iv.invoiceNumber ? `#${iv.invoiceNumber}` : null, iv.purchaseDate, iv.purchaseTime].filter(Boolean).join(' · ')}</div>}
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                            {(iv.items || []).length > 0 && (
+                              <thead><tr style={{ textAlign: 'left', color: '#6b7280', fontSize: 12 }}><th style={td}>Item</th><th style={num}>Qty</th><th style={num}>Amount</th></tr></thead>
+                            )}
+                            <tbody>
+                              {(iv.items || []).map((it, i) => (
+                                <tr key={i} style={{ borderTop: '1px solid #eef0ee' }}><td style={td}>{it.name}</td><td style={num}>{it.quantity ?? 1}</td><td style={num}>{r(it.lineTotalCents)}</td></tr>
+                              ))}
+                            </tbody>
+                            <tfoot><tr style={{ borderTop: '2px solid #e3e6ea', fontWeight: 700 }}><td style={td} colSpan={2}>Invoice total</td><td style={num}>{r(iv.totalCents)}</td></tr></tfoot>
+                          </table>
+                        </div>
+                      ))}
+                      {invPh.length > 0 && <div className="sub-photos"><div className="ans-label">Invoice photos ({invPh.length})</div><Gallery photos={invPh} /></div>}
+                    </div>
+                  );
                 }
                 const orphan = (sel.photos || []).filter((p) => !usedPh.has(p.id));
                 return (<><div className="sub-answers">{topRows}{blocks}</div>{orphan.length > 0 && groupPhotos(orphan)}</>);

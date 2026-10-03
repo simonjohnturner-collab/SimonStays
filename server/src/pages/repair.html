@@ -50,6 +50,19 @@
   .done h2 { margin:8px 0 6px; }
   .done p { color:var(--muted); margin:0 0 18px; }
   .hidden { display:none; }
+  .inv { border-top:1px dashed var(--line); margin-top:12px; padding-top:10px; }
+  .inv-head { font-size:13px; font-weight:700; }
+  .inv-meta { font-size:12px; color:var(--muted); }
+  .inv table { width:100%; border-collapse:collapse; font-size:13px; margin-top:6px; }
+  .inv th { text-align:left; color:var(--muted); font-weight:600; font-size:11px; padding:3px 4px; }
+  .inv td { padding:4px; border-top:1px solid #eef0ee; vertical-align:top; }
+  .inv .num { text-align:right; white-space:nowrap; }
+  .inv tfoot td { border-top:2px solid var(--line); font-weight:700; }
+  .inv-manual { margin-top:6px; }
+  .inv-manual input { margin-top:4px; }
+  .total-box { margin-top:16px; padding:12px 14px; border:1px solid var(--green); background:#f2faf5; border-radius:12px; }
+  .total-box .row { display:flex; justify-content:space-between; gap:10px; font-size:14px; padding:2px 0; }
+  .total-box .grand { display:flex; justify-content:space-between; gap:10px; margin-top:6px; padding-top:6px; border-top:2px solid var(--green); font-weight:800; font-size:17px; color:var(--green-d); }
 </style>
 </head>
 <body>
@@ -69,9 +82,20 @@
       <div id="units"></div>
       <button type="button" class="add-unit" id="addUnit">＋ Add another unit</button>
 
-      <label class="req" for="amount">Total amount to be paid</label>
-      <div class="amount-row"><span class="cur">R</span><input type="number" id="amount" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></div>
-      <p class="hint">The total you're charging for all the repairs above.</p>
+      <div class="unit-card">
+        <div class="unit-head"><h3>🧾 Invoices &amp; purchases</h3></div>
+        <p class="hint">Bought parts or materials for these repairs? Add a photo of each invoice or till slip — we'll read it, list every item and add it to your total.</p>
+        <div class="photos" id="invPhotos"></div>
+        <div class="photo-btns"><label class="pbtn">📷 Add invoice photos<input type="file" id="invInput" accept="image/*" multiple></label></div>
+        <div id="invWarn" class="hint hidden"></div>
+        <div id="invList"></div>
+      </div>
+
+      <label class="req" for="labour">Labour &amp; call-out charge</label>
+      <div class="amount-row"><span class="cur">R</span><input type="number" id="labour" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></div>
+      <p class="hint">Your charge for labour and call-out — don't include the invoices above, they're added for you.</p>
+
+      <div class="total-box" id="totalBox"></div>
 
       <label class="req" for="paymethod">How should we pay you?</label>
       <select id="paymethod">
@@ -214,6 +238,119 @@
   payMethodEl.addEventListener('change', syncPayFields);
   syncPayFields();
 
+  // ── Invoices & purchases ─────────────────────────────────────────────
+  // Each added invoice photo is read by the AI (same reader as the cleaner form)
+  // and itemised. Entry: { file, data, hash, loading, receipts, err, manual }.
+  // An invoice the AI can't read gets a box for the contractor to type its total.
+  var invoices = [];
+  function rand(c) { return 'R' + (Number(c || 0) / 100).toFixed(2); }
+  function toCents(v) { var n = parseFloat(v); return isNaN(n) || n < 0 ? null : Math.round(n * 100); }
+  function hashStr(s) { var h = 5381, i = s.length; while (i) { h = (h * 33) ^ s.charCodeAt(--i); } return (h >>> 0).toString(36) + ':' + s.length; }
+
+  // Receipts to count, with repeated invoice numbers dropped so nothing is counted twice.
+  function keptReceipts() {
+    var seen = {}, out = [], dups = 0;
+    invoices.forEach(function (inv) {
+      (inv.receipts || []).forEach(function (rc) {
+        var key = rc.invoiceNumber ? String(rc.invoiceNumber).toLowerCase() : null;
+        if (key && seen[key]) { dups++; return; }
+        if (key) seen[key] = true;
+        out.push(rc);
+      });
+    });
+    return { list: out, dups: dups };
+  }
+  function unreadable(inv) { return !inv.loading && !(inv.receipts && inv.receipts.length); }
+  function invoicesCents() {
+    var sum = 0;
+    keptReceipts().list.forEach(function (rc) { if (typeof rc.totalCents === 'number') sum += rc.totalCents; });
+    invoices.forEach(function (inv) { if (unreadable(inv)) sum += toCents(inv.manual) || 0; });
+    return sum;
+  }
+
+  function renderTotal() {
+    var inv = invoicesCents(), lab = toCents(document.getElementById('labour').value) || 0;
+    var busy = invoices.some(function (i) { return i.loading; });
+    document.getElementById('totalBox').innerHTML =
+      '<div class="row"><span>Invoices &amp; purchases' + (busy ? ' (reading…)' : '') + '</span><span>' + rand(inv) + '</span></div>' +
+      '<div class="row"><span>Labour &amp; call-out</span><span>' + rand(lab) + '</span></div>' +
+      '<div class="grand"><span>Total amount to be paid</span><span>' + rand(inv + lab) + '</span></div>';
+  }
+
+  function renderInvoices() {
+    var ph = document.getElementById('invPhotos'); ph.innerHTML = '';
+    invoices.forEach(function (inv, i) {
+      var t = el('div', 'thumb'); var im = el('img'); im.src = inv.data; t.appendChild(im);
+      var x = el('button', null, '×'); x.type = 'button';
+      x.onclick = function () { invoices.splice(i, 1); renderInvoices(); };
+      t.appendChild(x); ph.appendChild(t);
+    });
+
+    var list = document.getElementById('invList'); list.innerHTML = '';
+    var kept = keptReceipts(), n = 0;
+    invoices.forEach(function (inv, idx) {
+      if (inv.loading) { list.appendChild(el('div', 'inv inv-meta', 'Reading invoice ' + (idx + 1) + '…')); return; }
+      if (unreadable(inv)) {
+        var box = el('div', 'inv');
+        box.appendChild(el('div', 'inv-head', 'Invoice photo ' + (idx + 1) + ' — couldn’t be read automatically'));
+        var m = el('div', 'inv-manual'); m.appendChild(el('div', 'inv-meta', 'Please type this invoice’s total (or retake a clearer photo):'));
+        var row = el('div', 'amount-row'); row.appendChild(el('span', 'cur', 'R'));
+        var inp = el('input'); inp.type = 'number'; inp.inputMode = 'decimal'; inp.min = '0'; inp.step = '0.01'; inp.placeholder = '0.00'; inp.value = inv.manual || '';
+        inp.oninput = function () { inv.manual = inp.value; renderTotal(); };
+        row.appendChild(inp); m.appendChild(row); box.appendChild(m); list.appendChild(box);
+        return;
+      }
+      inv.receipts.forEach(function (rc) {
+        if (kept.list.indexOf(rc) < 0) return; // duplicate invoice number
+        n++;
+        var box = el('div', 'inv');
+        box.appendChild(el('div', 'inv-head', 'Invoice ' + n + (rc.merchant ? ' · ' + rc.merchant : '')));
+        var meta = [rc.invoiceNumber ? '#' + rc.invoiceNumber : null, rc.purchaseDate, rc.purchaseTime].filter(Boolean).join(' · ');
+        if (meta) box.appendChild(el('div', 'inv-meta', meta));
+        var tb = el('table'), th = el('thead'), hr = el('tr');
+        [['Item', ''], ['Qty', 'num'], ['Amount', 'num']].forEach(function (h) { hr.appendChild(el('th', h[1], h[0])); });
+        th.appendChild(hr); tb.appendChild(th);
+        var body = el('tbody');
+        (rc.items || []).forEach(function (it) {
+          var tr = el('tr');
+          tr.appendChild(el('td', null, it.name));
+          tr.appendChild(el('td', 'num', String(it.quantity == null ? 1 : it.quantity)));
+          tr.appendChild(el('td', 'num', it.lineTotalCents != null ? rand(it.lineTotalCents) : (it.unitPriceCents != null ? rand(it.unitPriceCents) : '—')));
+          body.appendChild(tr);
+        });
+        tb.appendChild(body);
+        var tf = el('tfoot'), fr = el('tr'), lc = el('td', null, 'Invoice total'); lc.colSpan = 2;
+        fr.appendChild(lc); fr.appendChild(el('td', 'num', typeof rc.totalCents === 'number' ? rand(rc.totalCents) : '—'));
+        tf.appendChild(fr); tb.appendChild(tf); box.appendChild(tb); list.appendChild(box);
+      });
+    });
+    if (kept.dups) list.appendChild(el('div', 'inv-meta', kept.dups + ' duplicate invoice' + (kept.dups > 1 ? 's' : '') + ' ignored.'));
+    renderTotal();
+  }
+
+  function invWarn(t) { var w = document.getElementById('invWarn'); w.textContent = t || ''; w.classList.toggle('hidden', !t); }
+
+  function addInvoice(file) {
+    return prep(file, 1600, 0.82).then(function (p) {
+      if (!p || !p.dataBase64) { invWarn('⚠️ That photo couldn’t be opened — please try another.'); return; }
+      var h = hashStr(p.dataBase64);
+      if (invoices.some(function (o) { return o.hash === h; })) { invWarn('⚠️ That invoice was already added — it hasn’t been added again.'); return; }
+      var inv = { file: file, data: p.dataBase64, contentType: p.contentType, hash: h, loading: true, receipts: null, manual: '' };
+      invoices.push(inv); renderInvoices();
+      return fetch('/public/forms/analyze-invoice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ images: [{ dataBase64: p.dataBase64, contentType: p.contentType }] }) })
+        .then(function (r) { return r.json(); })
+        .then(function (res) { inv.receipts = (res && res.ok && Array.isArray(res.receipts)) ? res.receipts : []; })
+        .catch(function () { inv.receipts = []; })
+        .then(function () { inv.loading = false; renderInvoices(); });
+    });
+  }
+  document.getElementById('invInput').onchange = function (e) {
+    var files = Array.prototype.slice.call(e.target.files); e.target.value = ''; invWarn('');
+    files.reduce(function (chain, f) { return chain.then(function () { return addInvoice(f); }); }, Promise.resolve());
+  };
+  document.getElementById('labour').addEventListener('input', renderTotal);
+  renderTotal();
+
   function showErr(t) { var m = document.getElementById('msg'); m.className = 'msg err'; m.textContent = t; window.scrollTo(0, document.body.scrollHeight); }
 
   document.getElementById('form').onsubmit = function (e) {
@@ -221,21 +358,33 @@
     document.getElementById('msg').textContent = '';
     var name = document.getElementById('name').value.trim();
     var date = document.getElementById('date').value;
-    var amount = document.getElementById('amount').value;
+    var labour = document.getElementById('labour').value;
     var method = payMethodEl.value;
     var phone = document.getElementById('phone').value.trim();
     var bank = document.getElementById('bank').value.trim();
     if (!name) return showErr('Please enter your name.');
     var valid = units.filter(function (b) { return b.unitId && (b.desc || '').trim(); });
     if (!valid.length) return showErr('Please add at least one unit with a description of the repair.');
-    if (amount === '' || isNaN(parseFloat(amount)) || parseFloat(amount) < 0) return showErr('Please enter the total amount to be paid.');
+    if (invoices.some(function (i) { return i.loading; })) return showErr('Still reading your invoices — please wait a moment and try again.');
+    var missing = invoices.filter(function (i) { return unreadable(i) && toCents(i.manual) == null; });
+    if (missing.length) return showErr('Please type the total for the invoice(s) that couldn’t be read, or remove them.');
+    var labourCents = toCents(labour);
+    if (labourCents == null) return showErr('Please enter your labour & call-out charge (0 if none).');
     if (method === 'ewallet' && !phone) return showErr('Please enter the e-wallet phone number for payment.');
     if (method === 'bank' && !bank) return showErr('Please enter your bank account details for payment.');
 
     var btn = document.getElementById('submit'); btn.disabled = true; btn.textContent = 'Sending…';
     var resolveIds = valid.map(function (b) { return b.resolveId; }).filter(Boolean);
     var unitsAns = valid.map(function (b) { return { unitId: b.unitId, unitLabel: unitLabel(b.unitId), desc: b.desc.trim(), resolveId: b.resolveId || null }; });
-    var ans = { date: date, rp_amount: parseFloat(amount).toFixed(2), rp_pay_method: (method === 'ewallet' ? 'E-wallet' : 'Bank account'), units: unitsAns };
+    var invCents = invoicesCents();
+    var invAns = keptReceipts().list.map(function (rc) {
+      return { merchant: rc.merchant || null, invoiceNumber: rc.invoiceNumber || null, purchaseDate: rc.purchaseDate || null, purchaseTime: rc.purchaseTime || null,
+        items: (rc.items || []).map(function (it) { return { name: it.name, quantity: it.quantity, category: it.category, lineTotalCents: it.lineTotalCents != null ? it.lineTotalCents : it.unitPriceCents }; }),
+        totalCents: typeof rc.totalCents === 'number' ? rc.totalCents : null };
+    });
+    invoices.forEach(function (i) { if (unreadable(i)) invAns.push({ manual: true, items: [], totalCents: toCents(i.manual) }); });
+    var ans = { date: date, rp_labour: (labourCents / 100).toFixed(2), rp_invoices_total: (invCents / 100).toFixed(2), rp_invoices: invAns,
+      rp_amount: ((labourCents + invCents) / 100).toFixed(2), rp_pay_method: (method === 'ewallet' ? 'E-wallet' : 'Bank account'), units: unitsAns };
     if (method === 'ewallet') ans.rp_pay_phone = phone; else ans.rp_bank = bank;
     var payload = {
       type: 'repair', unitId: valid[0].unitId, submitterName: name,
@@ -257,6 +406,12 @@
               }).then(function (r) { if (!r.ok) failed++; }, function () { failed++; });
             }));
           });
+        });
+        invoices.forEach(function (inv) {
+          jobs.push(fetch('/public/forms/' + res.id + '/photos', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fieldId: 'rp_invoice', dataBase64: inv.data, contentType: inv.contentType, filename: inv.file.name })
+          }).then(function (r) { if (!r.ok) failed++; }, function () { failed++; }));
         });
         return Promise.all(jobs).then(function () { return failed; });
       })
