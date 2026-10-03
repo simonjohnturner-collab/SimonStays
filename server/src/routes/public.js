@@ -509,7 +509,9 @@ router.get('/forms/:type', async (req, res, next) => {
     if (!hostId) return res.status(404).json({ error: 'not_available' });
     const type = req.params.type;
     const { defaultTemplate, TYPES } = require('../utils/formDefaults');
-    if (!TYPES.includes(type)) return res.status(404).json({ error: 'not_found' });
+    // Not a form type (e.g. "clean-exists", registered further down) → let the
+    // later, more specific route handle it instead of answering not_found.
+    if (!TYPES.includes(type)) return next();
     let template = await prisma.formTemplate.findFirst({ where: { hostId, type, active: true } });
     if (!template) template = { ...defaultTemplate(type), id: null };
     const properties = await prisma.property.findMany({
