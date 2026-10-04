@@ -60,7 +60,13 @@ function reshapePurchasesAndDamage(fields) {
       const lbl = g.section.label || '';
       if (PURCHASE_SEC_RE.test(lbl) || DAMAGE_SEC_RE.test(lbl)) continue; // replaced below
       kept.push(g.section);
-      for (const f of g.fields) kept.push(f);
+      // Drop old proof-of-purchase photo fields left inside other sections (e.g.
+      // "Upload proof of purchase" under Check-out & general): the Purchases section
+      // replaces them, and a receipt uploaded there was missed by the settlement.
+      for (const f of g.fields) {
+        if (f && f.type === 'photos' && PURCHASE_FIELD_RE.test(f.label || '')) continue;
+        kept.push(f);
+      }
     } else {
       for (const f of g.fields) { // leading loose fields: drop old purchase ones, keep the rest (e.g. c_notes)
         if (!f) continue;
