@@ -29,6 +29,11 @@ const CATEGORIES = [
 
 const ALLOWED_MEDIA = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 const PURCHASE_FIELDS = ['buy_invoice', 'buy_items']; // receipt + item photos
+// Older forms also carry their own proof-of-purchase photo fields (e.g.
+// r_purchase_photos, k_purchase_photos) — count those too so a receipt
+// uploaded there still reaches the settlement.
+const LEGACY_PURCHASE_RE = /purchase/i;
+const isPurchaseField = (f) => PURCHASE_FIELDS.some((base) => f === base || f.startsWith(base + '__')) || LEGACY_PURCHASE_RE.test(f);
 
 const SYSTEM = [
   'You read South African retail till slips / receipts and return a clean, itemised breakdown.',
@@ -104,8 +109,7 @@ async function setStatus(id, status) {
 
 function purchasePhotos(sub) {
   return (sub.photos || []).filter((p) => {
-    const f = p.fieldId || '';
-    return PURCHASE_FIELDS.some((base) => f === base || f.startsWith(base + '__'));
+    return isPurchaseField(p.fieldId || '');
   });
 }
 
@@ -113,8 +117,7 @@ function purchasePhotos(sub) {
 // trigger to avoid spinning up the analyzer for a clean that bought nothing).
 function hasPurchasePhotos(photos) {
   return (photos || []).some((p) => {
-    const f = p.fieldId || '';
-    return PURCHASE_FIELDS.some((base) => f === base || f.startsWith(base + '__'));
+    return isPurchaseField(p.fieldId || '');
   });
 }
 
@@ -137,8 +140,10 @@ async function analyzePurchase(submissionId) {
     // being merged into a single lump — and each photo can itself yield more than
     // one slip (readReceipts returns an array). Item photos (buy_items) aren't
     // priced receipts, so they only stand in when no invoice photo was uploaded.
-    const invoices = photos.filter((p) => matchesField(p, 'buy_invoice'));
-    const itemsOnly = photos.filter((p) => !matchesField(p, 'buy_invoice'));
+    // Legacy "proof of purchase" photos are receipts too, so they count as invoices.
+    const isInvoice = (p) => matchesField(p, 'buy_invoice') || (!matchesField(p, 'buy_items') && LEGACY_PURCHASE_RE.test(p.fieldId || ''));
+    const invoices = photos.filter(isInvoice);
+    const itemsOnly = photos.filter((p) => !isInvoice(p));
     const groups = invoices.length
       ? invoices.slice(0, 12).map((p) => [p])       // each invoice photo analysed on its own
       : (itemsOnly.length ? [itemsOnly.slice(0, 8)] : []); // fallback: item photos only
