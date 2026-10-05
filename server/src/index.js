@@ -74,6 +74,13 @@ app.get(['/terms', '/terms.html', '/terms-and-conditions'], (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, must-revalidate');
   res.type('html').send(termsHtml);
 });
+// Privacy Policy — same plain self-contained style as the terms page.
+const privacyHtml = fs.readFileSync(path.join(__dirname, 'pages/privacy.html'), 'utf8');
+app.get(['/privacy', '/privacy.html', '/privacy-policy'], (req, res) => {
+  res.setHeader('Content-Security-Policy', TERMS_CSP);
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  res.type('html').send(privacyHtml);
+});
 
 app.get(['/', '/stay', '/book'], (req, res) => {
   res.setHeader('Content-Security-Policy', STAY_CSP);
