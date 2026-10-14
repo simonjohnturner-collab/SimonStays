@@ -52,6 +52,7 @@ h3, h4 { margin: 0 0 8px; }
 .prop.manage { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
 .drawer > button.wide { margin-bottom: 6px; }
 .banner { background: #eafaf0; color: var(--green-d); padding: 8px 16px; font-size: 13px; border-bottom: 1px solid #d6efe0; }
+.banner.sync-failed { background: #fdeaea; color: var(--red); font-weight: 600; border-bottom-color: #f5c6c6; }
 .body { display: flex; flex: 1; min-height: 0; }
 
 /* Sidebar */

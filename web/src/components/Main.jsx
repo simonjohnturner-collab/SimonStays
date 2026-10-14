@@ -6,7 +6,6 @@ import Board from './Board.jsx';
 import BookingModal from './BookingModal.jsx';
 import UnitPanel from './UnitPanel.jsx';
 import UnitMonthView from './UnitMonthView.jsx';
-import EmailModal from './EmailModal.jsx';
 import ManageDrawer from './ManageDrawer.jsx';
 import InvoicesView from './InvoicesView.jsx';
 import RateCardMatrix from './RateCardMatrix.jsx';
@@ -24,6 +23,15 @@ import AdminView from './AdminView.jsx';
 import MarketView from './MarketView.jsx';
 
 const WINDOW_DAYS = 35;
+const LAST_SYNC_KEY = 'staysync_last_sync';
+
+function readLastSync() {
+  try { return localStorage.getItem(LAST_SYNC_KEY) || null; } catch { return null; }
+}
+function fmtSyncTime(iso) {
+  if (!iso) return 'never';
+  return new Date(iso).toLocaleString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
 
 export default function Main() {
   const { host, logout, impersonating, stopImpersonating } = useAuth();
@@ -37,7 +45,6 @@ export default function Main() {
   const [bookingCtx, setBookingCtx] = useState(null); // { unit } | { booking, unit }
   const [panelUnit, setPanelUnit] = useState(null);
   const [monthUnit, setMonthUnit] = useState(null); // { unit, propertyName } for the single-unit month view
-  const [emailOpen, setEmailOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [invoices, setInvoices] = useState(null); // { initialId } when open
   const [groups, setGroups] = useState([]);
@@ -56,31 +63,51 @@ export default function Main() {
   const [focus, setFocus] = useState(null); // { unitId, bookingId, key } — jump target
   function openFormsSubmission(id) { setFormsInitialId(id || null); setForms(true); }
   const [msg, setMsg] = useState('');
+  // When the server/database can't be reached we leave the board exactly as it
+  // was and show a red "unable to sync" notice with the last good load time.
+  const [syncFailed, setSyncFailed] = useState(false);
+  const [lastSynced, setLastSynced] = useState(readLastSync);
+  function markSynced() {
+    const now = new Date().toISOString();
+    setLastSynced(now); setSyncFailed(false);
+    try { localStorage.setItem(LAST_SYNC_KEY, now); } catch { /* ignore */ }
+  }
 
   const from = ymd(start);
   const to = ymd(addDays(start, WINDOW_DAYS));
 
+  // Fetch everything first and only replace the board once every request has
+  // succeeded — a dropped connection must never blank out the table.
   const loadBookings = useCallback(async (props) => {
     const units = props.flatMap((p) => p.units.map((u) => ({ ...u, propertyName: p.name })));
-    const entries = await Promise.all(units.map(async (u) => {
-      try { const r = await api.unitBookings(u.id, from, to); return [u.id, r.bookings]; }
-      catch { return [u.id, []]; }
-    }));
-    setBookingsByUnit(Object.fromEntries(entries));
-    try { const f = await api.listFloating(from, to); setFloatingBookings(f.bookings); } catch { setFloatingBookings([]); }
+    try {
+      const [entries, f] = await Promise.all([
+        Promise.all(units.map(async (u) => { const r = await api.unitBookings(u.id, from, to); return [u.id, r.bookings]; })),
+        api.listFloating(from, to),
+      ]);
+      setBookingsByUnit(Object.fromEntries(entries));
+      setFloatingBookings(f.bookings);
+      markSynced();
+      return true;
+    } catch {
+      setSyncFailed(true);
+      return false;
+    }
   }, [from, to]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [r, g, c] = await Promise.all([
-        api.listProperties(),
-        api.listGroups().catch(() => ({ groups: [] })),
-        api.listCleaners().catch(() => ({ cleaners: [] })),
+      let r;
+      try { r = await api.listProperties(); }
+      catch { setSyncFailed(true); return; } // keep the board as it was
+      const [g, c] = await Promise.all([
+        api.listGroups().catch(() => null),
+        api.listCleaners().catch(() => null),
       ]);
       setProperties(r.properties);
-      setGroups(g.groups || []);
-      setCleaners(c.cleaners || []);
+      if (g) setGroups(g.groups || []);
+      if (c) setCleaners(c.cleaners || []);
       await loadBookings(r.properties);
     } finally { setLoading(false); }
   }, [loadBookings]);
@@ -147,6 +174,8 @@ export default function Main() {
     try {
       const units = properties.flatMap((p) => p.units);
       const results = await Promise.all(units.map((u) => api.syncUnit(u.id).catch(() => null)));
+      // Nothing came back at all → the server/database is unreachable.
+      if (units.length && results.every((r) => r === null)) { setSyncFailed(true); return; }
       const totals = results.reduce((a, r) => {
         if (r && r.summary) { a.added += r.summary.added; a.updated += r.summary.updated; a.removed += r.summary.removed; }
         return a;
@@ -159,8 +188,9 @@ export default function Main() {
         try { const p = await api.pollEmail(); if (p && p.updated) nameMsg = `, +${p.updated} guest name${p.updated > 1 ? 's' : ''}`; }
         catch { /* best-effort */ }
       }
-      setMsg(`Synced: +${totals.added} new, ${totals.updated} updated, −${totals.removed} removed${nameMsg}`);
-      await loadBookings(properties);
+      if (await loadBookings(properties)) {
+        setMsg(`Synced: +${totals.added} new, ${totals.updated} updated, −${totals.removed} removed${nameMsg}`);
+      }
     } finally { setSyncing(false); }
   }
 
@@ -262,17 +292,21 @@ export default function Main() {
         <button className="ghost" onClick={() => setStart(addMonths(start, 1))}>month ›</button>
         <button className="ghost" onClick={syncAll} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync channels'}</button>
         <button className="ghost" onClick={() => setListings(true)}>🏠 Listings</button>
-        <button className="ghost" onClick={() => setEmailOpen(true)}>✉ Guest name</button>
         <NotificationsBell onOpen={openFormsSubmission} />
         <span className="host">{host.email}</span>
         <button className="ghost" onClick={logout}>Log out</button>
       </header>
 
-      {msg && <div className="banner">{msg}</div>}
+      {syncFailed && (
+        <div className="banner sync-failed">
+          ⚠ Unable to sync — correct as at {fmtSyncTime(lastSynced)}
+        </div>
+      )}
+      {msg && !syncFailed && <div className="banner">{msg}</div>}
 
       <div className="body">
         <main className="board-wrap">
-          {loading ? (
+          {loading && !hasUnits ? (
             <div className="center muted">Loading board…</div>
           ) : !hasUnits ? (
             <div className="center muted">
@@ -346,13 +380,6 @@ export default function Main() {
         />
       )}
 
-
-      {emailOpen && (
-        <EmailModal
-          onClose={() => setEmailOpen(false)}
-          onDone={async () => { await loadBookings(properties); }}
-        />
-      )}
 
       {panelUnit && (
         <UnitPanel
