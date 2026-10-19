@@ -96,10 +96,12 @@ router.delete('/clean-forms/:id', async (req, res) => {
 // ---- Submissions (search + review) ----
 
 router.get('/submissions', async (req, res) => {
-  const { type, propertyId, status, q } = req.query;
+  const { type, propertyId, unitId, status, q } = req.query;
   const where = { hostId: req.hostId };
   if (type) where.type = type;
   if (propertyId) where.propertyId = propertyId;
+  // A repair can cover several units (answers.units[]), so match those too.
+  if (unitId) where.AND = [{ OR: [{ unitId }, { answers: { path: ['units'], array_contains: [{ unitId }] } }] }];
   // Hide "incomplete" submissions (created but never finalised — required photos
   // didn't upload) unless explicitly requested.
   if (status) where.status = status; else where.status = { not: 'incomplete' };

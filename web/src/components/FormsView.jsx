@@ -134,6 +134,7 @@ export default function FormsView({ onClose, properties = [], initialSubmissionI
 function Submissions({ properties, labelById, forms, initialSubmissionId }) {
   const [type, setType] = useState('');
   const [propertyId, setPropertyId] = useState('');
+  const [unitId, setUnitId] = useState('');
   const [status, setStatus] = useState('');
   const [q, setQ] = useState('');
   const [rows, setRows] = useState(null);
@@ -208,17 +209,20 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
 
   const jumpTo = (id) => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
 
+  const unitsOfProp = (properties.find((p) => p.id === propertyId) || {}).units || [];
+
   async function load() {
     const params = new URLSearchParams();
     if (type) params.set('type', type);
     if (propertyId) params.set('propertyId', propertyId);
+    if (unitId) params.set('unitId', unitId);
     if (status) params.set('status', status);
     if (q.trim()) params.set('q', q.trim());
     const s = params.toString();
     const r = await api.listFormSubmissions(s ? `?${s}` : '');
     setRows(r.submissions);
   }
-  useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [type, propertyId, status, q]);
+  useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [type, propertyId, unitId, status, q]);
   useEffect(() => { if (initialSubmissionId) open(initialSubmissionId); /* eslint-disable-next-line */ }, [initialSubmissionId]);
 
   async function open(id) { const r = await api.getFormSubmission(id); setSel(r.submission); }
@@ -252,10 +256,16 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
             <option value="clean">Checkout clean</option>
             <option value="repair">Repair</option>
           </select>
-          <select value={propertyId} onChange={(e) => setPropertyId(e.target.value)}>
+          <select value={propertyId} onChange={(e) => { setPropertyId(e.target.value); setUnitId(''); }}>
             <option value="">All properties</option>
             {properties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
+          {unitsOfProp.length > 1 && (
+            <select value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+              <option value="">All units</option>
+              {unitsOfProp.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          )}
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="">Any status</option>
             <option value="new">New</option>
@@ -277,7 +287,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
           )}
         </div>
         {!rows ? <p className="muted small">Loading…</p> : rows.length === 0 ? (
-          <p className="muted small">No submissions yet{type || propertyId || status || q ? ' match this filter' : ''}.</p>
+          <p className="muted small">No submissions yet{type || propertyId || unitId || status || q ? ' match this filter' : ''}.</p>
         ) : rows.map((r) => (
           <div key={r.id} className={`forms-item-row ${selMode ? 'selecting' : ''}`}>
             {selMode && <input type="checkbox" className="fi-check" checked={picked.has(r.id)} onChange={() => togglePick(r.id)} />}
