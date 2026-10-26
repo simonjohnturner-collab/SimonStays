@@ -5,7 +5,7 @@ const { authHost } = require('../middleware/auth');
 const router = express.Router();
 router.use(authHost);
 
-const FIELDS = ['companyName', 'registrationNo', 'addressLines', 'email', 'phone',
+const FIELDS = ['companyName', 'registrationNo', 'addressLines', 'email', 'phone', 'website',
   'bankName', 'accountNumber', 'branch', 'swiftCode', 'paymentInstruction', 'specialConditions'];
 
 // GET /biller — the host's invoice-from profile (creates an empty one if missing).

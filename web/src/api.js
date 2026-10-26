@@ -91,6 +91,7 @@ export const api = {
   createInvoice: (payload) => req('POST', '/invoices', payload),
   updateInvoice: (id, payload) => req('PATCH', `/invoices/${id}`, payload),
   duplicateInvoice: (id) => req('POST', `/invoices/${id}/duplicate`),
+  refreshInvoiceBiller: (id) => req('POST', `/invoices/${id}/refresh-biller`),
   deleteInvoice: (id) => req('DELETE', `/invoices/${id}`),
 
   // pricing groups (units in a group share one rate card) + quotes

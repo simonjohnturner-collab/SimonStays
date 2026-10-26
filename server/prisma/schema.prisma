@@ -121,6 +121,7 @@ model BillerProfile {
   addressLines       String? // multi-line
   email              String?
   phone              String?
+  website            String? // shown in the invoice footer
   bankName           String?
   accountNumber      String?
   branch             String?

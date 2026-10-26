@@ -5,7 +5,7 @@ import { api } from '../api.js';
 export default function BillerSettings({ biller, onClose, onSaved }) {
   const [f, setF] = useState({
     companyName: biller?.companyName || '', registrationNo: biller?.registrationNo || '',
-    addressLines: biller?.addressLines || '', email: biller?.email || '', phone: biller?.phone || '',
+    addressLines: biller?.addressLines || '', email: biller?.email || '', phone: biller?.phone || '', website: biller?.website || '',
     bankName: biller?.bankName || '', accountNumber: biller?.accountNumber || '',
     branch: biller?.branch || '', swiftCode: biller?.swiftCode || '',
     paymentInstruction: biller?.paymentInstruction || '', specialConditions: biller?.specialConditions || '',
@@ -30,7 +30,10 @@ export default function BillerSettings({ biller, onClose, onSaved }) {
           <label>Registration no<input value={f.registrationNo} onChange={(e) => set('registrationNo', e.target.value)} /></label>
           <label>Phone<input value={f.phone} onChange={(e) => set('phone', e.target.value)} /></label>
         </div>
-        <label>Email<input value={f.email} onChange={(e) => set('email', e.target.value)} /></label>
+        <div className="row2">
+          <label>Email<input value={f.email} onChange={(e) => set('email', e.target.value)} /></label>
+          <label>Website<input value={f.website} onChange={(e) => set('website', e.target.value)} placeholder="www.example.co.za" /></label>
+        </div>
         <label>Address<textarea rows={2} value={f.addressLines} onChange={(e) => set('addressLines', e.target.value)} /></label>
 
         <fieldset>

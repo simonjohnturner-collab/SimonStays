@@ -250,6 +250,8 @@ td.cell.blue.late { background: #cdb4f0; }        /* late checkout (purple) */
 
 .inv-conditions, .inv-pay { margin-top: 22px; }
 .inv-pay .inv-bank { font-size: 13px; line-height: 1.5; }
+.inv-brand { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--green-d); text-decoration: none; }
+.inv-foot { margin-top: 28px; padding-top: 10px; border-top: 1px solid #e6e9ed; text-align: center; font-size: 12px; color: #6b7280; }
 
 @media print {
   body { background: #fff; }

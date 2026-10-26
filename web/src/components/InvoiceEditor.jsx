@@ -124,6 +124,11 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
     try { const r = await api.duplicateInvoice(invoice.id); onDuplicated && onDuplicated(r.invoice); }
     catch (e) { setMsg(e.message); setBusy(false); }
   }
+  async function refreshBiller() {
+    setBusy(true); setMsg('');
+    try { const r = await api.refreshInvoiceBiller(invoice.id); setMsg('Biller details updated.'); onSaved && onSaved(r.invoice); }
+    catch (e) { setMsg(e.message); } finally { setBusy(false); }
+  }
   async function remove() {
     if (!window.confirm(`Delete invoice ${invoice.number}?`)) return;
     setBusy(true);
@@ -135,6 +140,7 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
     <div className="invoice-wrap">
       <div className="invoice-actions no-print">
         <button className="secondary" onClick={onEditBiller}>Biller settings</button>
+        <button className="secondary" onClick={refreshBiller} disabled={busy} title="Replace this invoice's from / bank details with your current Biller settings">Use latest biller details</button>
         {invoice.bookingId && <button className="secondary" onClick={applyRateCard}>Apply rate card</button>}
         <div className="spacer" />
         {msg && <span className="muted small">{msg}</span>}
@@ -154,6 +160,8 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
             {B.phone && <div className="inv-sub">{B.phone}</div>}
           </div>
           <div className="inv-meta">
+            {/* Product branding: shown on every invoice, whoever the biller is. */}
+            <a className="inv-brand" href="https://www.simonstays.co.za" target="_blank" rel="noreferrer">www.simonstays.co.za</a>
             <div className="inv-title">INVOICE</div>
             <div className="inv-num">{invoice.number}</div>
             <label className="inv-field"><span>Date</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
@@ -241,6 +249,8 @@ export default function InvoiceEditor({ invoice, biller, onSaved, onDeleted, onD
             {!B.bankName && <div className="muted small no-print">Add bank details in Biller settings.</div>}
           </div>
         </div>
+
+        {B.website && <div className="inv-foot">{B.website}</div>}
       </div>
     </div>
   );

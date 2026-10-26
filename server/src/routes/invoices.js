@@ -72,6 +72,14 @@ router.post('/:id/duplicate', async (req, res) => {
   res.status(201).json({ invoice });
 });
 
+// POST /invoices/:id/refresh-biller — replace the snapshot with the current Biller settings.
+router.post('/:id/refresh-biller', async (req, res) => {
+  const inv = await owned(req, res); if (!inv) return;
+  const biller = await prisma.billerProfile.findUnique({ where: { hostId: req.hostId } });
+  const invoice = await prisma.invoice.update({ where: { id: inv.id }, data: { billerSnapshot: snapshot(biller) } });
+  res.json({ invoice });
+});
+
 // DELETE /invoices/:id
 router.delete('/:id', async (req, res) => {
   const inv = await owned(req, res); if (!inv) return;
