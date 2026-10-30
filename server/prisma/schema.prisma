@@ -376,6 +376,9 @@ model FormSubmission {
   // AI receipt/till-slip analysis of any purchase photos on this submission.
   purchaseSummary  Json?     // { merchant, purchaseDate, currency, items[], totalCents, totalsMatch, summary, model, generatedAt }
   purchaseStatus   String?   // pending | done | failed | no_key | none
+  purchaseError    String?   // why the last analysis failed (API status + message), shown in admin
+  purchaseAttempts Int?      // automatic analysis attempts, so the retry sweep gives up eventually
+  purchaseTriedAt  DateTime? // when analysis last ran (spaces out retries; spots a stuck 'pending')
   purchaseItems    PurchaseItem[]
 
   @@index([hostId, type, createdAt])

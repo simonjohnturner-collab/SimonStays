@@ -149,7 +149,7 @@ router.get('/submissions/:id', async (req, res) => {
 
   res.json({ submission: {
     ...fmtSub(sub), answers: sub.answers, photos: sub.photos,
-    purchaseSummary: sub.purchaseSummary, purchaseStatus: sub.purchaseStatus,
+    purchaseSummary: sub.purchaseSummary, purchaseStatus: sub.purchaseStatus, purchaseError: sub.purchaseError,
     reimbursedCents: sub.reimbursedCents, reimbursements: sub.reimbursements, cleanerFeeCents: sub.cleanerFeeCents,
     propertyCleanRateCents: sub.property ? sub.property.cleanRateCents : null,
     resolvesSubmissionId: sub.resolvesSubmissionId, resolvesInfo, resolvedBy,
@@ -164,9 +164,11 @@ router.post('/submissions/:id/analyze', async (req, res) => {
   if (!sub) return res.status(404).json({ error: 'not_found' });
   const { analyzePurchase, enabled } = require('../utils/purchaseAnalyzer');
   if (!enabled()) return res.status(400).json({ error: 'no_key', message: 'AI receipt reading is off — set ANTHROPIC_API_KEY in the server environment to enable it.' });
+  // A manual run also resets the automatic retry budget.
+  await prisma.formSubmission.update({ where: { id: sub.id }, data: { purchaseAttempts: 0 } });
   await analyzePurchase(sub.id);
-  const fresh = await prisma.formSubmission.findFirst({ where: { id: sub.id, hostId: req.hostId }, select: { purchaseSummary: true, purchaseStatus: true } });
-  res.json({ purchaseSummary: fresh && fresh.purchaseSummary, purchaseStatus: fresh && fresh.purchaseStatus });
+  const fresh = await prisma.formSubmission.findFirst({ where: { id: sub.id, hostId: req.hostId }, select: { purchaseSummary: true, purchaseStatus: true, purchaseError: true } });
+  res.json({ purchaseSummary: fresh && fresh.purchaseSummary, purchaseStatus: fresh && fresh.purchaseStatus, purchaseError: fresh && fresh.purchaseError });
 });
 
 router.patch('/submissions/:id', async (req, res) => {

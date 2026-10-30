@@ -174,6 +174,19 @@ if (require.main === module) {
     console.log(`Market probe scheduled: ${marketExpr}`);
   }
 
+  // Receipt retry sweep: a clean whose till slips weren't read (AI call failed,
+  // or the server restarted mid-read) is re-read automatically, so expenses fill
+  // in without anyone pressing "Re-analyse". Runs shortly after boot (picks up a
+  // just-fixed ANTHROPIC_API_KEY) and then hourly; override with PURCHASE_RETRY_CRON.
+  const purchases = require('./utils/purchaseAnalyzer');
+  const runPurchaseRetry = async () => {
+    try { const s = await purchases.retryFailedPurchases(); if (s.retried) console.log('[purchase-retry]', JSON.stringify(s)); }
+    catch (e) { console.error('[purchase-retry] failed', e.message); }
+  };
+  setTimeout(runPurchaseRetry, 60 * 1000);
+  const retryExpr = process.env.PURCHASE_RETRY_CRON || '17 * * * *';
+  if (cron.validate(retryExpr)) cron.schedule(retryExpr, runPurchaseRetry);
+
   // Night-before checkout reminders to the cleaner (WhatsApp), 19:00 SAST daily.
   // Auto-on where Twilio WhatsApp creds are set; override the time with
   // CHECKOUT_REMINDER_CRON. Dormant (no send) when creds are missing.

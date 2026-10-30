@@ -664,7 +664,7 @@ function PurchaseSummaryCard({ sub, onUpdate }) {
   const rand = (c) => (c == null ? '—' : 'R' + (Number(c) / 100).toFixed(2));
   async function reanalyze() {
     setBusy(true); setErr('');
-    try { const r = await api.analyzePurchase(sub.id); onUpdate({ purchaseSummary: r.purchaseSummary, purchaseStatus: r.purchaseStatus }); }
+    try { const r = await api.analyzePurchase(sub.id); onUpdate({ purchaseSummary: r.purchaseSummary, purchaseStatus: r.purchaseStatus, purchaseError: r.purchaseError }); }
     catch (e) { setErr(e.message || 'Could not analyse the receipt.'); }
     finally { setBusy(false); }
   }
@@ -697,7 +697,13 @@ function PurchaseSummaryCard({ sub, onUpdate }) {
           </div>
 
           {status === 'pending' && !s && <p className="muted small">Reading the till slips…</p>}
-          {status === 'failed' && !s && <p className="muted small">Couldn’t read the receipt — try “Re-analyse”, or check the photo.</p>}
+          {status === 'failed' && !s && (
+            <div style={{ background: '#fff4e5', border: '1px solid #f3c58b', borderRadius: 8, padding: '8px 10px', margin: '6px 0', fontSize: 13 }}>
+              <strong>Receipt not read — expenses are missing for this clean.</strong>
+              {sub.purchaseError && <div style={{ marginTop: 4, fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-word' }}>{sub.purchaseError}</div>}
+              <div className="muted" style={{ marginTop: 4 }}>It retries automatically every hour, or press “Analyse receipt”. A key or credit error has to be fixed on the Anthropic account / in Render first.</div>
+            </div>
+          )}
           {status === 'no_key' && !s && <p className="muted small">AI receipt reading is off — set <code>ANTHROPIC_API_KEY</code> in the server environment to switch it on.</p>}
           {err && <p className="muted small" style={{ color: '#a11' }}>{err}</p>}
 

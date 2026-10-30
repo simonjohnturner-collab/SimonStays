@@ -13,6 +13,8 @@ try { const pkg = require('@anthropic-ai/sdk'); Anthropic = pkg && (pkg.default 
 
 // Model is configurable via env so we can trade cost vs. accuracy without a deploy.
 const MODEL = process.env.PURCHASE_MODEL || 'claude-opus-5';
+// Used if MODEL is ever retired (the API answers 404), so receipts keep being read.
+const FALLBACK_MODEL = process.env.PURCHASE_FALLBACK_MODEL || 'claude-opus-5-5';
 
 // Buckets the model must classify each item into, so spend groups cleanly later.
 const CATEGORIES = [
@@ -103,8 +105,21 @@ const toInt = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : null)
 const toNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 const matchesField = (p, base) => { const f = p.fieldId || ''; return f === base || f.startsWith(base + '__'); };
 
-async function setStatus(id, status) {
-  try { await prisma.formSubmission.update({ where: { id }, data: { purchaseStatus: status } }); } catch (e) { /* row may be gone */ }
+async function setStatus(id, status, extra) {
+  try { await prisma.formSubmission.update({ where: { id }, data: { purchaseStatus: status, ...(extra || {}) } }); } catch (e) { /* row may be gone */ }
+}
+
+// A short, human-readable reason for a failed analysis, e.g.
+// "400 invalid_request_error: Your credit balance is too low ...". Stored on the
+// submission so the admin shows WHY, instead of a bare "couldn't read".
+function describeError(e) {
+  if (!e) return 'Unknown error';
+  const body = e.error && e.error.error ? e.error.error : null;
+  const parts = [];
+  if (e.status) parts.push(String(e.status));
+  if (body && body.type) parts.push(body.type + ':');
+  parts.push((body && body.message) || e.message || String(e));
+  return parts.join(' ').slice(0, 500);
 }
 
 function purchasePhotos(sub) {
@@ -121,7 +136,8 @@ function hasPurchasePhotos(photos) {
   });
 }
 
-async function analyzePurchase(submissionId) {
+// opts.auto: called by the retry sweep (counts towards purchaseAttempts).
+async function analyzePurchase(submissionId, opts) {
   let sub;
   try { sub = await prisma.formSubmission.findUnique({ where: { id: submissionId }, include: { photos: true } }); }
   catch (e) { console.error('[purchase] load failed:', e.message); return; }
@@ -131,7 +147,10 @@ async function analyzePurchase(submissionId) {
   if (!photos.length) { await setStatus(sub.id, 'none'); return; }
   if (!enabled()) { await setStatus(sub.id, 'no_key'); return; }
 
-  await setStatus(sub.id, 'pending');
+  await setStatus(sub.id, 'pending', {
+    purchaseTriedAt: new Date(),
+    purchaseAttempts: opts && opts.auto ? (sub.purchaseAttempts || 0) + 1 : (sub.purchaseAttempts || 0),
+  });
   try {
     const client = new Anthropic();
 
@@ -157,8 +176,9 @@ async function analyzePurchase(submissionId) {
     if (!receipts.length) throw new Error('no structured data returned');
     await store(sub, receipts, { input_tokens: usageIn, output_tokens: usageOut });
   } catch (e) {
-    console.error('[purchase] analyze failed:', e && e.message);
-    await setStatus(sub.id, 'failed');
+    const reason = describeError(e);
+    console.error('[purchase] analyze failed for ' + sub.id + ':', reason);
+    await setStatus(sub.id, 'failed', { purchaseError: reason });
   }
 }
 
@@ -169,14 +189,22 @@ async function readReceipts(client, photoGroup) {
     type: 'image',
     source: { type: 'base64', media_type: mediaType(p.contentType), data: Buffer.from(p.data).toString('base64') },
   }));
-  const resp = await client.messages.create({
+  const params = {
     model: MODEL,
     max_tokens: 8000,
     system: SYSTEM,
     tools: [TOOL],
     tool_choice: { type: 'auto' }, // 'auto' (not forced) stays compatible with adaptive thinking
     messages: [{ role: 'user', content: [...images, { type: 'text', text: 'Read every till slip / invoice in the attached photo(s). If a photo shows more than one separate slip, record each one on its own. Record every purchased item.' }] }],
-  });
+  };
+  let resp;
+  try { resp = await client.messages.create(params); }
+  catch (e) {
+    if (e && e.status === 404 && FALLBACK_MODEL && FALLBACK_MODEL !== MODEL) {
+      console.warn('[purchase] model ' + MODEL + ' not found, using ' + FALLBACK_MODEL);
+      resp = await client.messages.create({ ...params, model: FALLBACK_MODEL });
+    } else throw e;
+  }
   const tu = (resp.content || []).find((b) => b.type === 'tool_use');
   const data = tu ? tu.input : parseJsonFromText(resp.content);
   const currency = (data && typeof data.currency === 'string' && data.currency.trim()) || 'ZAR';
@@ -268,7 +296,7 @@ async function store(sub, receipts, usage) {
   await prisma.$transaction([
     prisma.purchaseItem.deleteMany({ where: { submissionId: sub.id } }),
     ...(rows.length ? [prisma.purchaseItem.createMany({ data: rows.slice(0, 600) })] : []),
-    prisma.formSubmission.update({ where: { id: sub.id }, data: { purchaseSummary: summary, purchaseStatus: 'done' } }),
+    prisma.formSubmission.update({ where: { id: sub.id }, data: { purchaseSummary: summary, purchaseStatus: 'done', purchaseError: null } }),
   ]);
 }
 
@@ -315,9 +343,47 @@ async function analyzeInvoiceImages(images) {
     }
     return { ok: true, currency: 'ZAR', receipts };
   } catch (e) {
-    console.error('[purchase] preview failed:', e && e.message);
+    console.error('[purchase] preview failed:', describeError(e));
     return { ok: false, reason: 'failed' };
   }
 }
 
-module.exports = { analyzePurchase, hasPurchasePhotos, enabled, analyzeInvoiceImages, MODEL, CATEGORIES };
+// Retry sweep: re-read any recent clean whose receipts never made it into
+// expenses - the AI call failed (bad key, no credit, outage), or got stuck at
+// 'pending' / never started because the server restarted mid-way. Retries are
+// spaced out (attempts x 30 min, capped at 6 h) and stop after MAX_AUTO_ATTEMPTS;
+// a manual "Re-analyse" in admin always runs. Returns a small summary.
+const MAX_AUTO_ATTEMPTS = 20;
+const SWEEP_DAYS = 30;
+async function retryFailedPurchases() {
+  if (!enabled()) return { skipped: 'no_key' };
+  const now = Date.now();
+  const candidates = await prisma.formSubmission.findMany({
+    where: {
+      type: 'clean',
+      status: { not: 'incomplete' },
+      createdAt: { gte: new Date(now - SWEEP_DAYS * 864e5) },
+      OR: [{ purchaseStatus: null }, { purchaseStatus: { in: ['failed', 'pending', 'no_key'] } }],
+      photos: { some: { OR: [{ fieldId: { startsWith: 'buy_' } }, { fieldId: { contains: 'purchase', mode: 'insensitive' } }] } },
+    },
+    select: { id: true, purchaseStatus: true, purchaseAttempts: true, purchaseTriedAt: true, photos: { select: { fieldId: true } } },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
+  let retried = 0, done = 0;
+  for (const c of candidates) {
+    if (!hasPurchasePhotos(c.photos)) continue;
+    const attempts = c.purchaseAttempts || 0;
+    if (attempts >= MAX_AUTO_ATTEMPTS) continue;
+    const last = c.purchaseTriedAt ? c.purchaseTriedAt.getTime() : 0;
+    const wait = c.purchaseStatus === 'pending' ? 15 * 60e3 : Math.min(6 * 3600e3, Math.max(1, attempts) * 30 * 60e3);
+    if (last && now - last < wait) continue;
+    retried++;
+    await analyzePurchase(c.id, { auto: true });
+    const after = await prisma.formSubmission.findUnique({ where: { id: c.id }, select: { purchaseStatus: true } });
+    if (after && after.purchaseStatus === 'done') done++;
+  }
+  return { candidates: candidates.length, retried, done };
+}
+
+module.exports = { analyzePurchase, retryFailedPurchases, describeError, hasPurchasePhotos, enabled, analyzeInvoiceImages, MODEL, CATEGORIES };
