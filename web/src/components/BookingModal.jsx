@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { fmtR, centsToRand, randToCents } from '../money.js';
 
-export default function BookingModal({ unit, booking, floating, units = [], groups = [], cleaners = [], onClose, onSaved, onInvoice }) {
+export default function BookingModal({ unit, booking, floating, units = [], groups = [], cleaners = [], onClose, onSaved, onInvoice, onMessage }) {
   const editing = !!booking;
   const isFloating = floating || (editing && !booking.unitId);
 
   const [guestName, setGuestName] = useState(booking?.guestName || '');
+  const [guestEmail, setGuestEmail] = useState(booking?.guestEmail || '');
+  const [guestPhone, setGuestPhone] = useState(booking?.guestPhone || '');
   const [checkIn, setCheckIn] = useState(booking?.checkIn?.slice(0, 10) || '');
   const [checkOut, setCheckOut] = useState(booking?.checkOut?.slice(0, 10) || '');
   const [cleaner, setCleaner] = useState(booking?.cleaner || '');
@@ -68,6 +70,8 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   function payload(extra = {}) {
     return {
       guestName, checkIn, checkOut, cleaner, comments,
+      guestEmail: guestEmail.trim() || null,
+      guestPhone: guestPhone.trim() || null,
       checkoutNotes: checkoutNotes.trim() || null,
       recommendedBy: recommendedBy.trim() || null,
       paymentStatus,
@@ -152,6 +156,11 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
         )}
 
         <label>Guest<input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Guest name" /></label>
+        <div className="row2">
+          <label>Guest email <span className="muted small">(so they get your messages)</span>
+            <input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} placeholder="guest@example.com" /></label>
+          <label>Guest phone<input value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} placeholder="e.g. 082 123 4567" /></label>
+        </div>
 
         <div className="row2">
           <label>Check-in<input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} /></label>
@@ -275,6 +284,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
             <button className="secondary" disabled={busy} onClick={makeFloating}>↩ Make floating</button>
           )}
           {editing && onInvoice && <button className="secondary" disabled={busy} onClick={() => onInvoice(booking)}>🧾 Invoice</button>}
+          {editing && booking.unitId && onMessage && <button className="secondary" disabled={busy} onClick={() => onMessage(booking)}>💬 Message guest</button>}
           <button className="save" disabled={busy} onClick={() => save(false)}>{editing ? 'Save' : 'Create booking'}</button>
         </div>
       </div>

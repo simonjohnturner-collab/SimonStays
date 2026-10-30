@@ -173,6 +173,22 @@
   .badge.pending{ background:#fff7e6; color:#8a5a00; }
   .badge.cancelled{ background:#fdecec; color:#c0392b; }
   .trip-info{ background:#eef6f0; border:1px solid #cfe6d6; border-radius:10px; padding:8px 12px; margin-top:8px; font-size:13px; line-height:1.6; }
+  /* Guest messages */
+  .acct-btn .dot{ display:inline-block; min-width:18px; padding:0 5px; margin-left:4px; border-radius:999px; background:#e74c3c; color:#fff; font-size:11px; line-height:18px; text-align:center; }
+  .th-item{ display:block; width:100%; text-align:left; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:10px; font-weight:400; }
+  .th-item:hover{ background:#f3f6f4; }
+  .th-top{ display:flex; justify-content:space-between; gap:8px; font-weight:700; }
+  .th-snip{ color:var(--muted); font-size:13px; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .th-back{ background:#eef1f4; color:var(--ink); padding:6px 12px; margin-bottom:10px; }
+  .bubbles{ display:flex; flex-direction:column; gap:8px; background:#f8faf9; border:1px solid var(--line); border-radius:12px; padding:12px; max-height:55vh; overflow-y:auto; }
+  .bub{ max-width:85%; padding:9px 12px; border-radius:14px; font-size:15px; line-height:1.45; white-space:pre-wrap; word-break:break-word; }
+  .bub.host{ align-self:flex-start; background:#fff; border:1px solid var(--line); border-bottom-left-radius:4px; }
+  .bub.guest{ align-self:flex-end; background:#dff0e6; border-bottom-right-radius:4px; }
+  .bub .when{ display:block; font-size:11px; color:var(--muted); margin-top:3px; }
+  .reply{ display:flex; gap:8px; margin-top:10px; align-items:flex-end; }
+  .reply textarea{ flex:1; font:inherit; font-size:16px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; min-height:46px; max-height:160px; resize:vertical; }
+  .reply button{ flex-shrink:0; padding:12px 16px; }
+  .trip-msg{ margin-top:10px; background:#eef1f4; color:var(--ink); }
   @media(max-width:640px){ .gallery{ grid-template-columns:1fr 1fr; } .gallery .g0{ grid-column:span 2; } .trip{ flex-direction:column; } .trip-thumb{ width:100%; height:170px; } }
 </style>
 </head>
@@ -702,18 +718,19 @@
   }
 
   // ---- Guest accounts: sign in / register → "My trips" ----
-  var GUEST=null, GTOKEN=null;
+  var GUEST=null, GTOKEN=null, UNREAD=0, AFTER_AUTH=null;
   function loadSession(){ try{ var s=JSON.parse(localStorage.getItem('ss_guest')||'null'); if(s&&s.token){ GTOKEN=s.token; GUEST=s.account||null; } }catch(e){} }
   function saveSession(tok,acct){ GTOKEN=tok; GUEST=acct||null; try{ localStorage.setItem('ss_guest',JSON.stringify({token:tok,account:acct})); }catch(e){} renderAcct(); }
-  function clearSession(){ GTOKEN=null; GUEST=null; try{ localStorage.removeItem('ss_guest'); }catch(e){} renderAcct(); }
+  function clearSession(){ GTOKEN=null; GUEST=null; UNREAD=0; try{ localStorage.removeItem('ss_guest'); }catch(e){} renderAcct(); }
   function authHeaders(){ return GTOKEN?{'Authorization':'Bearer '+GTOKEN}:{}; }
 
   function renderAcct(){
     var box=$('#acctBox'); if(!box) return;
     if(GUEST){
       var who=GUEST.name?esc(GUEST.name.split(' ')[0]):'account';
-      box.innerHTML='<span class="acct-name">Hi, '+who+'</span> <button class="acct-btn" id="tripsBtn">My trips</button> <button class="acct-btn" id="signoutBtn">Sign out</button>';
+      box.innerHTML='<span class="acct-name">Hi, '+who+'</span> <button class="acct-btn" id="tripsBtn">My trips</button> <button class="acct-btn" id="inboxBtn">Messages'+(UNREAD?'<span class="dot">'+UNREAD+'</span>':'')+'</button> <button class="acct-btn" id="signoutBtn">Sign out</button>';
       $('#tripsBtn').onclick=openTrips;
+      $('#inboxBtn').onclick=function(){ openInbox(); };
       $('#signoutBtn').onclick=function(){ clearSession(); };
     } else {
       box.innerHTML='<button class="acct-btn" id="signinBtn">Sign in</button>';
@@ -731,14 +748,14 @@
     }catch(e){}
   }
 
-  function openAuth(mode, prefillEmail){
+  function openAuth(mode, prefillEmail, note){
     var host=$('#detail');
     var overlay=el('div','overlay');
     function draw(){
       var login=(mode==='login');
       overlay.innerHTML='<div class="sheet" style="max-width:440px"><div class="sheet-head"><h2>'+(login?'Sign in':'Create your account')+'</h2><button class="x">&times;</button></div>'+
         '<div class="sheet-body">'+
-          '<p class="note">'+(login?'View your upcoming and previous trips.':'Sign up to keep track of your upcoming and previous trips.')+'</p>'+
+          '<p class="note">'+(note?esc(note):(login?'View your upcoming and previous trips.':'Sign up to keep track of your upcoming and previous trips.'))+'</p>'+
           '<div class="frm">'+
             (login?'':'<input id="aName" placeholder="Full name" autocomplete="name" />')+
             '<input id="aEmail" type="email" placeholder="Email" autocomplete="email" />'+
@@ -769,7 +786,9 @@
         var d=await r.json();
         if(!r.ok){ msg.innerHTML='<div class="msg err">'+esc(d.message||'Could not sign you in. Please try again.')+'</div>'; btn.disabled=false; btn.textContent=login?'Sign in':'Create account'; return; }
         saveSession(d.token,d.account);
-        openTrips();
+        var next=AFTER_AUTH; AFTER_AUTH=null;
+        if(next) next(); else openTrips();
+        refreshUnread();
       }catch(e){ msg.innerHTML='<div class="msg err">Something went wrong. Please try again.</div>'; btn.disabled=false; btn.textContent=login?'Sign in':'Create account'; }
     }
     overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
@@ -799,8 +818,87 @@
         ('<div class="empty">'+(tab==='upcoming'?'No upcoming trips yet. When you book a stay it’ll appear here.':'No previous trips yet.')+'</div>');
       body.innerHTML='<div class="tabs"><button class="'+(tab==='upcoming'?'on':'')+'" data-t="upcoming">Upcoming ('+up.length+')</button><button class="'+(tab==='previous'?'on':'')+'" data-t="previous">Previous ('+prev.length+')</button></div>'+cards;
       body.querySelectorAll('.tabs button').forEach(function(b){ b.onclick=function(){ tab=b.getAttribute('data-t'); draw(); }; });
+      body.querySelectorAll('.trip-msg').forEach(function(b){ b.onclick=function(){ openInbox(b.getAttribute('data-id')); }; });
     }
     draw();
+  }
+
+  // ---- Messages from the host (per trip) ----
+  async function refreshUnread(){
+    if(!GTOKEN) return;
+    try{ var r=await fetch(API+'/public/account/messages/unread',{headers:authHeaders()}); if(!r.ok) return; var d=await r.json(); if(d.count!==UNREAD){ UNREAD=d.count||0; renderAcct(); } }catch(e){}
+  }
+  function fmtWhen(d){ try{ return new Date(d).toLocaleString('en-ZA',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
+  function fmtShort(s){ try{ return new Date(s+'T12:00:00').toLocaleDateString('en-ZA',{day:'numeric',month:'short'}); }catch(e){ return s; } }
+
+  var MSG_AUTH_NOTE='Sign in to read and reply to messages from your host. No account yet? Create one with the email you booked with and your trips and messages will appear.';
+  var INBOX_POLL=null;
+
+  async function openInbox(focusId){
+    clearInterval(INBOX_POLL);
+    if(!GTOKEN){ AFTER_AUTH=function(){ openInbox(focusId); }; openAuth('login', null, MSG_AUTH_NOTE); return; }
+    var host=$('#detail');
+    var overlay=el('div','overlay');
+    overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
+    overlay.innerHTML='<div class="sheet" style="max-width:640px"><div class="sheet-head"><h2>Messages</h2><button class="x">&times;</button></div><div class="sheet-body"><p class="note">Loading…</p></div></div>';
+    host.innerHTML=''; host.appendChild(overlay);
+    overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
+    var body=overlay.querySelector('.sheet-body');
+    var threads=[];
+    async function load(){
+      var r=await fetch(API+'/public/account/messages',{headers:authHeaders()});
+      if(r.status===401){ clearSession(); AFTER_AUTH=function(){ openInbox(focusId); }; openAuth('login', null, MSG_AUTH_NOTE); return false; }
+      var d=await r.json(); threads=d.threads||[]; return true;
+    }
+    try{ if(!(await load())) return; }catch(e){ body.innerHTML='<div class="msg err">Could not load your messages. Please try again.</div>'; return; }
+
+    function place(t){ return esc(t.propertyName||'Stay')+(t.unitName?(' · Unit '+esc(t.unitName)):''); }
+    function list(){
+      if(!threads.length){ body.innerHTML='<div class="empty">No messages yet. Messages from your host about upcoming stays will appear here.</div>'; return; }
+      body.innerHTML=threads.map(function(t){
+        var last=t.messages[t.messages.length-1];
+        return '<button class="th-item" data-id="'+esc(t.bookingId)+'"><div class="th-top"><span>'+place(t)+'</span>'+(t.unread?'<span class="badge pending">'+t.unread+' new</span>':'')+'</div>'+
+          '<div class="trip-sub">📅 '+esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut))+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div>'+
+          '<div class="th-snip">'+(last?((last.sender==='guest'?'You: ':'')+esc(last.body)):'No messages yet — tap to message your host')+'</div></button>';
+      }).join('');
+      body.querySelectorAll('.th-item').forEach(function(b){ b.onclick=function(){ thread(b.getAttribute('data-id')); }; });
+      clearInterval(INBOX_POLL);
+    }
+    async function thread(id){
+      var t=threads.find(function(x){ return x.bookingId===id; });
+      if(!t){ list(); return; }
+      body.innerHTML=(threads.length>1?'<button class="th-back">← All messages</button>':'')+
+        '<div class="trip-nm">'+place(t)+'</div><div class="trip-sub" style="margin-bottom:10px">📅 '+esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut))+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div>'+
+        '<div class="bubbles">'+(t.messages.length?t.messages.map(function(m){ return '<div class="bub '+(m.sender==='guest'?'guest':'host')+'">'+esc(m.body)+'<span class="when">'+(m.sender==='guest'?'You · ':'Host · ')+esc(fmtWhen(m.createdAt))+'</span></div>'; }).join(''):'<p class="note" style="text-align:center">No messages yet. Write to your host below.</p>')+'</div>'+
+        '<div class="reply"><textarea id="replyTxt" rows="2" placeholder="Write a message…"></textarea><button id="replyBtn">Send</button></div><div id="rmsg"></div>';
+      var bub=body.querySelector('.bubbles'); bub.scrollTop=bub.scrollHeight;
+      var back=body.querySelector('.th-back'); if(back) back.onclick=function(){ list(); };
+      body.querySelector('#replyBtn').onclick=async function(){
+        var ta=body.querySelector('#replyTxt'), txt=(ta.value||'').trim(), btn=this;
+        if(!txt) return;
+        btn.disabled=true; btn.textContent='Sending…';
+        try{
+          var r=await fetch(API+'/public/account/messages/'+encodeURIComponent(id),{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({body:txt})});
+          if(!r.ok) throw new Error();
+          await load(); thread(id);
+        }catch(e){ btn.disabled=false; btn.textContent='Send'; body.querySelector('#rmsg').innerHTML='<div class="msg err">Could not send. Please try again.</div>'; }
+      };
+      if(t.unread){
+        try{ await fetch(API+'/public/account/messages/'+encodeURIComponent(id)+'/read',{method:'POST',headers:authHeaders()}); t.unread=0; refreshUnread(); }catch(e){}
+      }
+      clearInterval(INBOX_POLL);
+      INBOX_POLL=setInterval(async function(){
+        if(!overlay.isConnected || !body.querySelector('.bubbles')){ clearInterval(INBOX_POLL); return; }
+        var before=t.messages.length;
+        try{ if(!(await load())) return; }catch(e){ return; }
+        var now=threads.find(function(x){ return x.bookingId===id; });
+        // Redraw only when something arrived, and never over a half-typed reply.
+        if(now && now.messages.length!==before && !(body.querySelector('#replyTxt').value||'').trim()) thread(id);
+      }, 15000);
+    }
+    if(focusId && threads.some(function(x){ return x.bookingId===focusId; })) thread(focusId);
+    else if(threads.length===1) thread(threads[0].bookingId);
+    else list();
   }
 
   function tripCard(t){
@@ -827,11 +925,14 @@
         (money.length?('<div style="margin-top:6px">'+money.join('')+'</div>'):'')+
         (info.length?('<div class="trip-info">'+info.join('<br>')+'</div>'):'')+
         pending+
+        (t.status!=='cancelled'?'<button class="trip-msg" data-id="'+esc(t.id)+'">💬 Messages</button>':'')+
       '</div>'+
     '</div>';
   }
 
   loadSession(); renderAcct(); refreshAccount();
+  refreshUnread(); setInterval(refreshUnread, 60000);
+  if(/[?&]messages\b/.test(location.search)) openInbox();
   load();
 })();
 </script>

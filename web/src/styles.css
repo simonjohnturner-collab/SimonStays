@@ -881,3 +881,49 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .thumb-btn.picked img { opacity:1; outline:3px solid var(--green); outline-offset:-3px; }
 .thumb-tick { position:absolute; top:6px; right:6px; width:22px; height:22px; border-radius:50%; border:2px solid #fff; background:rgba(0,0,0,.35); color:#fff; font-weight:800; font-size:13px; line-height:18px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.4); }
 .thumb-btn.picked .thumb-tick { background:var(--green); }
+
+/* Guest messages (MessagesView) */
+.msg-tabs { display:flex; gap:8px; padding:12px 16px 0; max-width:1100px; width:100%; margin:0 auto; flex-wrap:wrap; }
+.msg-tabs button { background:#eef1f4; color:var(--ink); flex:1; min-width:120px; }
+.msg-tabs button.on { background:var(--green); color:#fff; }
+.msg-dot { display:inline-block; min-width:18px; padding:0 5px; margin-left:5px; border-radius:999px; background:#e74c3c; color:#fff; font-size:11px; font-weight:700; line-height:18px; text-align:center; }
+.msg-layout { display:grid; grid-template-columns:320px 1fr; gap:14px; max-width:1100px; width:100%; margin:0 auto; padding:14px 16px 30px; flex:1; min-height:0; }
+.msg-list { display:flex; flex-direction:column; gap:6px; overflow-y:auto; max-height:calc(100vh - 150px); }
+.msg-search { margin:4px 0; }
+.msg-item { display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:9px 11px; }
+.msg-item:hover { background:#f3f6f4; }
+.msg-item.on { border-color:var(--green); background:#eef6f0; }
+.msg-item-top { display:flex; justify-content:space-between; width:100%; }
+.msg-snippet { color:var(--muted); width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.msg-thread { background:#fff; border:1px solid var(--line); border-radius:12px; display:flex; flex-direction:column; min-height:420px; max-height:calc(100vh - 150px); overflow:hidden; }
+.msg-thread > .center { margin:auto; }
+.msg-thread-head { display:flex; gap:10px; align-items:center; padding:10px 14px; border-bottom:1px solid var(--line); }
+.msg-back { display:none; padding:4px 10px; }
+.msg-warn { background:#fff7e6; border:1px solid #f0d9a8; color:#8a5a00; border-radius:8px; padding:8px 10px; margin:8px 12px 0; font-size:13px; }
+.msg-item .msg-warn { margin:4px 0 0; padding:2px 6px; }
+.msg-bubbles { flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:8px; background:#f8faf9; }
+.msg-bubble { max-width:78%; padding:8px 11px; border-radius:12px; font-size:14px; line-height:1.45; }
+.msg-bubble.host { align-self:flex-end; background:#dff0e6; border-bottom-right-radius:4px; }
+.msg-bubble.guest { align-self:flex-start; background:#fff; border:1px solid var(--line); border-bottom-left-radius:4px; }
+.msg-body { white-space:pre-wrap; word-break:break-word; }
+.msg-meta { font-size:11px; color:var(--muted); margin-top:3px; text-align:right; }
+.msg-auto { font-size:11px; font-weight:600; color:var(--green-d); margin-bottom:2px; }
+.msg-compose { border-top:1px solid var(--line); padding:10px 12px; display:flex; flex-direction:column; gap:6px; }
+.msg-compose textarea, .msg-tpl-body { width:100%; font:inherit; resize:vertical; }
+.msg-tpl-body { margin:8px 0; }
+.msg-send-row { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+.msg-chips { display:flex; flex-wrap:wrap; gap:5px; align-items:center; margin:6px 0 12px; }
+.msg-sched.off { opacity:.6; }
+.msg-sched-row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:10px; }
+.msg-lbl { font-size:12px; color:var(--muted); font-weight:600; min-width:60px; }
+.msg-num { width:64px; }
+.msg-preview { white-space:pre-wrap; background:#f7f8fa; border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:8px 0; }
+@media (max-width:760px) {
+  .msg-layout { grid-template-columns:1fr; padding:10px; }
+  .msg-layout.has-active .msg-list { display:none; }
+  .msg-layout:not(.has-active) .msg-thread { display:none; }
+  .msg-back { display:inline-block; }
+  .msg-thread { max-height:none; min-height:calc(100vh - 140px); }
+  .msg-list { max-height:none; }
+  .msg-bubble { max-width:90%; }
+}

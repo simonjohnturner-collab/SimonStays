@@ -31,6 +31,8 @@ function toE164(raw, defaultCC = '27') {
 
 // Send a WhatsApp message. Pass `body` for a freeform message, or `contentSid` +
 // `contentVariables` ({ "1": "…", "2": "…" }) to send an approved template.
+// Omitting contentSid falls back to TWILIO_WHATSAPP_CONTENT_SID; pass null to
+// send a plain body without it.
 function sendWhatsApp({ to, body, contentSid, contentVariables }) {
   return new Promise((resolve) => {
     if (!enabled()) return resolve({ ok: false, skipped: 'no_creds' });
@@ -45,7 +47,7 @@ function sendWhatsApp({ to, body, contentSid, contentVariables }) {
     const form = new URLSearchParams();
     form.set('To', 'whatsapp:' + e164);
     form.set('From', from);
-    const useSid = contentSid || process.env.TWILIO_WHATSAPP_CONTENT_SID;
+    const useSid = contentSid !== undefined ? contentSid : process.env.TWILIO_WHATSAPP_CONTENT_SID;
     if (useSid) {
       form.set('ContentSid', useSid);
       if (contentVariables) form.set('ContentVariables', JSON.stringify(contentVariables));

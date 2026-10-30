@@ -4,6 +4,7 @@ const { authHost, requireOwnedUnit } = require('../middleware/auth');
 const { checkAvailability, syncUnit } = require('../utils/sync');
 const { dateOnly } = require('../utils/ical');
 const { quote } = require('../utils/pricing');
+const { onBookingConfirmed } = require('../utils/bookingConfirmed');
 
 const router = express.Router();
 router.use(authHost);
@@ -33,6 +34,7 @@ router.post('/units/:unitId/bookings', requireOwnedUnit, async (req, res) => {
     data: {
       unitId: req.unit.id, hostId: req.hostId, source: 'manual', status: 'confirmed',
       guestName: b.guestName || null, recommendedBy: b.recommendedBy || null,
+      ...(await guestContactFields(b)),
       checkIn: dateOnly(b.checkIn), checkOut: dateOnly(b.checkOut),
       cleaner: b.cleaner || null, comments: b.comments || null, checkoutNotes: b.checkoutNotes || null,
       leavingEarly: !!b.leavingEarly,
@@ -43,6 +45,7 @@ router.post('/units/:unitId/bookings', requireOwnedUnit, async (req, res) => {
     },
     include: { cleans: true },
   });
+  onBookingConfirmed(booking.id);
   res.status(201).json({ booking });
 });
 
@@ -54,6 +57,7 @@ router.post('/bookings/floating', async (req, res) => {
     data: {
       unitId: null, hostId: req.hostId, source: 'manual', status: 'floating',
       guestName: b.guestName || null, recommendedBy: b.recommendedBy || null,
+      ...(await guestContactFields(b)),
       checkIn: dateOnly(b.checkIn), checkOut: dateOnly(b.checkOut),
       cleaner: b.cleaner || null, comments: b.comments || null, checkoutNotes: b.checkoutNotes || null,
       leavingEarly: !!b.leavingEarly,
@@ -67,6 +71,19 @@ router.post('/bookings/floating', async (req, res) => {
   });
   res.status(201).json({ booking });
 });
+
+// Guest email/phone typed on a manual booking. The email links the booking to
+// the guest's shopfront account (if they have one) so they can read messages.
+async function guestContactFields(b) {
+  const out = {};
+  if ('guestPhone' in b) out.guestPhone = String(b.guestPhone || '').trim() || null;
+  if ('guestEmail' in b) {
+    out.guestEmail = String(b.guestEmail || '').trim().toLowerCase() || null;
+    const acct = out.guestEmail ? await prisma.guestAccount.findUnique({ where: { email: out.guestEmail }, select: { id: true } }) : null;
+    out.guestAccountId = acct ? acct.id : null;
+  }
+  return out;
+}
 
 // Return groupId if it belongs to the host, else null.
 async function validGroup(hostId, groupId) {
@@ -172,6 +189,7 @@ router.patch('/bookings/:id', async (req, res) => {
   ['leavingEarly', 'earlyCheckIn', 'lateCheckOut', 'extraMattress', 'hairDryer']
     .forEach((k) => { if (k in b) data[k] = !!b[k]; });
   Object.assign(data, paymentFields(b));
+  Object.assign(data, await guestContactFields(b));
   if ('status' in b) data.status = b.status;
   if ('checkIn' in b) data.checkIn = dateOnly(b.checkIn);
   if ('checkOut' in b) data.checkOut = dateOnly(b.checkOut);
@@ -187,6 +205,7 @@ router.patch('/bookings/:id', async (req, res) => {
     } else { data.unitId = null; data.status = 'floating'; }
   }
   const updated = await prisma.booking.update({ where: { id: booking.id }, data, include: { cleans: true } });
+  if (updated.status === 'confirmed' && booking.status !== 'confirmed') onBookingConfirmed(updated.id);
   res.json({ booking: updated });
 });
 

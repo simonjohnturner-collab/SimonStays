@@ -21,6 +21,7 @@ import SmartLockView from './SmartLockView.jsx';
 import AccountView from './AccountView.jsx';
 import AdminView from './AdminView.jsx';
 import MarketView from './MarketView.jsx';
+import MessagesView from './MessagesView.jsx';
 
 const WINDOW_DAYS = 35;
 const LAST_SYNC_KEY = 'staysync_last_sync';
@@ -59,6 +60,10 @@ export default function Main() {
   const [account, setAccount] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [market, setMarket] = useState(false);
+  const [messages, setMessages] = useState(null); // { bookingId } when open
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const loadUnread = useCallback(() => { api.messageUnread().then((r) => setUnreadMessages(r.count)).catch(() => {}); }, []);
+  useEffect(() => { loadUnread(); const t = setInterval(loadUnread, 60000); return () => clearInterval(t); }, [loadUnread]);
   const [formsInitialId, setFormsInitialId] = useState(null); // open Forms straight to this submission
   const [focus, setFocus] = useState(null); // { unitId, bookingId, key } — jump target
   function openFormsSubmission(id) { setFormsInitialId(id || null); setForms(true); }
@@ -231,6 +236,16 @@ export default function Main() {
   if (market) {
     return withChrome(<MarketView onClose={() => setMarket(false)} />);
   }
+  if (messages) {
+    return withChrome(
+      <MessagesView
+        onClose={() => { setMessages(null); loadUnread(); }}
+        properties={properties.map((p) => ({ id: p.id, name: p.name }))}
+        initialBookingId={messages.bookingId}
+        onUnreadChange={loadUnread}
+      />
+    );
+  }
   if (invoices) {
     return withChrome(<InvoicesView initialInvoiceId={invoices.initialId} onClose={() => setInvoices(null)} />);
   }
@@ -292,6 +307,9 @@ export default function Main() {
         <button className="ghost" onClick={() => setStart(addMonths(start, 1))}>month ›</button>
         <button className="ghost" onClick={syncAll} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync channels'}</button>
         <button className="ghost" onClick={() => setListings(true)}>🏠 Listings</button>
+        <button className="ghost msg-top-btn" onClick={() => setMessages({ bookingId: null })} title="Guest messages">
+          💬 Messages{unreadMessages > 0 && <span className="msg-dot">{unreadMessages}</span>}
+        </button>
         <NotificationsBell onOpen={openFormsSubmission} />
         <span className="host">{host.email}</span>
         <button className="ghost" onClick={logout}>Log out</button>
@@ -339,6 +357,7 @@ export default function Main() {
           cleaners={cleaners}
           onClose={() => setBookingCtx(null)}
           onSaved={async () => { setBookingCtx(null); await loadBookings(properties); }}
+          onMessage={(booking) => { setBookingCtx(null); setMessages({ bookingId: booking.id }); }}
           onInvoice={async (booking) => {
             const r = await api.createInvoice({ fromBookingId: booking.id });
             setBookingCtx(null);
@@ -371,6 +390,7 @@ export default function Main() {
           onOpenForms={() => { setMenuOpen(false); setForms(true); }}
           onOpenCleaners={() => { setMenuOpen(false); setProvidersOpen(true); }}
           onOpenGuests={() => { setMenuOpen(false); setGuestsOpen(true); }}
+          onOpenMessages={() => { setMenuOpen(false); setMessages({ bookingId: null }); }}
           onOpenSmartLocks={() => { setMenuOpen(false); setSmartLocks(true); }}
           onOpenAccount={() => { setMenuOpen(false); setAccount(true); }}
           onOpenPayments={() => { setMenuOpen(false); setPaymentsOpen(true); }}

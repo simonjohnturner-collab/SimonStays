@@ -6,6 +6,7 @@
  */
 const prisma = require('../lib/prisma');
 const { parseFeed, isGenericTitle, dateOnly, overlaps } = require('./ical');
+const { onBookingConfirmed } = require('./bookingConfirmed');
 
 const SOURCE_FOR = { airbnb: 'airbnb', booking: 'booking', lekkeslaap: 'lekkeslaap', other: 'import', manual: 'manual' };
 
@@ -48,6 +49,9 @@ async function syncUnit(unitId) {
 
     const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
     const seen = new Set();
+    // Has this channel imported successfully before? If not, this is its first
+    // import and every booking in it is "new" — don't alert the host for those.
+    const importedBefore = !!(await prisma.syncLog.findFirst({ where: { unitId, channelType: ch.type, ok: true }, select: { id: true } }));
     let added = 0, updated = 0;
     for (const ev of events) {
       // Only sync current/future stays. Past events are left entirely alone —
@@ -85,7 +89,7 @@ async function syncUnit(unitId) {
           where: { unitId, checkIn: ev.start, checkOut: ev.end },
           orderBy: { createdAt: 'desc' },
         });
-        await prisma.booking.create({
+        const created = await prisma.booking.create({
           data: {
             unitId, source, channelType: ch.type, status: 'confirmed',
             guestName: prior && !isPlaceholder(prior.guestName) ? prior.guestName : guestName,
@@ -94,6 +98,11 @@ async function syncUnit(unitId) {
             cleaner: prior ? prior.cleaner : null,
           },
         });
+        // A genuinely new reservation → tell the host. Skipped for host blocks
+        // (no guest), on a channel's first import (every existing booking would
+        // alert at once), and for a modified reservation replacing an earlier
+        // record of the same stay.
+        if (importedBefore && !prior && created.guestName !== 'Blocked') onBookingConfirmed(created.id);
         added++;
       }
     }

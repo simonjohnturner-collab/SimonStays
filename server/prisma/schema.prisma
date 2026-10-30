@@ -39,6 +39,9 @@ model Host {
   photos           Photo[]           @relation("HostPhotos")
   lockProvider     LockProvider?
   competitors      Competitor[]
+  messageTemplates MessageTemplate[]
+  messageSchedules MessageSchedule[]
+  messages         Message[]
 }
 
 // A host's connection to a smart-lock cloud provider (RemoteLock). Holds the
@@ -476,6 +479,11 @@ model Booking {
   // in that group, WITHOUT blocking the channel (stays floating).
   pricingGroupId String?
   pricingGroup   PricingGroup? @relation(fields: [pricingGroupId], references: [id], onDelete: SetNull)
+  // First time this booking became confirmed (stamped by utils/bookingConfirmed).
+  // Guards the host's WhatsApp alert against double-sends and anchors the
+  // "when a booking is confirmed" scheduled messages. Null on pre-existing rows.
+  confirmedAt  DateTime?
+  messages     Message[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -484,6 +492,68 @@ model Booking {
   @@index([hostId, status])
   @@index([guestAccountId])
   @@index([guestEmail])
+}
+
+// ---- Guest messaging ----
+// The host writes (or schedules) messages per booking in the admin app; the
+// guest reads and replies on the shopfront once signed in. Bodies may contain
+// {placeholders} (see utils/messaging.js) filled in per booking at send time.
+
+// A saved, pre-typed message the host can drop into a conversation or use as
+// the text of a scheduled message.
+model MessageTemplate {
+  id        String            @id @default(uuid())
+  hostId    String
+  host      Host              @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  name      String
+  body      String
+  schedules MessageSchedule[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@index([hostId])
+}
+
+// An automatic message, sent once to every matching booking at a time relative
+// to the stay — e.g. "2 days before check-in at 10:00, Firenza only".
+model MessageSchedule {
+  id          String           @id @default(uuid())
+  hostId      String
+  host        Host             @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  name        String
+  templateId  String? // send this saved message's current text…
+  template    MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  body        String? // …or this custom text when no template is picked
+  anchor      String           @default("check_in") // 'confirmed' (send straight away) | 'check_in' | 'check_out'
+  offsetDays  Int              @default(0) // days relative to the anchor date; negative = before
+  sendTime    String           @default("10:00") // HH:MM SAST (ignored for 'confirmed')
+  propertyIds Json             @default("[]") // properties this applies to; empty = all
+  active      Boolean          @default(true)
+  messages    Message[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([hostId])
+}
+
+// One message in a booking's conversation.
+model Message {
+  id         String           @id @default(uuid())
+  hostId     String
+  host       Host             @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  bookingId  String
+  booking    Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  sender     String // 'host' | 'guest'
+  body       String
+  scheduleId String? // set when an automatic message sent it (one per booking per schedule)
+  schedule   MessageSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  emailedAt  DateTime? // when the guest was emailed a copy
+  readAt     DateTime? // when the other side read it
+  createdAt  DateTime         @default(now())
+
+  @@unique([scheduleId, bookingId])
+  @@index([bookingId, createdAt])
+  @@index([hostId, createdAt])
 }
 
 model SyncLog {

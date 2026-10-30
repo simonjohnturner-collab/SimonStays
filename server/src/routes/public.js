@@ -13,6 +13,7 @@ const { DEFAULT_CANCELLATION_POLICY } = require('../utils/policy');
 const { sendMail } = require('../utils/mailer');
 const { invoiceHtml } = require('../utils/invoiceHtml');
 const { optionalGuest } = require('../middleware/auth');
+const { onBookingConfirmed } = require('../utils/bookingConfirmed');
 
 // The host's EFT details for the invoice (same shape as /public/host).
 async function eftFor(hostId) {
@@ -393,6 +394,7 @@ router.post('/book/:id/pay', async (req, res, next) => {
       where: { id: booking.id },
       data: { status: 'confirmed', paid: true, paymentStatus: 'paid' },
     });
+    onBookingConfirmed(confirmed.id); // host WhatsApp + "on confirmation" guest messages
 
     // Smart-lock guest code (RemoteLock / Yale via a unified provider) — stubbed
     // until credentials are set; returns null and never blocks confirmation.

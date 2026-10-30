@@ -155,6 +155,23 @@ export const api = {
   analyzePurchase: (id) => req('POST', `/forms/submissions/${id}/analyze`),
   remindCleaner: (id) => req('POST', `/bookings/${id}/remind-cleaner`),
 
+  // guest messaging: conversations, saved messages, scheduled messages
+  messageMeta: () => req('GET', '/messages/meta'),
+  messageUnread: () => req('GET', '/messages/unread'),
+  messageThreads: () => req('GET', '/messages/threads'),
+  messageRecipients: (q = '') => req('GET', `/messages/recipients${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  bookingMessages: (bookingId) => req('GET', `/messages/booking/${bookingId}`),
+  sendMessage: (bookingId, body) => req('POST', `/messages/booking/${bookingId}`, { body }),
+  renderMessage: (bookingId, body) => req('POST', '/messages/render', { bookingId, body }),
+  listMessageTemplates: () => req('GET', '/messages/templates'),
+  createMessageTemplate: (data) => req('POST', '/messages/templates', data),
+  updateMessageTemplate: (id, data) => req('PATCH', `/messages/templates/${id}`, data),
+  deleteMessageTemplate: (id) => req('DELETE', `/messages/templates/${id}`),
+  listMessageSchedules: () => req('GET', '/messages/schedules'),
+  createMessageSchedule: (data) => req('POST', '/messages/schedules', data),
+  updateMessageSchedule: (id, data) => req('PATCH', `/messages/schedules/${id}`, data),
+  deleteMessageSchedule: (id) => req('DELETE', `/messages/schedules/${id}`),
+
   // competitor market intelligence (the "building fill" / market-watch view)
   marketCompetitors: () => req('GET', '/market/competitors'),
   marketAddCompetitor: (data) => req('POST', '/market/competitors', data),

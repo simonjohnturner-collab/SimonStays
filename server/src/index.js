@@ -28,6 +28,7 @@ app.use('/photos', require('./routes/photos'));
 app.use('/listings', require('./routes/listings'));
 // Public guest accounts (shopfront login → "my trips"). Mount before /public so
 // its paths are matched first (the /public router has no /account/* routes).
+app.use('/public/account/messages', require('./routes/guestMessages'));
 app.use('/public/account', require('./routes/guestAuth'));
 // Public shopfront API (no auth) — mount before the auth'd catch-all routers.
 app.use('/public', require('./routes/public'));
@@ -98,6 +99,7 @@ app.use('/forms', require('./routes/forms'));
 app.use('/cleaners', require('./routes/cleaners'));
 app.use('/providers', require('./routes/providers'));
 app.use('/guests', require('./routes/guests'));
+app.use('/messages', require('./routes/messages'));
 app.use('/smartlocks', require('./routes/smartlocks'));
 app.use('/groups', require('./routes/groups'));
 app.use('/properties', require('./routes/properties'));
@@ -186,6 +188,18 @@ if (require.main === module) {
   setTimeout(runPurchaseRetry, 60 * 1000);
   const retryExpr = process.env.PURCHASE_RETRY_CRON || '17 * * * *';
   if (cron.validate(retryExpr)) cron.schedule(retryExpr, runPurchaseRetry);
+
+  // Scheduled guest messages ("2 days before check-in at 10:00", …). Checks every
+  // 10 minutes; each schedule sends once per booking. Override with MESSAGE_CRON.
+  const messaging = require('./utils/messaging');
+  const messageExpr = process.env.MESSAGE_CRON || '*/10 * * * *';
+  if (cron.validate(messageExpr)) {
+    cron.schedule(messageExpr, async () => {
+      try { const s = await messaging.runSchedules(); if (s.sent || s.failed) console.log('[messages]', JSON.stringify(s)); }
+      catch (e) { console.error('[messages] schedule run failed', e.message); }
+    });
+    console.log(`Scheduled guest messages: ${messageExpr}`);
+  }
 
   // Night-before checkout reminders to the cleaner (WhatsApp), 19:00 SAST daily.
   // Auto-on where Twilio WhatsApp creds are set; override the time with
