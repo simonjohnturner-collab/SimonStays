@@ -246,6 +246,7 @@ export default function Main() {
         onClose={() => { setMessages(null); loadUnread(); }}
         properties={properties.map((p) => ({ id: p.id, name: p.name }))}
         initialBookingId={messages.bookingId}
+        teachCount={teachCount}
         initialTab={messages.tab || 'inbox'}
         onUnreadChange={loadUnread}
       />
@@ -301,7 +302,7 @@ export default function Main() {
   return withChrome(
     <div className="app">
       <header className="topbar">
-        <button className="ghost hamburger" title={teachCount > 0 ? `Manage properties · ${teachCount} question(s) for Teach Simon` : 'Manage properties'} onClick={() => setMenuOpen(true)}>
+        <button className="ghost hamburger" title={teachCount > 0 ? `Manage properties · ${teachCount} question(s) waiting in Ask Simon` : 'Manage properties'} onClick={() => setMenuOpen(true)}>
           ☰{teachCount > 0 && <span className="msg-dot">{teachCount}</span>}
         </button>
         <div className="brand">Simon<span>Stays</span></div>
@@ -398,7 +399,6 @@ export default function Main() {
           onOpenCleaners={() => { setMenuOpen(false); setProvidersOpen(true); }}
           onOpenGuests={() => { setMenuOpen(false); setGuestsOpen(true); }}
           onOpenMessages={() => { setMenuOpen(false); setMessages({ bookingId: null }); }}
-          onOpenTeach={() => { setMenuOpen(false); setMessages({ bookingId: null, tab: 'teach' }); }}
           teachCount={teachCount}
           onOpenSmartLocks={() => { setMenuOpen(false); setSmartLocks(true); }}
           onOpenAccount={() => { setMenuOpen(false); setAccount(true); }}

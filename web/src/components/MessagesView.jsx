@@ -8,7 +8,7 @@ import TeachSimon from './TeachSimon.jsx';
 //   Scheduled  — automatic messages sent at a time relative to each stay, per property
 //   Teach Simon — answer what the Ask Simon AI couldn't, and manage what it knows
 // Guests read and reply on the shopfront (simonstays.co.za → Messages) and get an email copy.
-export default function MessagesView({ onClose, properties = [], initialBookingId = null, initialTab = 'inbox', onUnreadChange }) {
+export default function MessagesView({ onClose, properties = [], initialBookingId = null, initialTab = 'inbox', onUnreadChange, teachCount = 0 }) {
   const [tab, setTab] = useState(initialTab);
   const [templates, setTemplates] = useState([]);
   const [placeholders, setPlaceholders] = useState([]);
@@ -23,7 +23,7 @@ export default function MessagesView({ onClose, properties = [], initialBookingI
     <div className="invoices-view">
       <header className="topbar">
         <button className="brand linklike" onClick={onClose} title="Back to the board">Simon<span>Stays</span></button>
-        <span className="host">Guest messages</span>
+        <span className="host">Messaging &amp; Ask Simon</span>
         <div className="spacer" />
         <button className="ghost" onClick={onClose}>🏠 Home</button>
       </header>
@@ -32,7 +32,7 @@ export default function MessagesView({ onClose, properties = [], initialBookingI
         <button className={tab === 'inbox' ? 'on' : ''} onClick={() => setTab('inbox')}>💬 Inbox</button>
         <button className={tab === 'saved' ? 'on' : ''} onClick={() => setTab('saved')}>📝 Saved messages</button>
         <button className={tab === 'scheduled' ? 'on' : ''} onClick={() => setTab('scheduled')}>⏰ Scheduled</button>
-        <button className={tab === 'teach' ? 'on' : ''} onClick={() => setTab('teach')}>🧠 Teach Simon</button>
+        <button className={tab === 'teach' ? 'on' : ''} onClick={() => setTab('teach')}>🧠 Ask Simon{teachCount > 0 && <span className="msg-dot">{teachCount}</span>}</button>
       </div>
 
       {tab === 'inbox' && <Inbox templates={templates} initialBookingId={initialBookingId} onUnreadChange={onUnreadChange} />}
