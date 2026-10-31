@@ -301,7 +301,9 @@ export default function Main() {
   return withChrome(
     <div className="app">
       <header className="topbar">
-        <button className="ghost hamburger" title="Manage properties" onClick={() => setMenuOpen(true)}>☰</button>
+        <button className="ghost hamburger" title={teachCount > 0 ? `Manage properties · ${teachCount} question(s) for Teach Simon` : 'Manage properties'} onClick={() => setMenuOpen(true)}>
+          ☰{teachCount > 0 && <span className="msg-dot">{teachCount}</span>}
+        </button>
         <div className="brand">Simon<span>Stays</span></div>
         {hasUnits && <BoardSearch onJump={jumpToBooking} onJumpDate={jumpToDate} />}
         <div className="spacer" />
@@ -314,9 +316,6 @@ export default function Main() {
         <button className="ghost" onClick={() => setListings(true)}>🏠 Listings</button>
         <button className="ghost msg-top-btn" onClick={() => setMessages({ bookingId: null })} title="Guest messages">
           💬 Messages{unreadMessages > 0 && <span className="msg-dot">{unreadMessages}</span>}
-        </button>
-        <button className="ghost" onClick={() => setMessages({ bookingId: null, tab: 'teach' })} title="Questions guests asked Simon that need your answer">
-          🧠 Teach Simon{teachCount > 0 && <span className="msg-dot">{teachCount}</span>}
         </button>
         <NotificationsBell onOpen={openFormsSubmission} />
         <span className="host">{host.email}</span>
@@ -399,6 +398,8 @@ export default function Main() {
           onOpenCleaners={() => { setMenuOpen(false); setProvidersOpen(true); }}
           onOpenGuests={() => { setMenuOpen(false); setGuestsOpen(true); }}
           onOpenMessages={() => { setMenuOpen(false); setMessages({ bookingId: null }); }}
+          onOpenTeach={() => { setMenuOpen(false); setMessages({ bookingId: null, tab: 'teach' }); }}
+          teachCount={teachCount}
           onOpenSmartLocks={() => { setMenuOpen(false); setSmartLocks(true); }}
           onOpenAccount={() => { setMenuOpen(false); setAccount(true); }}
           onOpenPayments={() => { setMenuOpen(false); setPaymentsOpen(true); }}
