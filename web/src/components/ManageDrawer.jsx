@@ -63,7 +63,7 @@ export default function ManageDrawer({
             <button className="wide menu-item" onClick={onOpenAccount}>👤 Account</button>
             <button className="wide menu-item" onClick={onOpenPayments}>💰 Payment history</button>
             <a className="wide menu-item" href={`${apiBaseUrl().replace(/\/$/, '')}/stay`} target="_blank" rel="noreferrer">🛍️ View booking shopfront ↗</a>
-            {isAdmin && <button className="wide menu-item menu-admin" onClick={onOpenAdmin}>🛡️ Admin · all users</button>}
+            {isAdmin && <button className="wide menu-item menu-admin" onClick={onOpenAdmin}>🛡️ SimonStays admin portal</button>}
           </div>
         )}
 

@@ -292,6 +292,9 @@ a.menu-item { display: block; box-sizing: border-box; text-decoration: none; bor
 .admin-wrap { max-width: 1040px; margin: 0 auto; padding: 16px; }
 .admin-tools { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .admin-tools input { flex: 1; max-width: 360px; }
+.admin-filters { flex-wrap: wrap; }
+.admin-filters input[type=date] { flex: none; width: auto; }
+.admin-table tr.muted td { color: #9aa1ab; }
 .admin-table-wrap { overflow-x: auto; border: 1px solid var(--line, #e3e3e3); border-radius: 12px; }
 .admin-table { width: 100%; border-collapse: collapse; font-size: 14px; background: #fff; }
 .admin-table th, .admin-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line, #eee); white-space: nowrap; }

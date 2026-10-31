@@ -29,11 +29,11 @@ router.get('/', async (req, res) => {
   res.json({ account: { ...publicAccount(h), photoId: await hostPhotoId(h.id) } });
 });
 
-// SimonStays takes a 7.5% agency fee off each payout.
-const AGENCY_FEE_PERCENT = 7.5;
+// SimonStays takes its service fee (utils/fees, 10%) off each payout.
+const { FEE_PERCENT: AGENCY_FEE_PERCENT, feeOf } = require('../utils/fees');
 
 // GET /account/payments — bookings SimonStays collected for this host (website
-// bookings, paid), each with a priced breakdown and the 7.5% agency-fee
+// bookings, paid), each with a priced breakdown and the SimonStays fee
 // deduction, so the host sees the net amount paid out to them.
 router.get('/payments', async (req, res) => {
   const { quote } = require('../utils/pricing');
@@ -53,7 +53,7 @@ router.get('/payments', async (req, res) => {
       const prepaid = (b.cleans || []).filter((c) => c.paymentMethod !== 'direct').length;
       q = quote(b.unit.pricingGroup, { checkIn: iso(b.checkIn), checkOut: iso(b.checkOut), mattress: b.extraMattress, earlyCheckIn: b.earlyCheckIn, lateCheckOut: b.lateCheckOut, cleans: 1 + prepaid, overrides });
       grossCents = q.rentalCents;
-      agencyFeeCents = Math.round(grossCents * AGENCY_FEE_PERCENT / 100);
+      agencyFeeCents = feeOf(grossCents);
       netPayoutCents = grossCents - agencyFeeCents;
     }
     payments.push({

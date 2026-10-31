@@ -48,6 +48,10 @@ export const api = {
   // super-admin: list all hosts + sign in as one
   adminListHosts: () => req('GET', '/admin/hosts'),
   adminImpersonate: (hostId) => req('POST', `/admin/impersonate/${hostId}`),
+  adminProperties: () => req('GET', '/admin/properties'),
+  adminTransactions: (f = {}) => req('GET', `/admin/transactions?${new URLSearchParams(Object.entries(f).filter(([, v]) => v))}`),
+  adminMessageThreads: (hostId) => req('GET', `/admin/messages${hostId ? `?hostId=${encodeURIComponent(hostId)}` : ''}`),
+  adminMessageThread: (bookingId) => req('GET', `/admin/messages/${bookingId}`),
 
   // account: payout details + credential management
   getAccount: () => req('GET', '/account'),
