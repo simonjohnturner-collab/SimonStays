@@ -8,7 +8,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "za.co.simonstays.app"
+      "bundleIdentifier": "za.co.simonstays.app",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -31,7 +34,16 @@
     ],
     "scheme": "simonstays",
     "extra": {
-      "apiBase": "https://simonstays.co.za"
-    }
+      "apiBase": "https://simonstays.co.za",
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "5d64cdc3-639b-4892-ba28-dd4cd77791f3"
+      }
+    },
+    "owner": "simonjohnturner"
   }
 }
