@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
+import TeachSimon from './TeachSimon.jsx';
 
-// Guest messaging. Three tabs:
+// Guest messaging. Four tabs:
 //   Inbox      — one conversation per booking; send now, optionally from a saved message
 //   Saved      — pre-typed messages (with {placeholders}) to reuse
 //   Scheduled  — automatic messages sent at a time relative to each stay, per property
+//   Teach Simon — answer what the Ask Simon AI couldn't, and manage what it knows
 // Guests read and reply on the shopfront (simonstays.co.za → Messages) and get an email copy.
-export default function MessagesView({ onClose, properties = [], initialBookingId = null, onUnreadChange }) {
-  const [tab, setTab] = useState('inbox');
+export default function MessagesView({ onClose, properties = [], initialBookingId = null, initialTab = 'inbox', onUnreadChange }) {
+  const [tab, setTab] = useState(initialTab);
   const [templates, setTemplates] = useState([]);
   const [placeholders, setPlaceholders] = useState([]);
 
@@ -30,11 +32,13 @@ export default function MessagesView({ onClose, properties = [], initialBookingI
         <button className={tab === 'inbox' ? 'on' : ''} onClick={() => setTab('inbox')}>💬 Inbox</button>
         <button className={tab === 'saved' ? 'on' : ''} onClick={() => setTab('saved')}>📝 Saved messages</button>
         <button className={tab === 'scheduled' ? 'on' : ''} onClick={() => setTab('scheduled')}>⏰ Scheduled</button>
+        <button className={tab === 'teach' ? 'on' : ''} onClick={() => setTab('teach')}>🧠 Teach Simon</button>
       </div>
 
       {tab === 'inbox' && <Inbox templates={templates} initialBookingId={initialBookingId} onUnreadChange={onUnreadChange} />}
       {tab === 'saved' && <SavedMessages templates={templates} placeholders={placeholders} onChanged={loadTemplates} />}
       {tab === 'scheduled' && <Scheduled templates={templates} properties={properties} />}
+      {tab === 'teach' && <TeachSimon properties={properties} onCountChange={onUnreadChange} />}
     </div>
   );
 }

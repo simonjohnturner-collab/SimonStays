@@ -30,6 +30,10 @@ app.use('/listings', require('./routes/listings'));
 // its paths are matched first (the /public router has no /account/* routes).
 app.use('/public/account/messages', require('./routes/guestMessages'));
 app.use('/public/account', require('./routes/guestAuth'));
+// Paygate PayWeb3 callbacks (notify + guest return) — public, verified with Paygate.
+app.use('/public/paygate', require('./routes/paygate'));
+// Ask Simon (AI guest Q&A on the shopfront) — public, rate-limited.
+app.use('/public/ask', require('./routes/ask'));
 // Public shopfront API (no auth) — mount before the auth'd catch-all routers.
 app.use('/public', require('./routes/public'));
 
@@ -100,6 +104,7 @@ app.use('/cleaners', require('./routes/cleaners'));
 app.use('/providers', require('./routes/providers'));
 app.use('/guests', require('./routes/guests'));
 app.use('/messages', require('./routes/messages'));
+app.use('/teach', require('./routes/teach'));
 app.use('/smartlocks', require('./routes/smartlocks'));
 app.use('/groups', require('./routes/groups'));
 app.use('/properties', require('./routes/properties'));

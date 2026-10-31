@@ -60,9 +60,13 @@ export default function Main() {
   const [account, setAccount] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [market, setMarket] = useState(false);
-  const [messages, setMessages] = useState(null); // { bookingId } when open
+  const [messages, setMessages] = useState(null); // { bookingId, tab } when open
   const [unreadMessages, setUnreadMessages] = useState(0);
-  const loadUnread = useCallback(() => { api.messageUnread().then((r) => setUnreadMessages(r.count)).catch(() => {}); }, []);
+  const [teachCount, setTeachCount] = useState(0); // Ask Simon questions waiting for an answer
+  const loadUnread = useCallback(() => {
+    api.messageUnread().then((r) => setUnreadMessages(r.count)).catch(() => {});
+    api.teachCount().then((r) => setTeachCount(r.count)).catch(() => {});
+  }, []);
   useEffect(() => { loadUnread(); const t = setInterval(loadUnread, 60000); return () => clearInterval(t); }, [loadUnread]);
   const [formsInitialId, setFormsInitialId] = useState(null); // open Forms straight to this submission
   const [focus, setFocus] = useState(null); // { unitId, bookingId, key } — jump target
@@ -242,6 +246,7 @@ export default function Main() {
         onClose={() => { setMessages(null); loadUnread(); }}
         properties={properties.map((p) => ({ id: p.id, name: p.name }))}
         initialBookingId={messages.bookingId}
+        initialTab={messages.tab || 'inbox'}
         onUnreadChange={loadUnread}
       />
     );
@@ -309,6 +314,9 @@ export default function Main() {
         <button className="ghost" onClick={() => setListings(true)}>🏠 Listings</button>
         <button className="ghost msg-top-btn" onClick={() => setMessages({ bookingId: null })} title="Guest messages">
           💬 Messages{unreadMessages > 0 && <span className="msg-dot">{unreadMessages}</span>}
+        </button>
+        <button className="ghost" onClick={() => setMessages({ bookingId: null, tab: 'teach' })} title="Questions guests asked Simon that need your answer">
+          🧠 Teach Simon{teachCount > 0 && <span className="msg-dot">{teachCount}</span>}
         </button>
         <NotificationsBell onOpen={openFormsSubmission} />
         <span className="host">{host.email}</span>

@@ -172,6 +172,17 @@ export const api = {
   updateMessageSchedule: (id, data) => req('PATCH', `/messages/schedules/${id}`, data),
   deleteMessageSchedule: (id) => req('DELETE', `/messages/schedules/${id}`),
 
+  // Teach Simon (the Ask Simon AI's knowledge)
+  teachStatus: () => req('GET', '/teach/status'),
+  teachCount: () => req('GET', '/teach/count'),
+  teachQuestions: (status) => req('GET', `/teach/questions?status=${status}`),
+  teachAnswer: (id, data) => req('POST', `/teach/questions/${id}/answer`, data),
+  teachDismiss: (id) => req('POST', `/teach/questions/${id}/dismiss`),
+  listKnowledge: () => req('GET', '/teach/knowledge'),
+  createKnowledge: (data) => req('POST', '/teach/knowledge', data),
+  updateKnowledge: (id, data) => req('PATCH', `/teach/knowledge/${id}`, data),
+  deleteKnowledge: (id) => req('DELETE', `/teach/knowledge/${id}`),
+
   // competitor market intelligence (the "building fill" / market-watch view)
   marketCompetitors: () => req('GET', '/market/competitors'),
   marketAddCompetitor: (data) => req('POST', '/market/competitors', data),

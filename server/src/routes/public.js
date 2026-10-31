@@ -32,7 +32,9 @@ async function emailInvoice(data) {
   const html = invoiceHtml({ ...data, eft });
   const ok = await sendMail({
     to: data.to,
-    subject: `Your SimonStays booking is confirmed · ${data.ref}`,
+    // Only a simulated card payment is confirmed at this point; EFT and real card
+    // payments are confirmed once the money arrives.
+    subject: data.awaitingPayment ? `Your SimonStays booking · ${data.ref} (awaiting payment)` : `Your SimonStays booking is confirmed · ${data.ref}`,
     html,
     text: `Thank you for booking ${data.propertyName} · Unit ${data.unitName}. Check-in ${data.checkIn} (from ${data.checkInTime || '15:00'}) → Check-out ${data.checkOut} (by ${data.checkOutTime || '10:00'}). Booking reference ${data.ref}. Total: R${((data.quote.totalCents || 0) / 100).toFixed(2)}.`,
   });
@@ -342,12 +344,17 @@ router.post('/book', optionalGuest, async (req, res, next) => {
         earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut,
       },
     });
-    const checkout = await payments.createCheckout(booking, payableCents);
+    // Card: send the guest to Paygate for what's due now (the first half on a
+    // 50/50 split). EFT is paid by hand, so no online checkout.
+    const dueNowCents = split ? payableCents - owingCents : payableCents;
+    const checkout = method === 'Card'
+      ? await payments.createCheckout(booking, dueNowCents, { base: siteBase(req) })
+      : { mode: 'eft' };
 
     // Email the guest their invoice (fire-and-forget — never block the booking).
     if (b.guestEmail) {
       emailInvoice({
-        hostId, to: b.guestEmail, ref,
+        hostId, to: b.guestEmail, ref, awaitingPayment: checkout.mode !== 'simulate',
         propertyName: unit.property.name, unitName: unit.name,
         checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut),
         checkInTime: unit.checkInTime || '15:00', checkOutTime: unit.checkOutTime || '10:00',
@@ -360,7 +367,7 @@ router.post('/book', optionalGuest, async (req, res, next) => {
       bookingId: booking.id, ref, amountCents: payableCents, quote: q,
       property: unit.property.name, unit: unit.name,
       checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut),
-      payment: checkout, // { mode:'simulate' } for now; { mode:'redirect', url } when a vendor is live
+      payment: checkout, // { mode:'simulate' } | { mode:'form', action, fields } (Paygate) | { mode:'eft' }
     });
   } catch (e) { next(e); }
 });
@@ -407,6 +414,51 @@ router.post('/book/:id/pay', async (req, res, next) => {
       property: booking.unit.property.name, unit: booking.unit.name,
       accessCode, // null until the smart-lock integration is live
     });
+  } catch (e) { next(e); }
+});
+
+// The site's own origin as the guest sees it (Paygate return + notify URLs).
+// PAYMENT_BASE_URL overrides it — Paygate refuses non-public addresses like localhost.
+const siteBase = (req) => (process.env.PAYMENT_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+
+// GET /public/book/:id/status — after Paygate sends the guest back. The booking
+// id (a UUID) is the capability; only what the confirmation screen needs. If a
+// payment is still pending, ask Paygate first in case its notify hasn't landed.
+router.get('/book/:id/status', async (req, res, next) => {
+  try {
+    await payments.reconcileBooking(req.params.id);
+    const b = await prisma.booking.findUnique({ where: { id: req.params.id }, include: { unit: { include: { property: true } } } });
+    if (!b || b.source !== 'website') return res.status(404).json({ error: 'not_found' });
+    res.json({
+      status: b.status, paymentStatus: b.paymentStatus, ref: b.ref,
+      property: b.unit ? b.unit.property.name : null, unit: b.unit ? b.unit.name : null,
+      checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
+      amountOwingCents: b.amountOwingCents || 0, guestEmail: b.guestEmail || null,
+    });
+  } catch (e) { next(e); }
+});
+
+// POST /public/book/:id/checkout { kind } — (re)start a Paygate payment: retry
+// after a cancelled payment ('booking'), or pay the rest of a 50/50 split ('balance').
+router.post('/book/:id/checkout', async (req, res, next) => {
+  try {
+    if (!payments.isOnline()) return res.status(400).json({ error: 'offline', message: 'Online payment isn’t switched on yet — please pay by EFT.' });
+    const b = await prisma.booking.findUnique({ where: { id: req.params.id }, include: { unit: { include: { property: true } } } });
+    if (!b || b.source !== 'website') return res.status(404).json({ error: 'not_found' });
+    const kind = (req.body || {}).kind === 'balance' ? 'balance' : 'booking';
+    let amount;
+    if (kind === 'balance') {
+      if (b.status !== 'confirmed' || !(b.amountOwingCents > 0)) return res.status(400).json({ error: 'nothing_owing', message: 'There is no balance to pay on this booking.' });
+      amount = b.amountOwingCents;
+    } else {
+      if (b.status !== 'pending') return res.status(400).json({ error: 'not_pending', message: b.status === 'confirmed' ? 'This booking is already paid and confirmed.' : 'This booking can no longer be paid.' });
+      const avail = await checkAvailability(b.unitId, iso(b.checkIn), iso(b.checkOut), b.id);
+      if (!avail.available) return res.status(409).json({ error: 'dates_unavailable', message: 'Sorry — those dates have since been booked. Please choose different dates.' });
+      // What's due now: the whole stay, or the first half on a 50/50 split.
+      amount = b.paymentStatus === 'partial' && b.amountOwingCents ? (b.totalCents || 0) - b.amountOwingCents : (b.totalCents || 0);
+    }
+    if (!(amount > 0)) return res.status(400).json({ error: 'no_amount' });
+    res.json({ payment: await payments.createCheckout(b, amount, { base: siteBase(req), kind }) });
   } catch (e) { next(e); }
 });
 

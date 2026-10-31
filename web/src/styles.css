@@ -927,3 +927,7 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
   .msg-list { max-height:none; }
   .msg-bubble { max-width:90%; }
 }
+
+/* Teach Simon */
+.msg-tabs.sub { padding:0; margin:0 0 12px; }
+.teach-q { font-weight:600; margin:4px 0 6px; white-space:pre-wrap; }

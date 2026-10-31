@@ -42,6 +42,8 @@ model Host {
   messageTemplates MessageTemplate[]
   messageSchedules MessageSchedule[]
   messages         Message[]
+  knowledge        KnowledgeEntry[]
+  askQuestions     AskQuestion[]
 }
 
 // A host's connection to a smart-lock cloud provider (RemoteLock). Holds the
@@ -205,6 +207,8 @@ model Property {
   units       Unit[]
   photos      Photo[]
   formSubmissions FormSubmission[]
+  knowledge       KnowledgeEntry[]
+  askQuestions    AskQuestion[]
 
   @@index([hostId])
 }
@@ -484,6 +488,7 @@ model Booking {
   // "when a booking is confirmed" scheduled messages. Null on pre-existing rows.
   confirmedAt  DateTime?
   messages     Message[]
+  payments     Payment[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -554,6 +559,69 @@ model Message {
   @@unique([scheduleId, bookingId])
   @@index([bookingId, createdAt])
   @@index([hostId, createdAt])
+}
+
+// ---- Ask Simon (AI guest Q&A) ----
+// Guests ask questions about a stay on the shopfront; Simon (Claude) answers from
+// the listing details plus what the host has taught it. Questions it can't
+// answer queue up under "Teach Simon"; the host's answer becomes a KnowledgeEntry.
+
+// One thing Simon knows: a question and the host's answer, for one property or
+// (propertyId null) all of the host's properties.
+model KnowledgeEntry {
+  id         String    @id @default(uuid())
+  hostId     String
+  host       Host      @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  question   String
+  answer     String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([hostId, propertyId])
+}
+
+// A guest's question to Simon and what happened to it.
+model AskQuestion {
+  id             String    @id @default(uuid())
+  hostId         String
+  host           Host      @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  unitId         String?
+  sessionId      String? // the shopfront visitor's chat session (localStorage)
+  guestAccountId String? // set when the guest was signed in
+  bookingId      String? // their booking at this property, if any — the host's answer is messaged there
+  question       String
+  answer         String? // what Simon replied
+  status         String    @default("answered") // answered | needs_answer | taught | dismissed
+  hostAnswer     String? // the host's answer, once taught
+  knowledgeId    String? // the KnowledgeEntry the host's answer created
+  answeredAt     DateTime? // when the host answered (or Simon later could)
+  createdAt      DateTime  @default(now())
+
+  @@index([hostId, status, createdAt])
+  @@index([propertyId, sessionId])
+}
+
+// One online payment attempt for a booking (PayFast). Created when the guest is
+// sent to pay; updated by PayFast's notification (ITN). Its id is the
+// m_payment_id we send, and providerRef (pf_payment_id) makes repeats idempotent.
+model Payment {
+  id          String   @id @default(uuid())
+  bookingId   String
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  provider    String   @default("payfast")
+  kind        String   @default("booking") // 'booking' (first payment) | 'balance' (rest of a 50/50 split)
+  amountCents Int
+  status      String   @default("pending") // pending | COMPLETE | FAILED | CANCELLED (PayFast's payment_status)
+  providerRef String?  @unique // pf_payment_id
+  raw         Json? // the verified notification, for the audit trail
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([bookingId])
 }
 
 model SyncLog {

@@ -173,6 +173,20 @@
   .badge.pending{ background:#fff7e6; color:#8a5a00; }
   .badge.cancelled{ background:#fdecec; color:#c0392b; }
   .trip-info{ background:#eef6f0; border:1px solid #cfe6d6; border-radius:10px; padding:8px 12px; margin-top:8px; font-size:13px; line-height:1.6; }
+  /* Ask Simon (AI Q&A on a stay) */
+  .ask-box{ margin:14px 0 4px; border:1px solid #cfe6d6; background:#f3faf5; border-radius:14px; padding:12px 14px; }
+  .ask-open{ display:flex; width:100%; align-items:center; gap:10px; text-align:left; background:transparent; color:var(--ink); padding:0; font-weight:400; }
+  .ask-open:hover{ background:transparent; }
+  .ask-av{ flex-shrink:0; width:38px; height:38px; border-radius:50%; background:var(--green); color:#fff; display:flex; align-items:center; justify-content:center; font-size:19px; }
+  .ask-open b{ display:block; font-size:15px; }
+  .ask-open span.sub{ color:var(--muted); font-size:13px; }
+  .ask-thread{ display:flex; flex-direction:column; gap:8px; margin:12px 0 8px; max-height:340px; overflow-y:auto; }
+  .ask-thread .bub.simon{ align-self:flex-start; background:#fff; border:1px solid var(--line); border-bottom-left-radius:4px; }
+  .ask-thread .bub.me{ align-self:flex-end; background:#dff0e6; border-bottom-right-radius:4px; }
+  .ask-thread .bub.wait{ border-style:dashed; color:var(--muted); }
+  .ask-chips{ display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; }
+  .ask-chips button{ background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:6px 12px; font-size:13px; font-weight:400; }
+  .ask-note{ font-size:12px; color:var(--muted); margin-top:6px; }
   /* Guest messages */
   .acct-btn .dot{ display:inline-block; min-width:18px; padding:0 5px; margin-left:4px; border-radius:999px; background:#e74c3c; color:#fff; font-size:11px; line-height:18px; text-align:center; }
   .th-item{ display:block; width:100%; text-align:left; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:10px; font-weight:400; }
@@ -189,6 +203,7 @@
   .reply textarea{ flex:1; font:inherit; font-size:16px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; min-height:46px; max-height:160px; resize:vertical; }
   .reply button{ flex-shrink:0; padding:12px 16px; }
   .trip-msg{ margin-top:10px; background:#eef1f4; color:var(--ink); }
+  .trip-pay{ margin-top:10px; }
   @media(max-width:640px){ .gallery{ grid-template-columns:1fr 1fr; } .gallery .g0{ grid-column:span 2; } .trip{ flex-direction:column; } .trip-thumb{ width:100%; height:170px; } }
 </style>
 </head>
@@ -382,6 +397,72 @@
       loadCal();
     }catch(e){ host.innerHTML=''; alert('Could not load this stay.'); }
   }
+  // ---- Ask Simon: AI answers about this stay; unknowns go to the host ----
+  function askSession(){
+    var k='ss_ask_sid', v=null;
+    try{ v=localStorage.getItem(k); }catch(e){}
+    if(!v){ v='s'+Date.now().toString(36)+Math.random().toString(36).slice(2,10); try{ localStorage.setItem(k,v); }catch(e){} }
+    return v;
+  }
+  var ASK_POLL=null;
+  function renderAsk(box, p, u){
+    if(!box) return;
+    clearInterval(ASK_POLL);
+    var sid=askSession(), items=[], busy=false, open=false;
+    var SUGGEST=['Is there parking?','What’s the Wi-Fi like?','Is there backup power?','Can I check in early?'];
+    function headers(){ return Object.assign({'Content-Type':'application/json'}, authHeaders()); }
+    async function loadHistory(){
+      try{
+        var r=await fetch(API+'/public/ask/history?propertyId='+encodeURIComponent(p.id)+'&sessionId='+encodeURIComponent(sid),{headers:authHeaders()});
+        if(!r.ok) return; var d=await r.json(); items=d.questions||[];
+      }catch(e){}
+    }
+    function closed(){
+      box.innerHTML='<button class="ask-open"><span class="ask-av">💬</span><span><b>Ask Simon</b><span class="sub">Questions about this stay? Simon answers right away'+(items.length?' · '+items.length+' asked':'')+'</span></span></button>';
+      box.querySelector('.ask-open').onclick=function(){ open=true; draw(); };
+    }
+    function draw(){
+      if(!box.isConnected){ clearInterval(ASK_POLL); return; }
+      if(!open){ closed(); return; }
+      var bubbles=items.map(function(q){
+        return '<div class="bub me">'+esc(q.question)+'</div>'+
+          '<div class="bub simon'+(q.waiting?' wait':'')+'">'+esc(q.answer||'')+'<span class="when">'+(q.fromHost?'Your host':'Simon')+(q.waiting?' · waiting for your host':'')+'</span></div>';
+      }).join('');
+      box.innerHTML='<div style="display:flex;align-items:center;gap:10px"><span class="ask-av">💬</span><div style="flex:1"><b>Ask Simon</b><div class="note small">Simon is an AI assistant that knows this stay. If it doesn’t know, your host answers.</div></div><button class="th-back" id="askClose" style="margin:0">Close</button></div>'+
+        '<div class="ask-thread">'+(bubbles||'<div class="bub simon">Hi! I’m Simon. Ask me anything about '+esc(p.name)+' — parking, check-in, what’s nearby, backup power…</div>')+'</div>'+
+        (items.length?'':'<div class="ask-chips">'+SUGGEST.map(function(t){ return '<button data-q="'+esc(t)+'">'+esc(t)+'</button>'; }).join('')+'</div>')+
+        '<div class="reply"><textarea id="askTxt" rows="1" maxlength="500" placeholder="Ask a question…"></textarea><button id="askGo"'+(busy?' disabled':'')+'>'+(busy?'…':'Ask')+'</button></div>'+
+        '<div id="askMsg"></div>';
+      var th=box.querySelector('.ask-thread'); th.scrollTop=th.scrollHeight;
+      box.querySelector('#askClose').onclick=function(){ open=false; draw(); };
+      box.querySelectorAll('.ask-chips button').forEach(function(b){ b.onclick=function(){ send(b.getAttribute('data-q')); }; });
+      var ta=box.querySelector('#askTxt');
+      box.querySelector('#askGo').onclick=function(){ send(ta.value); };
+      ta.addEventListener('keydown',function(e){ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(ta.value); } });
+    }
+    async function send(text){
+      text=(text||'').trim(); if(!text||busy) return;
+      busy=true; items.push({ question:text, answer:'Simon is typing…' }); draw();
+      try{
+        var r=await fetch(API+'/public/ask',{method:'POST',headers:headers(),body:JSON.stringify({ propertyId:p.id, unitId:u&&u.id, question:text, sessionId:sid })});
+        var d=await r.json();
+        items.pop();
+        if(!r.ok){ busy=false; draw(); box.querySelector('#askMsg').innerHTML='<div class="msg err">'+esc(d.message||'Simon couldn’t answer just now. Please try again.')+'</div>'; return; }
+        items.push(d.question);
+      }catch(e){ items.pop(); busy=false; draw(); box.querySelector('#askMsg').innerHTML='<div class="msg err">Simon couldn’t answer just now. Please try again.</div>'; return; }
+      busy=false; draw();
+    }
+    // Pick up host answers to waiting questions while the page is open.
+    ASK_POLL=setInterval(async function(){
+      if(!box.isConnected){ clearInterval(ASK_POLL); return; }
+      if(busy || !items.some(function(q){ return q.waiting; })) return;
+      var typing=box.querySelector('#askTxt'); if(typing && typing.value.trim()) return;
+      await loadHistory(); draw();
+    }, 20000);
+    closed();
+    loadHistory().then(function(){ if(!busy) draw(); });
+  }
+
   function startMonth(){ var d=new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; }
   function galleryHtml(photos){ return '<div class="gallery">'+photos.map(function(ph,i){ return '<img class="g'+i+'" data-full="'+API+'/photos/'+ph.id+'" src="'+API+'/photos/'+ph.id+'">'; }).join('')+'</div>'; }
 
@@ -414,6 +495,7 @@
       '<div class="sheet-body">'+gal+
       '<div class="note">📍 '+esc(p.address||'Location shared on booking')+'</div>'+
       hostBlock+
+      '<div class="ask-box" id="askBox"></div>'+
       (hasLoc?'<div id="detailMap" class="detail-map"></div>':'')+
       '<h3 class="sec">About this unit</h3>'+
       (u.description?('<div class="desc">'+esc(u.description)+'</div>'):'')+
@@ -423,6 +505,7 @@
       '<div class="book-panel" id="bookPanel"></div>'+
       '</div></div>';
     host.innerHTML=''; host.appendChild(overlay);
+    renderAsk(overlay.querySelector('#askBox'), p, u);
     overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
     overlay.querySelectorAll('.gallery img').forEach(function(img){ img.onclick=function(){ lightbox(img.getAttribute('data-full')); }; });
     if(hasLoc){
@@ -643,6 +726,7 @@
       var d=await r.json();
       if(!r.ok){ cm.innerHTML='<div class="msg err">'+esc(d.message||'Could not create the booking.')+'</div>'; btn.disabled=false; btn.textContent='Confirm booking'; return; }
       STATE.ref=d.ref||null;
+      if(method==='card' && d.payment && d.payment.mode==='form'){ btn.textContent='Taking you to secure payment…'; goToGateway(d.payment); return; }
       if(method==='card' && d.payment && d.payment.mode==='redirect'){ window.location=d.payment.url; return; }
       if(method==='card'){
         btn.textContent='Confirming…';
@@ -819,8 +903,60 @@
       body.innerHTML='<div class="tabs"><button class="'+(tab==='upcoming'?'on':'')+'" data-t="upcoming">Upcoming ('+up.length+')</button><button class="'+(tab==='previous'?'on':'')+'" data-t="previous">Previous ('+prev.length+')</button></div>'+cards;
       body.querySelectorAll('.tabs button').forEach(function(b){ b.onclick=function(){ tab=b.getAttribute('data-t'); draw(); }; });
       body.querySelectorAll('.trip-msg').forEach(function(b){ b.onclick=function(){ openInbox(b.getAttribute('data-id')); }; });
+      body.querySelectorAll('.trip-pay').forEach(function(b){ b.onclick=function(){ startCheckout(b.getAttribute('data-id'),'balance',b); }; });
     }
     draw();
+  }
+
+  // ---- Paygate: send the guest to pay, and handle their return ----
+  // The browser posts straight to Paygate's payment page (card details never touch this site).
+  function goToGateway(pay){
+    var f=document.createElement('form'); f.method='POST'; f.action=pay.action; f.style.display='none';
+    Object.keys(pay.fields).forEach(function(k){ var i=document.createElement('input'); i.type='hidden'; i.name=k; i.value=pay.fields[k]; f.appendChild(i); });
+    document.body.appendChild(f); f.submit();
+  }
+  async function startCheckout(bookingId, kind, btn){
+    if(btn){ btn.disabled=true; btn.textContent='Taking you to secure payment…'; }
+    try{
+      var r=await fetch(API+'/public/book/'+encodeURIComponent(bookingId)+'/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:kind})});
+      var d=await r.json();
+      if(!r.ok || !d.payment || d.payment.mode!=='form') throw new Error(d.message||'Could not start the payment.');
+      goToGateway(d.payment);
+    }catch(e){ if(btn){ btn.disabled=false; btn.textContent='Try again'; } alert(e.message||'Could not start the payment. Please try again.'); }
+  }
+  // After paying, Paygate sends the guest (via /public/paygate/return) to
+  // /?booking=<id>&paid=1, or &payment=cancelled if it was declined or cancelled.
+  // The server checks with Paygate; the status call keeps checking until it's settled.
+  async function paymentReturn(bookingId, cancelled){
+    try{ history.replaceState(null,'',location.pathname); }catch(e){}
+    var host=$('#detail'), overlay=el('div','overlay');
+    overlay.innerHTML='<div class="sheet" style="max-width:520px"><div class="sheet-head"><h2>'+(cancelled?'Payment not completed':'Confirming your payment…')+'</h2><button class="x">&times;</button></div><div class="sheet-body"><div class="done"><div class="big">'+(cancelled?'↩':'⏳')+'</div><p class="note">'+(cancelled?'Loading your booking…':'Please wait while we confirm your payment with Paygate.')+'</p></div></div></div>';
+    host.innerHTML=''; host.appendChild(overlay);
+    overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
+    var body=overlay.querySelector('.sheet-body'), head=overlay.querySelector('h2');
+    async function status(){ var r=await fetch(API+'/public/book/'+encodeURIComponent(bookingId)+'/status'); if(!r.ok) throw new Error(); return r.json(); }
+    function summary(s){ return '<div class="ref-badge">Booking reference <b>'+esc(s.ref||'')+'</b></div><p>'+esc(s.property||'')+(s.unit?(' · Unit '+esc(s.unit)):'')+'<br>📅 '+esc(s.checkIn)+' → '+esc(s.checkOut)+'</p>'; }
+    var s;
+    try{ s=await status(); }catch(e){ body.innerHTML='<div class="msg err">We couldn’t find that booking. If you paid, please contact us with your payment receipt.</div>'; return; }
+    if(cancelled && s.status==='pending'){
+      head.textContent='Payment not completed';
+      body.innerHTML='<div class="done"><div class="big">↩</div>'+summary(s)+'<p class="note">The payment was cancelled or declined, so no money was taken. This booking isn’t confirmed and the dates aren’t held yet.</p><button id="retryPay" class="cta-btn">💳 Try paying again</button></div>';
+      overlay.querySelector('#retryPay').onclick=function(){ startCheckout(bookingId,'booking',this); };
+      return;
+    }
+    for(var i=0; i<30 && s.status!=='confirmed'; i++){ await new Promise(function(r){ setTimeout(r,2000); }); try{ s=await status(); }catch(e){} }
+    if(s.status==='confirmed'){
+      head.textContent='Booking confirmed';
+      body.innerHTML='<div class="done"><div class="big">✅</div><h3>Payment received — you’re booked!</h3>'+summary(s)+
+        (s.amountOwingCents?'<p class="note">Balance of <b>'+rand(s.amountOwingCents)+'</b> is due at least 3 days before check-in — you can pay it from <b>My trips</b>.</p>':'')+
+        '<p class="note">'+(s.guestEmail?'Your invoice was emailed to <b>'+esc(s.guestEmail)+'</b>. ':'')+(GUEST?'Find this trip under <b>My trips</b>.':'Create an account with the same email to see this trip and message your host.')+'</p>'+
+        '<button id="payDone" class="cta-btn">Done</button></div>';
+      overlay.querySelector('#payDone').onclick=function(){ host.innerHTML=''; if(GUEST) openTrips(); };
+    } else {
+      head.textContent='Payment received?';
+      body.innerHTML='<div class="done"><div class="big">⏳</div>'+summary(s)+'<p class="note">We haven’t had confirmation from Paygate yet. If your payment went through, your booking will be confirmed shortly and you’ll get an email — no need to pay again.</p><button id="payCheck" class="cta-btn">Check again</button></div>';
+      overlay.querySelector('#payCheck').onclick=function(){ paymentReturn(bookingId,false); };
+    }
   }
 
   // ---- Messages from the host (per trip) ----
@@ -925,6 +1061,7 @@
         (money.length?('<div style="margin-top:6px">'+money.join('')+'</div>'):'')+
         (info.length?('<div class="trip-info">'+info.join('<br>')+'</div>'):'')+
         pending+
+        (t.canPayBalance?'<button class="trip-pay cta-btn" data-id="'+esc(t.id)+'">💳 Pay balance '+rand(t.amountOwingCents)+'</button>':'')+
         (t.status!=='cancelled'?'<button class="trip-msg" data-id="'+esc(t.id)+'">💬 Messages</button>':'')+
       '</div>'+
     '</div>';
@@ -933,6 +1070,8 @@
   loadSession(); renderAcct(); refreshAccount();
   refreshUnread(); setInterval(refreshUnread, 60000);
   if(/[?&]messages\b/.test(location.search)) openInbox();
+  (function(){ var q=new URLSearchParams(location.search), b=q.get('booking');
+    if(b && (q.get('paid') || q.get('payment')==='cancelled')) paymentReturn(b, q.get('payment')==='cancelled'); })();
   load();
 })();
 </script>

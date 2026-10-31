@@ -10,6 +10,7 @@ const prisma = require('../lib/prisma');
 const { signGuest } = require('../lib/jwt');
 const { authGuest } = require('../middleware/auth');
 const { DEFAULT_CANCELLATION_POLICY } = require('../utils/policy');
+const payments = require('../utils/payments');
 
 const router = express.Router();
 
@@ -95,6 +96,8 @@ function tripOf(b) {
     totalCents: b.totalCents != null ? b.totalCents : null,
     depositCents: b.depositCents != null ? b.depositCents : null,
     amountOwingCents: b.amountOwingCents != null ? b.amountOwingCents : null,
+    // A website booking with a balance left can be paid online from "My trips".
+    canPayBalance: confirmed && b.source === 'website' && b.amountOwingCents > 0 && payments.isOnline(),
     cancellationPolicy: (p && p.cancellationPolicy) || DEFAULT_CANCELLATION_POLICY,
     coverPhotoId: (u && u.photos && u.photos[0] && u.photos[0].id) || (p && p.photos && p.photos[0] && p.photos[0].id) || null,
     // Practical arrival info the guest is entitled to — only once confirmed.
