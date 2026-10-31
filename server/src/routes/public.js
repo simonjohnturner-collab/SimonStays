@@ -349,7 +349,7 @@ router.post('/book', optionalGuest, async (req, res, next) => {
     const dueNowCents = split ? payableCents - owingCents : payableCents;
     let checkout = { mode: 'eft' };
     if (method === 'Card') {
-      try { checkout = await payments.createCheckout(booking, dueNowCents, { base: siteBase(req) }); }
+      try { checkout = await payments.createCheckout(booking, dueNowCents, { base: siteBase(req), returnTo: b.appReturn }); }
       catch (e) {
         // Paygate refused (e.g. DATA_CHK = the PAYGATE_KEY doesn't match the PAYGATE_ID).
         // Don't leave a half-made booking behind; let the guest pick EFT instead.
@@ -466,7 +466,7 @@ router.post('/book/:id/checkout', async (req, res, next) => {
       amount = b.paymentStatus === 'partial' && b.amountOwingCents ? (b.totalCents || 0) - b.amountOwingCents : (b.totalCents || 0);
     }
     if (!(amount > 0)) return res.status(400).json({ error: 'no_amount' });
-    res.json({ payment: await payments.createCheckout(b, amount, { base: siteBase(req), kind }) });
+    res.json({ payment: await payments.createCheckout(b, amount, { base: siteBase(req), kind, returnTo: (req.body || {}).appReturn }) });
   } catch (e) { next(e); }
 });
 

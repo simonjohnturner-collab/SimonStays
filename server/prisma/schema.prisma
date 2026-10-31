@@ -618,6 +618,7 @@ model Payment {
   status      String   @default("pending") // pending | COMPLETE | FAILED | CANCELLED (PayFast's payment_status)
   providerRef String?  @unique // pf_payment_id
   raw         Json? // the verified notification, for the audit trail
+  returnTo    String? // the SimonStays app's deep link to send the guest back to (null = website)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

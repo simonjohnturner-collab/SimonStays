@@ -27,17 +27,26 @@ async function emailFor(b) {
 
 // Start a payment. `base` is the site's own origin (for Paygate's return and
 // notify URLs). Returns { mode:'simulate' } or { mode:'form', action, fields }.
-async function createCheckout(booking, amountCents, { base, kind = 'booking' } = {}) {
+// `returnTo` is the app's deep link (see appReturn) — after paying, the guest is
+// sent back into the app instead of the website.
+async function createCheckout(booking, amountCents, { base, kind = 'booking', returnTo = null } = {}) {
   if (!isOnline() || !base) return { mode: 'simulate', amountCents };
   const b = booking.unit ? booking : await prisma.booking.findUnique({ where: { id: booking.id }, include: { unit: { include: { property: true } } } });
-  const payment = await prisma.payment.create({ data: { bookingId: b.id, kind, amountCents, provider: 'paygate' } });
+  const payment = await prisma.payment.create({ data: { bookingId: b.id, kind, amountCents, provider: 'paygate', returnTo: appReturn(returnTo) } });
   const init = await paygate.initiate({
     reference: payment.id, amountCents, email: await emailFor(b), user1: kind,
     returnUrl: `${base}/public/paygate/return/${payment.id}`,
     notifyUrl: `${base}/public/paygate/notify`,
   });
   await prisma.payment.update({ where: { id: payment.id }, data: { providerRef: init.payRequestId } });
-  return { mode: 'form', paymentId: payment.id, amountCents, ...init.form };
+  return { mode: 'form', paymentId: payment.id, amountCents, ...init.form, goUrl: `${base}/public/paygate/go/${payment.id}` };
+}
+
+// Only the SimonStays app's own link schemes may be a return target (never a
+// web address — that would be an open redirect). exp:// is Expo Go in testing.
+function appReturn(url) {
+  const u = String(url || '').trim();
+  return /^(simonstays|exp|exps):\/\/[^\s"'<>]{0,300}$/i.test(u) ? u : null;
 }
 
 // Used by POST /public/book/:id/pay. Only simulate mode confirms from the
@@ -167,4 +176,4 @@ async function alertHost(booking, body) {
   } catch (e) { console.error('[payments] host alert failed', e.message); }
 }
 
-module.exports = { createCheckout, verifyPayment, reconcile, reconcileBooking, handleNotify, expireAbandoned, isOnline, MODE };
+module.exports = { appReturn, createCheckout, verifyPayment, reconcile, reconcileBooking, handleNotify, expireAbandoned, isOnline, MODE };

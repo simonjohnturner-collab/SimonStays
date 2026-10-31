@@ -10,6 +10,7 @@
 const crypto = require('crypto');
 
 const BASE = 'https://secure.paygate.co.za/payweb3';
+const PROCESS_URL = `${BASE}/process.trans`;
 // Paygate's published test merchant (docs: PayWeb3 Testing) — no real money.
 const TEST = { paygateId: '10011072130', key: 'secret' };
 
@@ -72,7 +73,7 @@ async function initiate({ reference, amountCents, email, returnUrl, notifyUrl, u
   if (r.CHECKSUM !== checksum([r.PAYGATE_ID, r.PAY_REQUEST_ID, r.REFERENCE], c.key)) throw new Error('Paygate initiate: bad response checksum');
   return {
     payRequestId: r.PAY_REQUEST_ID,
-    form: { action: `${BASE}/process.trans`, fields: { PAY_REQUEST_ID: r.PAY_REQUEST_ID, CHECKSUM: r.CHECKSUM } },
+    form: { action: PROCESS_URL, fields: { PAY_REQUEST_ID: r.PAY_REQUEST_ID, CHECKSUM: r.CHECKSUM } },
   };
 }
 
@@ -123,4 +124,4 @@ async function selfTest(base) {
   }
 }
 
-module.exports = { mode, config, ready, initiate, query, validPayload, checksum, md5, txDate, selfTest, STATUS, TEST };
+module.exports = { mode, config, ready, initiate, query, validPayload, checksum, md5, txDate, selfTest, STATUS, TEST, PROCESS_URL };

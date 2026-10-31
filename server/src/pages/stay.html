@@ -315,7 +315,7 @@
     if(list.length===0){ box.appendChild(el('div','empty', GEO ? ('No stays within '+radiusKm()+' km of '+shortLabel(GEO.label)+'. Try a larger distance or clear the dates.') : 'No stays match your search. Type an area and press Search, widen the distance, or clear the dates.')); }
     list.forEach(function(u){
       var c=el('div','card');
-      var img=u.coverPhotoId?('background-image:url('+API+'/photos/'+u.coverPhotoId+')'):'';
+      var img=u.coverPhotoId?('background-image:url('+API+'/photos/'+u.coverPhotoId+'?w=960)'):'';
       c.innerHTML='<div class="ph" style="'+img+'"></div><div class="body"><div class="nm">'+unitTitle(u)+'</div>'+
         '<div class="sub">'+unitSub(u)+'</div>'+priceLabel(u)+'</div>';
       c.onclick=function(){ openUnit(u); };
@@ -464,7 +464,7 @@
   }
 
   function startMonth(){ var d=new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; }
-  function galleryHtml(photos){ return '<div class="gallery">'+photos.map(function(ph,i){ return '<img class="g'+i+'" data-full="'+API+'/photos/'+ph.id+'" src="'+API+'/photos/'+ph.id+'">'; }).join('')+'</div>'; }
+  function galleryHtml(photos){ return '<div class="gallery">'+photos.map(function(ph,i){ return '<img class="g'+i+'" data-full="'+API+'/photos/'+ph.id+'?w=1920" src="'+API+'/photos/'+ph.id+'?w=960" loading="lazy">'; }).join('')+'</div>'; }
 
   function renderDetail(){
     var p=STATE.prop, u=STATE.unit||{}, host=$('#detail');
@@ -486,7 +486,7 @@
     if(p.description || complexPhotos.length){
       complexBlock='<h3 class="sec">About the complex</h3>'+
         (p.description?('<div class="desc">'+esc(p.description)+'</div>'):'')+
-        (complexPhotos.length?('<div class="gallery small">'+complexPhotos.map(function(ph){ return '<img data-full="'+API+'/photos/'+ph.id+'" src="'+API+'/photos/'+ph.id+'">'; }).join('')+'</div>'):'');
+        (complexPhotos.length?('<div class="gallery small">'+complexPhotos.map(function(ph){ return '<img data-full="'+API+'/photos/'+ph.id+'?w=1920" src="'+API+'/photos/'+ph.id+'?w=640" loading="lazy">'; }).join('')+'</div>'):'');
     }
     var overlay=el('div','overlay');
     overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
@@ -651,7 +651,7 @@
     var overlay=el('div','overlay');
     overlay.innerHTML='<div class="sheet"><div class="sheet-head"><button class="co-back">‹ Back</button><h2>Confirm &amp; pay</h2><button class="x">&times;</button></div>'+
       '<div class="sheet-body">'+
-        (cover?'<div class="co-hero" style="background-image:url('+API+'/photos/'+cover+')"></div>':'')+
+        (cover?'<div class="co-hero" style="background-image:url('+API+'/photos/'+cover+'?w=960)"></div>':'')+
         '<h3 style="margin:10px 0 2px">'+esc(p.name)+' · Unit '+esc(u.name)+'</h3>'+
         '<div class="note">📅 <b>'+STATE.ciSel+'</b> → <b>'+STATE.coSel+'</b> · check-in from '+ci+', checkout by '+co+'</div>'+
         '<div class="qbox" style="margin-top:10px">'+breakdownLines(q)+'<div class="qrow qtot"><span>Total</span><span>'+rand(q.totalCents)+'</span></div></div>'+
@@ -1038,7 +1038,7 @@
   }
 
   function tripCard(t){
-    var cover=t.coverPhotoId?('background-image:url('+API+'/photos/'+t.coverPhotoId+')'):'';
+    var cover=t.coverPhotoId?('background-image:url('+API+'/photos/'+t.coverPhotoId+'?w=640)'):'';
     var money=[];
     if(t.totalCents!=null) money.push('<div class="trip-row"><span>Total</span><span><b>'+rand(t.totalCents)+'</b></span></div>');
     if(t.depositCents) money.push('<div class="trip-row"><span>Refundable deposit</span><span>'+rand(t.depositCents)+'</span></div>');

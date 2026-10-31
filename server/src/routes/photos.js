@@ -21,10 +21,42 @@ router.get('/:id', async (req, res) => {
       prisma.photo.update({ where: { id: photo.id }, data: { data: buffer, contentType } }).catch(() => {});
     }
   }
+  // ?w=640 — a phone-sized copy: turned the right way up (EXIF), scaled down to
+  // a standard width, re-encoded as JPEG. Saves phones downloading 5MB originals.
+  const w = sizedWidth(req.query.w);
+  if (w) {
+    const out = await resized(photo.id, buffer, w).catch((e) => { console.error('[photos] resize failed', photo.id, e.message); return null; });
+    if (out) { buffer = out; contentType = 'image/jpeg'; }
+  }
   res.set('Content-Type', contentType);
   res.set('Cache-Control', 'public, max-age=31536000, immutable');
   res.send(buffer);
 });
+
+// Requested widths snap up to a few standard sizes so the cache stays small.
+const WIDTHS = [320, 640, 960, 1280, 1920];
+function sizedWidth(q) {
+  const n = parseInt(q, 10);
+  if (!n || n <= 0) return null;
+  return WIDTHS.find((x) => x >= n) || WIDTHS[WIDTHS.length - 1];
+}
+
+// Small in-memory LRU of resized copies (photos never change: ids are immutable).
+const CACHE_MAX_BYTES = 60 * 1024 * 1024;
+const cache = new Map(); let cacheBytes = 0;
+async function resized(id, buffer, w) {
+  const key = `${id}:${w}`;
+  const hit = cache.get(key);
+  if (hit) { cache.delete(key); cache.set(key, hit); return hit; }
+  const out = await require('sharp')(buffer, { failOn: 'none' })
+    .rotate() // honour EXIF orientation, then strip it
+    .resize({ width: w, withoutEnlargement: true })
+    .jpeg({ quality: 80, progressive: true, mozjpeg: true })
+    .toBuffer();
+  cache.set(key, out); cacheBytes += out.length;
+  for (const [k, v] of cache) { if (cacheBytes <= CACHE_MAX_BYTES) break; cache.delete(k); cacheBytes -= v.length; }
+  return out;
+}
 
 // Decode a data URL (or bare base64) into { buffer, contentType }.
 function decodeImage(body) {

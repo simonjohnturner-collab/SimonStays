@@ -19,6 +19,25 @@ router.post('/notify', express.text({ type: 'application/x-www-form-urlencoded',
   } catch (e) { console.error('[paygate] notify failed', e); }
 });
 
+// GET /public/paygate/go/:paymentId — a page that posts the guest straight on
+// to Paygate's payment page. The app opens this in an in-app browser (which can
+// only open a link, not post a form). The payment id is the capability.
+router.get('/go/:paymentId', async (req, res) => {
+  const paygate = require('../utils/paygate');
+  const p = await prisma.payment.findUnique({ where: { id: req.params.paymentId } }).catch(() => null);
+  if (!p || p.status !== 'pending' || !p.providerRef) return res.status(404).type('html').send('<p style="font-family:sans-serif">This payment link has expired. Please go back to the app and try again.</p>');
+  const c = paygate.config();
+  const checksum = paygate.md5(`${c.paygateId}${p.providerRef}${p.id}${c.key}`);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  res.set('Cache-Control', 'no-store').type('html').send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SimonStays · Secure payment</title></head>
+<body style="font-family:system-ui,sans-serif;text-align:center;padding:48px 16px;color:#1f2a24">
+<p>Taking you to Paygate’s secure payment page…</p>
+<form id="f" method="POST" action="${paygate.PROCESS_URL}">
+<input type="hidden" name="PAY_REQUEST_ID" value="${esc(p.providerRef)}"><input type="hidden" name="CHECKSUM" value="${esc(checksum)}">
+<noscript><button type="submit">Continue to payment</button></noscript></form>
+<script>document.getElementById('f').submit()</script></body></html>`);
+});
+
 // GET|POST /public/paygate/return/:paymentId — Paygate sends the guest's browser
 // here after paying (usually as a POST). Check with Paygate, then send them to
 // the shopfront's confirmation or "not completed" screen.
@@ -32,6 +51,11 @@ router.all('/return/:paymentId', async (req, res) => {
   } catch (e) { console.error('[paygate] return reconcile failed', e.message); }
   const failed = ['DECLINED', 'CANCELLED', 'USER_CANCELLED', 'NOT_DONE', 'VOIDED'].includes(fresh.status);
   const balance = payment.kind === 'balance' ? '&balance=1' : '';
+  if (payment.returnTo) {
+    // Back into the app (its in-app browser closes when it sees this link).
+    const sep = payment.returnTo.includes('?') ? '&' : '?';
+    return res.redirect(303, `${payment.returnTo}${sep}booking=${payment.bookingId}&result=${failed ? 'cancelled' : 'paid'}${balance}`);
+  }
   res.redirect(303, `/?booking=${payment.bookingId}${failed ? '&payment=cancelled' : '&paid=1'}${balance}`);
 });
 
