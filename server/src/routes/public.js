@@ -78,7 +78,7 @@ router.get('/host', async (req, res, next) => {
       bankName: biller.bankName || null, accountNumber: biller.accountNumber || null,
       branch: biller.branch || null, reference: biller.paymentInstruction || null,
     } : null;
-    res.json({ host: { name: (h && h.name) || null, photoId: photo ? photo.id : null, eft } });
+    res.json({ host: { name: (h && h.name) || null, photoId: photo ? photo.id : null, eft, cardOnline: payments.isOnline() } });
   } catch (e) { next(e); }
 });
 
@@ -347,9 +347,17 @@ router.post('/book', optionalGuest, async (req, res, next) => {
     // Card: send the guest to Paygate for what's due now (the first half on a
     // 50/50 split). EFT is paid by hand, so no online checkout.
     const dueNowCents = split ? payableCents - owingCents : payableCents;
-    const checkout = method === 'Card'
-      ? await payments.createCheckout(booking, dueNowCents, { base: siteBase(req) })
-      : { mode: 'eft' };
+    let checkout = { mode: 'eft' };
+    if (method === 'Card') {
+      try { checkout = await payments.createCheckout(booking, dueNowCents, { base: siteBase(req) }); }
+      catch (e) {
+        // Paygate refused (e.g. DATA_CHK = the PAYGATE_KEY doesn't match the PAYGATE_ID).
+        // Don't leave a half-made booking behind; let the guest pick EFT instead.
+        console.error('[paygate] checkout failed for', ref, '-', e.message);
+        await prisma.booking.update({ where: { id: booking.id }, data: { status: 'cancelled', comments: `${comments} · Card checkout failed: ${e.message}` } }).catch(() => {});
+        return res.status(502).json({ error: 'payment_unavailable', message: 'Card payments are temporarily unavailable — please choose EFT, or try again a little later.' });
+      }
+    }
 
     // Email the guest their invoice (fire-and-forget — never block the booking).
     if (b.guestEmail) {

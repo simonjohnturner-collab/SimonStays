@@ -675,7 +675,7 @@
         '<label class="tnc"><input type="checkbox" id="agree"> <span>I confirm that <b>SimonStays accepts no responsibility whatsoever</b> for anything that happens at the property. I have read, reviewed and understood the <b>cancellation policy</b> above, and I accept that <b>no refunds</b> will be granted outside of that policy.</span></label>'+
         '<label class="tnc"><input type="checkbox" id="agreeTnc"> <span>I have read and accept the <a href="/terms" target="_blank" rel="noreferrer"><b>Terms &amp; Conditions</b> ↗</a>.</span></label>'+
         '<div id="cmsg"></div>'+
-        '<div class="todo">💳 Online card payment is being finalised — for now this places a booking request and gives a test confirmation.</div>'+
+        ((HOST&&HOST.cardOnline)?'':'<div class="todo">💳 Online card payment is being finalised — for now this places a booking request and gives a test confirmation.</div>')+
         '<button id="confirmBtn" class="cta-btn" disabled>Confirm booking</button>'+
       '</div></div>';
     host.innerHTML=''; host.appendChild(overlay);

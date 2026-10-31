@@ -194,6 +194,9 @@ if (require.main === module) {
   const retryExpr = process.env.PURCHASE_RETRY_CRON || '17 * * * *';
   if (cron.validate(retryExpr)) cron.schedule(retryExpr, runPurchaseRetry);
 
+  // Paygate: confirm the PAYGATE_ID + PAYGATE_KEY pair works (result in the logs).
+  require('./utils/paygate').selfTest(process.env.PAYMENT_BASE_URL).catch(() => {});
+
   // Scheduled guest messages ("2 days before check-in at 10:00", …). Checks every
   // 10 minutes; each schedule sends once per booking. Override with MESSAGE_CRON.
   const messaging = require('./utils/messaging');

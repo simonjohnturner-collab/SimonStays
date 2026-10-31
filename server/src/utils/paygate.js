@@ -101,4 +101,26 @@ async function query({ payRequestId, reference }) {
   return { status: STATUS[r.TRANSACTION_STATUS] || `STATUS_${r.TRANSACTION_STATUS}`, amountCents: Number(r.AMOUNT), data: r };
 }
 
-module.exports = { mode, config, ready, initiate, query, validPayload, checksum, md5, txDate, STATUS, TEST };
+// Check the PAYGATE_ID + PAYGATE_KEY pair by starting (never completing) a R1
+// transaction — no money moves. Logs a plain-English result for the Render logs.
+async function selfTest(base) {
+  const c = config();
+  if (c.mode === 'simulate') return { ok: true, skipped: true };
+  const who = `mode=${c.mode} PAYGATE_ID=…${String(c.paygateId).slice(-4)} key=${c.key.length} chars`;
+  if (!c.paygateId || !c.key) { console.warn(`[paygate] self-test: PAYGATE_ID / PAYGATE_KEY missing (${who}) — card payments are OFF`); return { ok: false }; }
+  const site = (base || 'https://simonstays.co.za').replace(/\/$/, '');
+  try {
+    await initiate({ reference: `selftest-${Date.now()}`, amountCents: 100, email: 'selftest@simonstays.co.za', returnUrl: `${site}/`, notifyUrl: `${site}/public/paygate/notify` });
+    console.log(`[paygate] self-test OK (${who}) — card payments are ready`);
+    return { ok: true };
+  } catch (e) {
+    const hint = /DATA_CHK/.test(e.message)
+      ? 'the PAYGATE_KEY does not match the encryption key Paygate has for this PAYGATE_ID'
+      : /PGID_NOT_EN|PGID/.test(e.message) ? 'this PAYGATE_ID is not enabled for PayWeb3 — ask Paygate to activate it'
+        : 'see the error';
+    console.error(`[paygate] self-test FAILED (${who}): ${e.message} — ${hint}`);
+    return { ok: false, error: e.message };
+  }
+}
+
+module.exports = { mode, config, ready, initiate, query, validPayload, checksum, md5, txDate, selfTest, STATUS, TEST };
