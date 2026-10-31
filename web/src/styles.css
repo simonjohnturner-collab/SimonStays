@@ -931,3 +931,14 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 /* Teach Simon */
 .msg-tabs.sub { padding:0; margin:0 0 12px; }
 .teach-q { font-weight:600; margin:4px 0 6px; white-space:pre-wrap; }
+
+/* Booking source letter (A / SS / D …) in a block's top-left corner */
+.cell.stay { position: relative; }
+.src-tag { position: absolute; top: 1px; left: 2px; font-size: 9px; line-height: 11px; font-weight: 800; padding: 0 3px; border-radius: 3px; color: #fff; background: #7a8290; pointer-events: none; letter-spacing: .2px; }
+.src-tag.static { position: static; display: inline-block; margin: 0 3px 0 6px; vertical-align: 1px; }
+.src-tag.src-airbnb { background: #e0565b; }
+.src-tag.src-website { background: var(--green); }
+.src-tag.src-manual { background: #4a6fa5; }
+.src-tag.src-booking { background: #1a4fa0; }
+.src-tag.src-lekkeslaap { background: #c07a12; }
+.cell.stay .stay-name { padding-left: 21px; }

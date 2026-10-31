@@ -249,9 +249,15 @@ async function loadOwnedWithCleans(req, res) {
   return booking;
 }
 
-// DELETE /bookings/:id
+// DELETE /bookings/:id — "Cancel booking". A SimonStays website booking is
+// marked cancelled (frees the dates, keeps the record + payment history, and the
+// guest sees it as cancelled in My trips); other bookings are deleted.
 router.delete('/bookings/:id', async (req, res) => {
   const booking = await loadOwned(req, res); if (!booking) return;
+  if (booking.source === 'website') {
+    await prisma.booking.update({ where: { id: booking.id }, data: { status: 'cancelled' } });
+    return res.json({ ok: true, cancelled: true });
+  }
   await prisma.booking.delete({ where: { id: booking.id } });
   res.json({ ok: true });
 });

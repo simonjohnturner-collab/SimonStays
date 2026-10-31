@@ -108,7 +108,11 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   }
 
   async function remove() {
-    if (!window.confirm('Cancel this booking?')) return;
+    const paidCents = booking.amountPaidCents || 0;
+    const q = booking.source === 'website'
+      ? `Cancel this SimonStays booking? The dates are freed and it's kept as "cancelled" for your records.${paidCents ? `\n\nThe guest has paid ${fmtR(paidCents)} — refund them separately.` : ''}`
+      : 'Cancel this booking?';
+    if (!window.confirm(q)) return;
     setBusy(true);
     try { await api.deleteBooking(booking.id); onSaved(); }
     catch (e) { setMsg({ text: e.message, kind: 'err' }); setBusy(false); }

@@ -1,6 +1,16 @@
 import { useMemo, useState, useEffect } from 'react';
 import { range, ymd, weekday, dayMonth, isWeekend, today } from '../dates.js';
 
+// Where a booking came from, as a small letter in the block's top-left corner.
+const SOURCE_TAG = {
+  airbnb: ['A', 'Airbnb'], website: ['SS', 'SimonStays website'], manual: ['D', 'Direct'],
+  booking: ['B', 'Booking.com'], lekkeslaap: ['L', 'LekkeSlaap'], import: ['C', 'Other channel'],
+};
+function SourceTag({ b }) {
+  const [tag, label] = SOURCE_TAG[b.source] || ['?', b.source];
+  return <span className={`src-tag src-${b.source}`} title={label}>{tag}</span>;
+}
+
 // Build a per-date cell map for one unit's bookings.
 // Occupancy (guest name) covers the nights stayed: check-in .. check-out-1.
 // The check-out day itself is the departure morning — clean needed, and free for
@@ -122,7 +132,9 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
           <td key={k} colSpan={s.len} className={cls.join(' ')}
             onClick={() => onEditBooking(c.booking, c.floating ? null : u)}
             title={cellTitle(c) + (c.floating ? ' · FLOATING (does not block)' : '')}>
+            <SourceTag b={c.booking} />
             <span className={`stay-name ${c.red ? 'red' : ''}`}>
+              {c.booking.status === 'pending' && <span className="badge-inline" title="Awaiting payment — not confirmed, doesn't block the calendar">⏳ </span>}
               {s.early && <span className="badge-inline" title="Early check-in">⏰ </span>}
               {c.name}
               {s.insta && <span className="badge-inline" title="In-stay clean during this stay"> 🧽</span>}
@@ -253,6 +265,8 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
         <span><i className="sw early-sw" /> ⏰ early check-in</span>
         <span><i className="sw late-sw" /> late checkout</span>
         <span><i className="sw red-text">Aa</i> unpaid</span>
+        <span>⏳ awaiting payment</span>
+        <span><b className="src-tag src-airbnb static">A</b> Airbnb <b className="src-tag src-website static">SS</b> SimonStays <b className="src-tag src-manual static">D</b> direct</span>
       </div>
     </div>
   );
@@ -267,7 +281,8 @@ function cellTitle(c) {
   if (b.extraMattress) reqs.push('extra mattress');
   if (b.hairDryer) reqs.push('hair dryer');
   if (b.cleans?.length) reqs.push(`${b.cleans.length} in-stay clean${b.cleans.length > 1 ? 's' : ''}`);
-  return `${c.name} · ${b.checkIn.slice(0, 10)} → ${b.checkOut.slice(0, 10)} · ${b.source} · ${paid}` +
+  const source = (SOURCE_TAG[b.source] || [null, b.source])[1];
+  return `${c.name} · ${b.checkIn.slice(0, 10)} → ${b.checkOut.slice(0, 10)} · ${source} · ${paid}${b.status === 'pending' ? ' · AWAITING PAYMENT' : ''}` +
     (b.cleaner ? ` · checkout cleaner: ${b.cleaner}` : '') +
     (reqs.length ? `\nRequests: ${reqs.join(', ')}` : '') +
     (b.comments ? `\n${b.comments}` : '');

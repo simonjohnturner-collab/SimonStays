@@ -90,6 +90,15 @@ async function applyPaid(payment, txId) {
     await prisma.booking.update({ where: { id: booking.id }, data: money });
     return { ok: true, outcome: 'payment_recorded' };
   }
+  if (booking.status === 'cancelled') {
+    // Paid on an old payment page after the booking was cancelled — don't revive it.
+    await prisma.booking.update({
+      where: { id: booking.id },
+      data: { ...money, comments: `${booking.comments || ''} · ⚠ PAID via Paygate (transaction ${txId || '?'}) after this booking was cancelled — refund the guest.` },
+    });
+    alertHost(booking, `⚠ Payment for a CANCELLED booking — ${placeOf(booking)}\n👤 ${booking.guestName || 'Guest'} · ${booking.ref || ''}\nR${(payment.amountCents / 100).toFixed(2)} received via Paygate. Refund the guest (or re-book them).`);
+    return { ok: true, outcome: 'paid_but_cancelled' };
+  }
   // The pending hold doesn't block the calendar, so re-check before confirming.
   const avail = await checkAvailability(booking.unitId, iso(booking.checkIn), iso(booking.checkOut), booking.id);
   if (!avail.available) {
@@ -128,6 +137,24 @@ async function reconcileBooking(bookingId, opts = {}) {
   return reconcile(p, opts).catch((e) => { console.error('[paygate] reconcile failed', e.message); return null; });
 }
 
+// Card bookings whose payment was never completed hold no dates but clutter the
+// board — cancel them after `hours`. EFT bookings (no online payment attempt)
+// are left alone: the host confirms those by hand.
+async function expireAbandoned({ hours = 24, now = new Date() } = {}) {
+  const cutoff = new Date(now.getTime() - hours * 3600 * 1000);
+  const stale = await prisma.booking.findMany({
+    where: {
+      source: 'website', status: 'pending',
+      payments: { some: {}, none: { OR: [{ status: 'COMPLETE' }, { createdAt: { gt: cutoff } }] } },
+    },
+    select: { id: true, comments: true },
+  });
+  for (const b of stale) {
+    await prisma.booking.update({ where: { id: b.id }, data: { status: 'cancelled', comments: `${b.comments || ''} · Auto-cancelled: card payment not completed within ${hours}h.` } });
+  }
+  return stale.length;
+}
+
 // WhatsApp the host about a payment event (best-effort).
 async function alertHost(booking, body) {
   try {
@@ -140,4 +167,4 @@ async function alertHost(booking, body) {
   } catch (e) { console.error('[payments] host alert failed', e.message); }
 }
 
-module.exports = { createCheckout, verifyPayment, reconcile, reconcileBooking, handleNotify, isOnline, MODE };
+module.exports = { createCheckout, verifyPayment, reconcile, reconcileBooking, handleNotify, expireAbandoned, isOnline, MODE };

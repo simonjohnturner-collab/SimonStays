@@ -196,6 +196,12 @@ if (require.main === module) {
 
   // Paygate: confirm the PAYGATE_ID + PAYGATE_KEY pair works (result in the logs).
   require('./utils/paygate').selfTest(process.env.PAYMENT_BASE_URL).catch(() => {});
+  // Hourly: cancel website card bookings whose payment was never completed (24h).
+  const expireHolds = () => require('./utils/payments').expireAbandoned()
+    .then((n) => { if (n) console.log(`[payments] auto-cancelled ${n} unpaid card booking(s)`); })
+    .catch((e) => console.error('[payments] expire failed', e.message));
+  setTimeout(expireHolds, 90 * 1000);
+  cron.schedule('41 * * * *', expireHolds);
 
   // Scheduled guest messages ("2 days before check-in at 10:00", …). Checks every
   // 10 minutes; each schedule sends once per booking. Override with MESSAGE_CRON.
