@@ -244,7 +244,7 @@ export default function Main() {
     return withChrome(
       <MessagesView
         onClose={() => { setMessages(null); loadUnread(); }}
-        properties={properties.map((p) => ({ id: p.id, name: p.name }))}
+        properties={properties.map((p) => ({ id: p.id, name: p.name, units: p.units }))}
         initialBookingId={messages.bookingId}
         teachCount={teachCount}
         initialTab={messages.tab || 'inbox'}

@@ -11,6 +11,14 @@ const { overridesFor } = require('../utils/nightPrices');
 const { alertHost } = require('../utils/payments');
 const { offerOut } = require('../utils/offers');
 
+// What this conversation costs: the paid invoice, else the latest, else the booking.
+function amountOf(b) {
+  const sent = b.messages.filter((m) => m.offer).map((m) => m.offer);
+  const o = sent.find((x) => x.status === 'paid') || sent[sent.length - 1];
+  if (o) return o.totalCents;
+  return b.quotedCents != null ? b.quotedCents : (b.totalCents != null ? b.totalCents : null);
+}
+
 const router = express.Router();
 router.use(authGuest);
 
@@ -49,7 +57,7 @@ router.get('/', async (req, res, next) => {
       guestName: b.guestName || acct.name || null,
       checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
       nights: Math.max(0, Math.round((new Date(b.checkOut) - new Date(b.checkIn)) / 864e5)),
-      amountCents: b.quotedCents != null ? b.quotedCents : (b.totalCents != null ? b.totalCents : null),
+      amountCents: amountOf(b),
       messages: b.messages.map((m) => msgOut(m, b)),
       unread: b.messages.filter((m) => m.sender === 'host' && !m.readAt).length,
     }));

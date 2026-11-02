@@ -14,7 +14,7 @@ const { sendMail } = require('../utils/mailer');
 const { invoiceHtml } = require('../utils/invoiceHtml');
 const { optionalGuest } = require('../middleware/auth');
 const { onBookingConfirmed } = require('../utils/bookingConfirmed');
-const { offerState } = require('../utils/offers');
+const { offerState, staysOf, firstClash, splitOf, saveExtraStays } = require('../utils/offers');
 
 // The host's EFT details for the invoice (same shape as /public/host).
 async function eftFor(hostId) {
@@ -486,6 +486,7 @@ router.get('/offers/:token', async (req, res, next) => {
     if (req.query.check) { await payments.reconcileBooking(o.bookingId); o = await loadOffer(req.params.token); }
     const b = o.booking, p = b.unit.property;
     res.set('Cache-Control', 'no-store').json({
+      stays: staysOf(o).map((s) => ({ propertyName: s.propertyName, unitName: s.unitName, checkIn: s.checkIn, checkOut: s.checkOut, nights: s.nights })),
       state: offerState(o, b), lines: o.lines, totalCents: o.totalCents, depositCents: o.depositCents || 0, expiresAt: o.expiresAt,
       ref: b.ref || null, guestName: b.guestName || null, status: b.status,
       property: p.name, unit: b.unit.name, address: p.address || null,
@@ -508,14 +509,19 @@ router.post('/offers/:token/pay', async (req, res, next) => {
     const b = o.booking, state = offerState(o, b);
     if (state !== 'open') return res.status(409).json({ error: `offer_${state}`, state, message: 'This invoice can no longer be paid. Please message your host.' });
     if (!(req.body || {}).acceptedTerms) return res.status(400).json({ error: 'terms_required', message: 'Please accept the cancellation policy and the Terms & Conditions.' });
-    if (iso(b.checkIn) < iso(new Date())) return res.status(409).json({ error: 'dates_passed', message: 'These dates have passed. Please message your host.' });
-    const avail = await checkAvailability(b.unitId, iso(b.checkIn), iso(b.checkOut), b.id);
-    if (avail.error || !avail.available) return res.status(409).json({ error: 'dates_unavailable', message: 'Sorry, those dates have since been booked, so no payment was taken. Please message your host.' });
+    const stays = staysOf(o).length ? staysOf(o) : [{ unitId: b.unitId, checkIn: iso(b.checkIn), checkOut: iso(b.checkOut) }];
+    if (stays.some((s) => s.checkIn < iso(new Date()))) return res.status(409).json({ error: 'dates_passed', message: 'These dates have passed. Please message your host.' });
+    if (await firstClash(stays, b.id)) return res.status(409).json({ error: 'dates_unavailable', message: 'Sorry, those dates have since been booked, so no payment was taken. Please message your host.' });
     await prisma.booking.update({ where: { id: b.id }, data: { termsAcceptedAt: new Date() } });
 
     if ((req.body || {}).method === 'eft') {
       // Now a real hold on the board, waiting for the host to confirm the money.
-      if (b.status === 'enquiry') await prisma.booking.update({ where: { id: b.id }, data: { status: 'pending', comments: `${b.comments || ''} · Pay: EFT` } });
+      const share = splitOf(o).primaryCents;
+      const held = await prisma.booking.update({
+        where: { id: b.id },
+        data: { status: 'pending', totalCents: share, quotedCents: share, ...(b.status === 'enquiry' ? { comments: `${b.comments || ''} · Pay: EFT` } : {}) },
+      });
+      await saveExtraStays(o, held, 'pending');
       return res.json({ mode: 'eft', ref: b.ref || null, eft: await eftFor(b.unit.property.hostId) });
     }
     if (!payments.isOnline()) {

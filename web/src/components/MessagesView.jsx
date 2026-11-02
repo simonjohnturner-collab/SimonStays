@@ -36,7 +36,7 @@ export default function MessagesView({ onClose, properties = [], initialBookingI
         <button className={tab === 'teach' ? 'on' : ''} onClick={() => setTab('teach')}>🧠 Ask Simon{teachCount > 0 && <span className="msg-dot">{teachCount}</span>}</button>
       </div>
 
-      {tab === 'inbox' && <Inbox templates={templates} initialBookingId={initialBookingId} onUnreadChange={onUnreadChange} />}
+      {tab === 'inbox' && <Inbox templates={templates} properties={properties} initialBookingId={initialBookingId} onUnreadChange={onUnreadChange} />}
       {tab === 'saved' && <SavedMessages templates={templates} placeholders={placeholders} onChanged={loadTemplates} />}
       {tab === 'scheduled' && <Scheduled templates={templates} properties={properties} />}
       {tab === 'teach' && <TeachSimon properties={properties} onCountChange={onUnreadChange} />}
@@ -71,20 +71,87 @@ function InvoiceCard({ offer }) {
   );
 }
 
-// Build an invoice from the pricing sheet: edit, remove or add lines. The total
-// is what the guest pays.
-function InvoiceComposer({ bookingId, invoice, standardCents, onSent, onCancel }) {
-  const [lines, setLines] = useState(() => invoice.draftLines.map((l) => ({ description: l.description, amount: (l.amountCents / 100).toFixed(2), deposit: !!l.deposit })));
+const nightsOf = (l) => (l.checkIn && l.checkOut ? Math.round((Date.parse(`${l.checkOut}T12:00:00Z`) - Date.parse(`${l.checkIn}T12:00:00Z`)) / 864e5) : 0);
+const stayCents = (l) => Math.max(0, nightsOf(l)) * randToCents(l.rate);
+const today = () => new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10); // SAST
+
+// One accommodation line: the unit and dates to block, and this guest's own rate.
+// Fills in the pricing sheet's rate until the host types their own.
+function StayLine({ line, properties, onChange, onRemove }) {
+  const { unitId, checkIn, checkOut } = line;
+  const nights = nightsOf(line);
+  const ready = unitId && nights > 0;
+  useEffect(() => {
+    if (!ready) { onChange({ standardCents: null, unavailable: false }); return undefined; }
+    let live = true;
+    const t = setTimeout(() => {
+      api.quoteUnit(unitId, { checkIn, checkOut, cleans: 1 })
+        .then((r) => {
+          if (!live) return;
+          const standardCents = Math.round(r.quote.accommodationCents / r.quote.nights);
+          onChange((l) => ({ standardCents, ...(l.rateEdited ? {} : { rate: (standardCents / 100).toFixed(2) }) }));
+        })
+        .catch(() => { if (live) onChange({ standardCents: null }); });
+      api.availability(unitId, checkIn, checkOut)
+        .then((r) => { if (live) onChange({ unavailable: !r.available }); })
+        .catch(() => {});
+    }, 300);
+    return () => { live = false; clearTimeout(t); };
+    // eslint-disable-next-line
+  }, [unitId, checkIn, checkOut]);
+
+  return (
+    <div className="msg-stay">
+      <label className="msg-stay-unit"><span>Unit</span>
+        <select value={unitId} onChange={(e) => onChange({ unitId: e.target.value })}>
+          <option value="">Choose a unit…</option>
+          {properties.map((p) => (
+            <optgroup key={p.id} label={p.name}>
+              {(p.units || []).map((u) => <option key={u.id} value={u.id}>{p.name} · Unit {u.name}</option>)}
+            </optgroup>
+          ))}
+        </select>
+      </label>
+      <label><span>Check-in</span><input type="date" min={today()} value={checkIn} onChange={(e) => onChange({ checkIn: e.target.value })} /></label>
+      <label><span>Check-out</span><input type="date" min={checkIn || today()} value={checkOut} onChange={(e) => onChange({ checkOut: e.target.value })} /></label>
+      <div className="msg-stay-calc"><span>Nights</span><b>{nights > 0 ? nights : '–'}</b></div>
+      <label><span>Rate per night</span><input className="amt" inputMode="decimal" placeholder="0.00" value={line.rate} onChange={(e) => onChange({ rate: e.target.value, rateEdited: true })} /></label>
+      <div className="msg-stay-calc amt"><span>Amount</span><b>{fmtR(stayCents(line))}</b></div>
+      <button type="button" className="mini" aria-label="Remove this accommodation line" onClick={onRemove}>✕</button>
+      {(line.standardCents != null || line.unavailable || (checkIn && checkOut && nights <= 0)) && (
+        <div className="msg-stay-note small">
+          {checkIn && checkOut && nights <= 0 ? <span className="msg-stay-bad">Check-out must be after check-in.</span>
+            : line.unavailable ? <span className="msg-stay-bad">This unit is already booked for these dates.</span>
+              : <span className="muted">Standard rate {fmtR(line.standardCents)} a night</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Build an invoice from the pricing sheet: accommodation lines say which units
+// and dates to block; other lines are fees or discounts. The total is what the guest pays.
+function InvoiceComposer({ bookingId, properties, invoice, standardCents, onSent, onCancel }) {
+  const nextKey = useRef(0);
+  const blankStay = () => ({ key: nextKey.current++, kind: 'stay', unitId: '', checkIn: '', checkOut: '', rate: '', rateEdited: false, standardCents: null, unavailable: false });
+  const [lines, setLines] = useState(() => invoice.draftLines.map((l) => (l.kind === 'stay'
+    ? { ...blankStay(), unitId: l.unitId, checkIn: l.checkIn, checkOut: l.checkOut, rate: (l.nightlyCents / 100).toFixed(2), rateEdited: l.description != null }
+    : { key: nextKey.current++, kind: 'charge', description: l.description, amount: (l.amountCents / 100).toFixed(2), deposit: !!l.deposit })));
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const totalCents = lines.reduce((n, l) => n + randToCents(l.amount), 0);
-  const edit = (i, patch) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const totalCents = lines.reduce((n, l) => n + (l.kind === 'stay' ? stayCents(l) : randToCents(l.amount)), 0);
+  const stays = lines.filter((l) => l.kind === 'stay');
+  const staysReady = stays.length > 0 && stays.every((l) => l.unitId && nightsOf(l) > 0 && !l.unavailable);
+  const edit = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...(typeof patch === 'function' ? patch(l) : patch) } : l)));
+  const remove = (key) => setLines((ls) => ls.filter((l) => l.key !== key));
 
   async function send() {
     setBusy(true); setErr('');
     try {
-      const r = await api.sendInvoice(bookingId, lines.map((l) => ({ description: l.description, amountCents: randToCents(l.amount), deposit: l.deposit })), note);
+      const r = await api.sendInvoice(bookingId, lines.map((l) => (l.kind === 'stay'
+        ? { kind: 'stay', unitId: l.unitId, checkIn: l.checkIn, checkOut: l.checkOut, nightlyCents: randToCents(l.rate) }
+        : { kind: 'charge', description: l.description, amountCents: randToCents(l.amount), deposit: l.deposit })), note);
       onSent(r.emailed);
     } catch (e) { setErr((e.data && e.data.message) || e.message); setBusy(false); }
   }
@@ -92,22 +159,26 @@ function InvoiceComposer({ bookingId, invoice, standardCents, onSent, onCancel }
   return (
     <div className="msg-composer">
       <div className="msg-composer-head"><b>Invoice for this guest</b>{standardCents != null && <span className="muted small">Standard price {fmtR(standardCents)}</span>}</div>
-      {lines.map((l, i) => (
-        <div key={i} className="msg-composer-line">
-          <input value={l.description} aria-label="Description" placeholder="Description" onChange={(e) => edit(i, { description: e.target.value })} />
-          <input className="amt" value={l.amount} aria-label="Amount in rand" inputMode="decimal" placeholder="0.00" onChange={(e) => edit(i, { amount: e.target.value })} />
-          <button type="button" className="mini" aria-label={`Remove ${l.description || 'line'}`} onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}>✕</button>
+      {stays.map((l) => (
+        <StayLine key={l.key} line={l} properties={properties} onChange={(patch) => edit(l.key, patch)} onRemove={() => remove(l.key)} />
+      ))}
+      <button type="button" className="secondary small" onClick={() => setLines((ls) => [...ls.filter((l) => l.kind === 'stay'), blankStay(), ...ls.filter((l) => l.kind !== 'stay')])}>＋ Add accommodation</button>
+      {lines.filter((l) => l.kind !== 'stay').map((l) => (
+        <div key={l.key} className="msg-composer-line">
+          <input value={l.description} aria-label="Description" placeholder="Description" onChange={(e) => edit(l.key, { description: e.target.value })} />
+          <input className="amt" value={l.amount} aria-label="Amount in rand" inputMode="decimal" placeholder="0.00" onChange={(e) => edit(l.key, { amount: e.target.value })} />
+          <button type="button" className="mini" aria-label={`Remove ${l.description || 'line'}`} onClick={() => remove(l.key)}>✕</button>
         </div>
       ))}
-      <button type="button" className="secondary small" onClick={() => setLines((ls) => [...ls, { description: '', amount: '', deposit: false }])}>＋ Add a line</button>
+      <button type="button" className="secondary small" onClick={() => setLines((ls) => [...ls, { key: nextKey.current++, kind: 'charge', description: '', amount: '', deposit: false }])}>＋ Add a fee or discount</button>
       <div className="muted small">Use a minus amount for a discount, for example -500.</div>
       <div className="msg-invoice-row total"><span>Guest pays</span><span>{fmtR(totalCents)}</span></div>
       <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note to the guest (optional)" />
       {err && <div className="msg-warn">{err}</div>}
       <div className="msg-send-row">
-        <span className="muted small">The guest has {invoice.validHours} hours to pay. Dates aren’t held until they do.</span>
+        <span className="muted small">The guest has {invoice.validHours} hours to pay. Nothing is blocked until they do.</span>
         <button className="secondary" onClick={onCancel} disabled={busy}>Cancel</button>
-        <button onClick={send} disabled={busy || totalCents <= 0}>{busy ? 'Sending…' : `Send ${fmtR(totalCents)} invoice`}</button>
+        <button onClick={send} disabled={busy || totalCents <= 0 || !staysReady}>{busy ? 'Sending…' : `Send ${fmtR(totalCents)} invoice`}</button>
       </div>
     </div>
   );
@@ -115,7 +186,7 @@ function InvoiceComposer({ bookingId, invoice, standardCents, onSent, onCancel }
 
 // ---------------- Inbox ----------------
 
-function Inbox({ templates, initialBookingId, onUnreadChange }) {
+function Inbox({ templates, properties, initialBookingId, onUnreadChange }) {
   const [threads, setThreads] = useState(null);
   const [activeId, setActiveId] = useState(initialBookingId);
   const [thread, setThread] = useState(null); // { booking, messages }
@@ -236,7 +307,7 @@ function Inbox({ templates, initialBookingId, onUnreadChange }) {
               <div ref={endRef} />
             </div>
             {invoicing && thread.invoice && !thread.invoice.blocked ? (
-              <InvoiceComposer bookingId={activeId} invoice={thread.invoice} standardCents={thread.standardCents} onSent={invoiceSent} onCancel={() => setInvoicing(false)} />
+              <InvoiceComposer bookingId={activeId} properties={properties} invoice={thread.invoice} standardCents={thread.standardCents} onSent={invoiceSent} onCancel={() => setInvoicing(false)} />
             ) : (
             <div className="msg-compose">
               {thread.invoice && !thread.invoice.blocked && (

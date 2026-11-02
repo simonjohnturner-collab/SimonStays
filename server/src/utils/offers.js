@@ -8,6 +8,7 @@ const messaging = require('./messaging');
 const { checkAvailability } = require('./sync');
 const { quote } = require('./pricing');
 const { overridesFor } = require('./nightPrices');
+const { dateOnly } = require('./ical');
 
 const OFFER_HOURS = 48; // how long an invoice can be paid before the host must resend
 const MAX_LINES = 30;
@@ -16,18 +17,66 @@ const INVOICEABLE_SOURCES = ['website', 'manual']; // never channel bookings (Ai
 const INVOICEABLE_STATUSES = ['enquiry', 'pending'];
 
 const iso = (d) => new Date(d).toISOString().slice(0, 10);
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_NIGHTS = 365;
+const fmtDay = (ymd) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const nightsBetween = (checkIn, checkOut) => Math.round((Date.parse(`${checkOut}T12:00:00Z`) - Date.parse(`${checkIn}T12:00:00Z`)) / 864e5);
+const validDay = (s) => YMD.test(s || '') && new Date(`${s}T12:00:00Z`).toISOString().slice(0, 10) === s;
+
+// The accommodation lines of an invoice: what gets blocked once it's paid.
+const staysOf = (offer) => (Array.isArray(offer.lines) ? offer.lines : []).filter((l) => l.kind === 'stay');
+
+// How the money splits across bookings. Each extra stay carries its own line and
+// the first booking carries the rest (fees, deposit, discounts), so the bookings
+// add up to the invoice. A discount bigger than that rest stays on the first booking.
+function splitOf(offer) {
+  const extras = staysOf(offer).slice(1);
+  const extrasCents = extras.reduce((n, s) => n + s.amountCents, 0);
+  const fits = offer.totalCents - extrasCents >= 0;
+  return { extras, primaryCents: fits ? offer.totalCents - extrasCents : offer.totalCents, shareOf: (s) => (fits ? s.amountCents : 0) };
+}
 
 // Validate the host's lines; returns { lines, totalCents, depositCents } or { error }.
-function cleanLines(raw) {
+// Nights and amounts on a stay are worked out here, not taken from the browser.
+async function cleanLines(raw, hostId) {
   if (!Array.isArray(raw) || !raw.length) return { error: 'Add at least one line to the invoice.' };
   if (raw.length > MAX_LINES) return { error: `An invoice can have up to ${MAX_LINES} lines.` };
+  const unitIds = raw.filter((l) => l && l.kind === 'stay' && l.unitId).map((l) => String(l.unitId));
+  const units = await prisma.unit.findMany({ where: { id: { in: unitIds }, property: { hostId } }, include: { property: true } });
+  const today = iso(new Date());
   const lines = [];
   for (const l of raw) {
+    if (l && l.kind === 'stay') {
+      const unit = units.find((u) => u.id === String(l.unitId));
+      if (!unit) return { error: 'Choose a unit on every accommodation line.' };
+      const { checkIn, checkOut } = l;
+      const place = `${unit.property.name} · Unit ${unit.name}`;
+      if (!validDay(checkIn) || !validDay(checkOut)) return { error: `Choose check-in and check-out dates for ${place}.` };
+      const nights = nightsBetween(checkIn, checkOut);
+      if (nights < 1 || nights > MAX_NIGHTS) return { error: `Check the dates for ${place}: check-out must be after check-in.` };
+      if (checkIn < today) return { error: `The check-in date for ${place} has passed.` };
+      const nightlyCents = Number(l.nightlyCents);
+      if (!Number.isInteger(nightlyCents) || nightlyCents < 0 || nightlyCents > MAX_LINE_CENTS) return { error: `Check the nightly rate for ${place}.` };
+      lines.push({
+        kind: 'stay', unitId: unit.id, propertyName: unit.property.name, unitName: unit.name,
+        checkIn, checkOut, nights, nightlyCents, amountCents: nights * nightlyCents, deposit: false,
+        description: `${place}: ${fmtDay(checkIn)} → ${fmtDay(checkOut)} · ${nights} night${nights === 1 ? '' : 's'} @ R${(nightlyCents / 100).toFixed(2)}`,
+      });
+      continue;
+    }
     const description = String((l && l.description) || '').trim().slice(0, 160);
     const amountCents = Number(l && l.amountCents);
     if (!description) return { error: 'Every line needs a description.' };
     if (!Number.isInteger(amountCents) || Math.abs(amountCents) > MAX_LINE_CENTS) return { error: `Check the amount on "${description}".` };
-    lines.push({ description, amountCents, deposit: !!(l.deposit && amountCents > 0) });
+    lines.push({ kind: 'charge', description, amountCents, deposit: !!(l.deposit && amountCents > 0) });
+  }
+  const stays = lines.filter((l) => l.kind === 'stay');
+  if (!stays.length) return { error: 'Add an accommodation line, so we know which unit and dates to block.' };
+  for (let i = 0; i < stays.length; i++) {
+    for (let j = i + 1; j < stays.length; j++) {
+      const a = stays[i], b = stays[j];
+      if (a.unitId === b.unitId && a.checkIn < b.checkOut && b.checkIn < a.checkOut) return { error: `Two lines overlap for ${a.propertyName} · Unit ${a.unitName}.` };
+    }
   }
   const totalCents = lines.reduce((n, l) => n + l.amountCents, 0);
   if (totalCents <= 0) return { error: 'The invoice total must be more than zero.' };
@@ -45,15 +94,60 @@ async function standardQuote(b) {
 }
 
 // The lines the invoice editor opens with: the standard quote, itemised.
-function draftLines(q) {
-  if (!q) return [{ description: 'Accommodation', amountCents: 0 }];
-  const lines = [{ description: `Accommodation · ${q.nights} night${q.nights === 1 ? '' : 's'}`, amountCents: q.accommodationCents }];
-  if (q.discountCents) lines.push({ description: `${q.discountPercent}% length discount`, amountCents: -q.discountCents });
-  if (q.cleaningCents) lines.push({ description: 'Cleaning fee', amountCents: q.cleaningCents });
-  if (q.earlyCents) lines.push({ description: 'Early check-in', amountCents: q.earlyCents });
-  if (q.lateCents) lines.push({ description: 'Late checkout', amountCents: q.lateCents });
-  if (q.depositCents) lines.push({ description: 'Refundable breakage deposit', amountCents: q.depositCents, deposit: true });
+function draftLines(q, b) {
+  const stay = {
+    kind: 'stay', unitId: b.unitId, checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
+    nightlyCents: q ? Math.round(q.accommodationCents / q.nights) : 0,
+  };
+  if (!q) return [stay];
+  const lines = [stay];
+  const charge = (description, amountCents, deposit = false) => lines.push({ kind: 'charge', description, amountCents, deposit });
+  if (q.discountCents) charge(`${q.discountPercent}% length discount`, -q.discountCents);
+  if (q.cleaningCents) charge('Cleaning fee', q.cleaningCents);
+  if (q.earlyCents) charge('Early check-in', q.earlyCents);
+  if (q.lateCents) charge('Late checkout', q.lateCents);
+  if (q.depositCents) charge('Refundable breakage deposit', q.depositCents, true);
   return lines;
+}
+
+// Start from the last invoice sent if it has accommodation lines, else the pricing sheet.
+const draftFor = (lastOffer, q, b) => (lastOffer && staysOf(lastOffer).length ? lastOffer.lines : draftLines(q, b));
+
+// Are all this invoice's units free? Returns the first stay that isn't, or null.
+async function firstClash(stays, excludeBookingId) {
+  for (const s of stays) {
+    const a = await checkAvailability(s.unitId, s.checkIn, s.checkOut, excludeBookingId);
+    if (a.error || !a.available) return s;
+  }
+  return null;
+}
+
+// Create or update the bookings for an invoice's extra units. Pending bookings
+// (EFT) wait for the host; confirmed ones have been paid for.
+async function saveExtraStays(offer, primary, status) {
+  const { extras, shareOf } = splitOf(offer);
+  const paid = status === 'confirmed';
+  const saved = [];
+  for (let i = 0; i < extras.length; i++) {
+    const s = extras[i], share = shareOf(s);
+    const checkIn = dateOnly(s.checkIn), checkOut = dateOnly(s.checkOut);
+    const money = {
+      status, totalCents: share, quotedCents: share, paid, paymentStatus: paid ? 'paid' : 'unpaid',
+      amountPaidCents: paid ? share : 0, amountOwingCents: paid ? 0 : share,
+    };
+    const existing = await prisma.booking.findFirst({ where: { sourceOfferId: offer.id, unitId: s.unitId, checkIn } });
+    saved.push(existing
+      ? await prisma.booking.update({ where: { id: existing.id }, data: money })
+      : await prisma.booking.create({
+        data: {
+          ...money, unitId: s.unitId, hostId: primary.hostId, source: 'website', sourceOfferId: offer.id, checkIn, checkOut,
+          guestName: primary.guestName, guestEmail: primary.guestEmail, guestPhone: primary.guestPhone, guestAccountId: primary.guestAccountId,
+          ref: primary.ref ? `${primary.ref}-${i + 2}` : null, termsAcceptedAt: primary.termsAcceptedAt,
+          comments: `Second or later unit on invoice ${primary.ref || ''}`.trim(),
+        },
+      }));
+  }
+  return saved;
 }
 
 // Why this booking can't take an invoice, or null if it can.
@@ -91,13 +185,17 @@ function offerOut(offer, booking) {
 async function sendOffer(booking, { lines: rawLines, note }) {
   const block = invoiceBlock(booking);
   if (block) return { error: block, status: 400, message: "This booking can't be sent an invoice." };
-  const clean = cleanLines(rawLines);
+  const clean = await cleanLines(rawLines, booking.hostId || booking.unit.property.hostId);
   if (clean.error) return { error: 'bad_lines', status: 400, message: clean.error };
-  const avail = await checkAvailability(booking.unitId, iso(booking.checkIn), iso(booking.checkOut), booking.id);
-  if (avail.error || !avail.available) return { error: 'dates_unavailable', status: 409, message: "Those dates are no longer available, so this invoice wasn't sent." };
+  const stays = clean.lines.filter((l) => l.kind === 'stay');
+  const clash = await firstClash(stays, booking.id);
+  if (clash) return { error: 'dates_unavailable', status: 409, message: `${clash.propertyName} · Unit ${clash.unitName} isn't available for those dates, so this invoice wasn't sent.` };
 
   const offer = await prisma.$transaction(async (tx) => {
     await tx.priceOffer.updateMany({ where: { bookingId: booking.id, status: 'open' }, data: { status: 'replaced' } });
+    // Extra units held for an earlier invoice (EFT) go with it.
+    const earlier = await tx.priceOffer.findMany({ where: { bookingId: booking.id }, select: { id: true } });
+    await tx.booking.updateMany({ where: { sourceOfferId: { in: earlier.map((o) => o.id) }, status: 'pending' }, data: { status: 'cancelled' } });
     const created = await tx.priceOffer.create({
       data: {
         bookingId: booking.id, token: crypto.randomBytes(24).toString('base64url'),
@@ -108,6 +206,8 @@ async function sendOffer(booking, { lines: rawLines, note }) {
     await tx.booking.update({
       where: { id: booking.id },
       data: {
+        // The conversation follows the first accommodation line.
+        unitId: stays[0].unitId, checkIn: dateOnly(stays[0].checkIn), checkOut: dateOnly(stays[0].checkOut),
         totalCents: clean.totalCents, quotedCents: clean.totalCents, depositCents: clean.depositCents || null,
         paymentStatus: 'unpaid', amountOwingCents: null,
       },
@@ -121,4 +221,4 @@ async function sendOffer(booking, { lines: rawLines, note }) {
   return { offer, message: sent.message };
 }
 
-module.exports = { OFFER_HOURS, cleanLines, standardQuote, draftLines, invoiceBlock, offerState, offerLink, offerOut, sendOffer };
+module.exports = { OFFER_HOURS, cleanLines, staysOf, splitOf, firstClash, saveExtraStays, standardQuote, draftFor, invoiceBlock, offerState, offerLink, offerOut, sendOffer };

@@ -81,10 +81,14 @@ async function applyPaid(payment, txId) {
   const { onBookingConfirmed } = require('./bookingConfirmed');
   let booking = await prisma.booking.findUnique({ where: { id: payment.bookingId }, include: { unit: { include: { property: true } } } });
   if (!booking) return { ok: true, outcome: 'booking_gone' };
-  if (payment.offerId) booking = await applyOfferTerms(payment.offerId, booking);
+  const offers = require('./offers');
+  const offer = payment.offerId ? await prisma.priceOffer.findUnique({ where: { id: payment.offerId } }) : null;
+  if (offer) booking = await applyOfferTerms(offer, booking);
+  // On an invoice with several units, the rest of the money belongs to the extra bookings.
+  const extraCents = offer ? offer.totalCents - offers.splitOf(offer).primaryCents : 0;
 
   const total = booking.totalCents != null ? booking.totalCents : payment.amountCents;
-  const paidSoFar = (booking.amountPaidCents || 0) + payment.amountCents;
+  const paidSoFar = (booking.amountPaidCents || 0) + payment.amountCents - extraCents;
   const owing = Math.max(0, total - paidSoFar);
   const money = {
     amountPaidCents: paidSoFar, amountOwingCents: owing,
@@ -111,7 +115,8 @@ async function applyPaid(payment, txId) {
   }
   // The pending hold doesn't block the calendar, so re-check before confirming.
   const avail = await checkAvailability(booking.unitId, iso(booking.checkIn), iso(booking.checkOut), booking.id);
-  if (!avail.available) {
+  const extraClash = offer ? await offers.firstClash(offers.staysOf(offer).slice(1), booking.id) : null;
+  if (!avail.available || extraClash) {
     await prisma.booking.update({
       where: { id: booking.id },
       data: { ...money, comments: `${booking.comments || ''} · ⚠ PAID via Paygate (transaction ${txId || '?'}) but the dates were taken before payment completed — refund or move this guest.` },
@@ -122,19 +127,29 @@ async function applyPaid(payment, txId) {
   await prisma.booking.update({ where: { id: booking.id }, data: { ...money, status: 'confirmed' } });
   try { await require('./locks').issueGuestCode({ ...booking, status: 'confirmed' }, booking.unit); } catch (e) { /* stubbed until smart locks are live */ }
   await onBookingConfirmed(booking.id); // host WhatsApp + "on confirmation" guest messages
+  // Every other unit on the invoice is blocked and confirmed the same way.
+  const extraBookings = offer ? await offers.saveExtraStays(offer, booking, 'confirmed') : [];
+  for (const extra of extraBookings) {
+    const full = await prisma.booking.findUnique({ where: { id: extra.id }, include: { unit: { include: { property: true } } } });
+    try { await require('./locks').issueGuestCode(full, full.unit); } catch (e) { /* stubbed until smart locks are live */ }
+    await onBookingConfirmed(extra.id);
+  }
   return { ok: true, outcome: 'confirmed' };
 }
 
 // The guest paid this invoice, so its terms stand even if a newer one was sent
 // while they were on the payment page: they owe what they were shown.
-async function applyOfferTerms(offerId, booking) {
-  const offer = await prisma.priceOffer.findUnique({ where: { id: offerId } });
-  if (!offer) return booking;
+async function applyOfferTerms(offer, booking) {
+  const { staysOf, splitOf } = require('./offers');
+  const { dateOnly } = require('./ical');
+  const first = staysOf(offer)[0];
+  const share = splitOf(offer).primaryCents;
   await prisma.priceOffer.update({ where: { id: offer.id }, data: { status: 'paid', paidAt: new Date() } });
   return prisma.booking.update({
     where: { id: booking.id },
     data: {
-      totalCents: offer.totalCents, quotedCents: offer.totalCents,
+      ...(first ? { unitId: first.unitId, checkIn: dateOnly(first.checkIn), checkOut: dateOnly(first.checkOut) } : {}),
+      totalCents: share, quotedCents: share,
       depositCents: offer.depositCents || null, depositStatus: offer.depositCents ? 'held' : null,
     },
     include: { unit: { include: { property: true } } },

@@ -487,6 +487,7 @@ model Booking {
   // Guards the host's WhatsApp alert against double-sends and anchors the
   // "when a booking is confirmed" scheduled messages. Null on pre-existing rows.
   confirmedAt  DateTime?
+  sourceOfferId String? // set on the extra unit bookings an invoice with several stays creates
   messages     Message[]
   payments     Payment[]
   offers       PriceOffer[]
@@ -571,7 +572,9 @@ model PriceOffer {
   bookingId    String
   booking      Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   token        String    @unique
-  lines        Json // [{description,amountCents,deposit}]; negative amounts are discounts
+  // kind 'stay': {unitId,propertyName,unitName,checkIn,checkOut,nights,nightlyCents,amountCents,description}
+  // kind 'charge': {description,amountCents,deposit}; negative amounts are discounts
+  lines        Json
   totalCents   Int
   depositCents Int       @default(0) // the refundable part of the total
   status       String    @default("open") // open | replaced | paid (expiry is derived from expiresAt)

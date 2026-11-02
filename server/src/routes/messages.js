@@ -99,14 +99,16 @@ router.get('/booking/:bookingId', async (req, res, next) => {
     });
     await prisma.message.updateMany({ where: { bookingId: b.id, sender: 'guest', readAt: null }, data: { readAt: new Date() } });
     const standard = await offers.standardQuote(b).catch(() => null);
-    const latest = messages.filter((m) => m.offer).pop();
+    const sent = messages.filter((m) => m.offer).map((m) => m.offer);
+    const latest = sent[sent.length - 1] || null;
+    const headline = sent.find((o) => o.status === 'paid') || latest; // what this conversation costs
     res.json({
-      booking: bookingSummary(b),
-      standardCents: standard ? standard.totalCents : null,
+      booking: { ...bookingSummary(b), amountCents: headline ? headline.totalCents : bookingSummary(b).amountCents },
+      // The pricing sheet only compares fairly with an invoice for this one unit.
+      standardCents: standard && !(latest && offers.staysOf(latest).length > 1) ? standard.totalCents : null,
       invoice: {
         blocked: offers.invoiceBlock(b),
-        // Start from the last invoice sent, else the pricing sheet.
-        draftLines: latest ? latest.offer.lines : offers.draftLines(standard),
+        draftLines: offers.draftFor(latest, standard, b),
         validHours: offers.OFFER_HOURS,
       },
       messages: messages.map((m) => ({
