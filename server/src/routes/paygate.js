@@ -50,6 +50,11 @@ router.all('/return/:paymentId', async (req, res) => {
     fresh = await prisma.payment.findUnique({ where: { id: payment.id } });
   } catch (e) { console.error('[paygate] return reconcile failed', e.message); }
   const failed = ['DECLINED', 'CANCELLED', 'USER_CANCELLED', 'NOT_DONE', 'VOIDED'].includes(fresh.status);
+  // An invoice from a conversation returns to its own page.
+  if (payment.offerId) {
+    const offer = await prisma.priceOffer.findUnique({ where: { id: payment.offerId } }).catch(() => null);
+    if (offer) return res.redirect(303, `/invoice/${offer.token}?${failed ? 'payment=cancelled' : 'paid=1'}`);
+  }
   const balance = payment.kind === 'balance' ? '&balance=1' : '';
   if (payment.returnTo) {
     // Back into the app (its in-app browser closes when it sees this link).

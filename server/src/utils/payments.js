@@ -29,10 +29,10 @@ async function emailFor(b) {
 // notify URLs). Returns { mode:'simulate' } or { mode:'form', action, fields }.
 // `returnTo` is the app's deep link (see appReturn) — after paying, the guest is
 // sent back into the app instead of the website.
-async function createCheckout(booking, amountCents, { base, kind = 'booking', returnTo = null } = {}) {
+async function createCheckout(booking, amountCents, { base, kind = 'booking', returnTo = null, offerId = null } = {}) {
   if (!isOnline() || !base) return { mode: 'simulate', amountCents };
   const b = booking.unit ? booking : await prisma.booking.findUnique({ where: { id: booking.id }, include: { unit: { include: { property: true } } } });
-  const payment = await prisma.payment.create({ data: { bookingId: b.id, kind, amountCents, provider: 'paygate', returnTo: appReturn(returnTo) } });
+  const payment = await prisma.payment.create({ data: { bookingId: b.id, kind, amountCents, provider: 'paygate', returnTo: appReturn(returnTo), offerId } });
   const init = await paygate.initiate({
     reference: payment.id, amountCents, email: await emailFor(b), user1: kind,
     returnUrl: `${base}/public/paygate/return/${payment.id}`,
@@ -79,8 +79,9 @@ async function reconcile(payment, { query = paygate.query } = {}) {
 async function applyPaid(payment, txId) {
   const { checkAvailability } = require('./sync');
   const { onBookingConfirmed } = require('./bookingConfirmed');
-  const booking = await prisma.booking.findUnique({ where: { id: payment.bookingId }, include: { unit: { include: { property: true } } } });
+  let booking = await prisma.booking.findUnique({ where: { id: payment.bookingId }, include: { unit: { include: { property: true } } } });
   if (!booking) return { ok: true, outcome: 'booking_gone' };
+  if (payment.offerId) booking = await applyOfferTerms(payment.offerId, booking);
 
   const total = booking.totalCents != null ? booking.totalCents : payment.amountCents;
   const paidSoFar = (booking.amountPaidCents || 0) + payment.amountCents;
@@ -124,6 +125,29 @@ async function applyPaid(payment, txId) {
   return { ok: true, outcome: 'confirmed' };
 }
 
+// The guest paid this invoice, so its terms stand even if a newer one was sent
+// while they were on the payment page: they owe what they were shown.
+async function applyOfferTerms(offerId, booking) {
+  const offer = await prisma.priceOffer.findUnique({ where: { id: offerId } });
+  if (!offer) return booking;
+  await prisma.priceOffer.update({ where: { id: offer.id }, data: { status: 'paid', paidAt: new Date() } });
+  return prisma.booking.update({
+    where: { id: booking.id },
+    data: {
+      totalCents: offer.totalCents, quotedCents: offer.totalCents,
+      depositCents: offer.depositCents || null, depositStatus: offer.depositCents ? 'held' : null,
+    },
+    include: { unit: { include: { property: true } } },
+  });
+}
+
+// Local testing only: settle an invoice with no gateway configured. The route
+// refuses this on Render, so it can never confirm a real stay without payment.
+async function completeSimulatedOffer(offer, booking) {
+  const payment = await prisma.payment.create({ data: { bookingId: booking.id, kind: 'booking', amountCents: offer.totalCents, provider: 'simulate', status: 'COMPLETE', offerId: offer.id } });
+  return applyPaid(payment, null);
+}
+
 // Paygate's notify post: check it's signed with our key and is for one of our
 // payments, then confirm the outcome with Paygate directly.
 async function handleNotify(rawBody, opts = {}) {
@@ -154,6 +178,7 @@ async function expireAbandoned({ hours = 24, now = new Date() } = {}) {
   const stale = await prisma.booking.findMany({
     where: {
       source: 'website', status: 'pending',
+      offers: { none: { status: 'open', expiresAt: { gt: now } } }, // an unexpired invoice is still payable
       payments: { some: {}, none: { OR: [{ status: 'COMPLETE' }, { createdAt: { gt: cutoff } }] } },
     },
     select: { id: true, comments: true },
@@ -176,4 +201,4 @@ async function alertHost(booking, body) {
   } catch (e) { console.error('[payments] host alert failed', e.message); }
 }
 
-module.exports = { appReturn, createCheckout, verifyPayment, reconcile, reconcileBooking, handleNotify, expireAbandoned, isOnline, MODE };
+module.exports = { alertHost, completeSimulatedOffer, appReturn, createCheckout, verifyPayment, reconcile, reconcileBooking, handleNotify, expireAbandoned, isOnline, MODE };

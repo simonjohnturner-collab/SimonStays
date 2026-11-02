@@ -109,7 +109,7 @@ router.get('/bookings/search', async (req, res) => {
   if (q.length < 2) return res.json({ results: [] });
   const bookings = await prisma.booking.findMany({
     where: {
-      status: { not: 'cancelled' },
+      status: { notIn: ['cancelled', 'enquiry'] },
       OR: [
         { guestName: { contains: q, mode: 'insensitive' } },
         { resCode: { contains: q, mode: 'insensitive' } },

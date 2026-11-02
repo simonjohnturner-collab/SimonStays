@@ -489,6 +489,7 @@ model Booking {
   confirmedAt  DateTime?
   messages     Message[]
   payments     Payment[]
+  offers       PriceOffer[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -552,6 +553,8 @@ model Message {
   body       String
   scheduleId String? // set when an automatic message sent it (one per booking per schedule)
   schedule   MessageSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  offerId    String? // set when this message carries an invoice
+  offer      PriceOffer?      @relation(fields: [offerId], references: [id], onDelete: SetNull)
   emailedAt  DateTime? // when the guest was emailed a copy
   readAt     DateTime? // when the other side read it
   createdAt  DateTime         @default(now())
@@ -559,6 +562,26 @@ model Message {
   @@unique([scheduleId, bookingId])
   @@index([bookingId, createdAt])
   @@index([hostId, createdAt])
+}
+
+// A custom-priced invoice the host sent in a conversation. The guest pays its
+// total on /invoice/:token; the token is the capability (see utils/offers.js).
+model PriceOffer {
+  id           String    @id @default(uuid())
+  bookingId    String
+  booking      Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  token        String    @unique
+  lines        Json // [{description,amountCents,deposit}]; negative amounts are discounts
+  totalCents   Int
+  depositCents Int       @default(0) // the refundable part of the total
+  status       String    @default("open") // open | replaced | paid (expiry is derived from expiresAt)
+  expiresAt    DateTime
+  paidAt       DateTime?
+  messages     Message[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([bookingId])
 }
 
 // ---- Ask Simon (AI guest Q&A) ----
@@ -619,6 +642,7 @@ model Payment {
   providerRef String?  @unique // pf_payment_id
   raw         Json? // the verified notification, for the audit trail
   returnTo    String? // the SimonStays app's deep link to send the guest back to (null = website)
+  offerId     String? // the invoice this pays, when it came from a conversation
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -675,6 +699,7 @@ enum BookingStatus {
   floating
   cancelled
   pending // website hold awaiting payment; does NOT block the calendar
+  enquiry // a guest asking before booking; only in Messages, never on the board or calendar
 }
 
 // ---- Competitor market intelligence (the "building fill" gauge) ----

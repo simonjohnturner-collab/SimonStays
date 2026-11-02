@@ -945,3 +945,23 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .src-tag.src-booking { background: #1a4fa0; }
 .src-tag.src-lekkeslaap { background: #c07a12; }
 .cell.stay .stay-name { padding-left: 21px; }
+
+/* Enquiries and invoices in guest messages */
+.msg-summary { flex:1; display:flex; justify-content:space-between; gap:12px; align-items:flex-start; min-width:0; }
+.msg-summary-price { text-align:right; white-space:nowrap; }
+.msg-paid { color:var(--green-d); font-weight:600; }
+.msg-enquiry-tag { display:inline-block; margin-left:6px; padding:0 7px; border-radius:999px; background:#fff7e6; color:#8a5a00; font-size:11px; font-weight:600; line-height:18px; }
+.msg-invoice { margin-top:8px; padding:9px 11px; background:#fff; border:1px solid var(--line); border-radius:8px; color:var(--ink, inherit); min-width:240px; }
+.msg-invoice-title { display:flex; justify-content:space-between; gap:10px; margin-bottom:4px; }
+.msg-invoice-state { font-size:11px; font-weight:600; color:#8a5a00; }
+.msg-invoice-state.paid { color:var(--green-d); }
+.msg-invoice-state.replaced, .msg-invoice-state.expired, .msg-invoice-state.closed { color:#6b7280; }
+.msg-invoice-row { display:flex; justify-content:space-between; gap:12px; font-size:13px; padding:2px 0; }
+.msg-invoice-row.total { font-weight:700; border-top:1px solid var(--line); margin-top:4px; padding-top:6px; }
+.msg-invoice-actions { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+.msg-composer { padding:10px 14px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:6px; max-height:55vh; overflow-y:auto; }
+.msg-composer-head { display:flex; justify-content:space-between; gap:10px; align-items:baseline; }
+.msg-composer-line { display:flex; gap:6px; align-items:center; }
+.msg-composer-line input { flex:1; min-width:0; margin:0; }
+.msg-composer-line input.amt { flex:0 0 110px; text-align:right; }
+.msg-composer > .secondary { align-self:flex-start; }

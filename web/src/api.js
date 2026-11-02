@@ -166,6 +166,8 @@ export const api = {
   messageRecipients: (q = '') => req('GET', `/messages/recipients${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   bookingMessages: (bookingId) => req('GET', `/messages/booking/${bookingId}`),
   sendMessage: (bookingId, body) => req('POST', `/messages/booking/${bookingId}`, { body }),
+  sendInvoice: (bookingId, lines, note) => req('POST', `/messages/booking/${bookingId}/invoice`, { lines, note }),
+  closeEnquiry: (bookingId) => req('POST', `/messages/booking/${bookingId}/close`),
   renderMessage: (bookingId, body) => req('POST', '/messages/render', { bookingId, body }),
   listMessageTemplates: () => req('GET', '/messages/templates'),
   createMessageTemplate: (data) => req('POST', '/messages/templates', data),

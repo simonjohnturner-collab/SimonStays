@@ -74,7 +74,7 @@ router.get('/properties', async (req, res) => {
     orderBy: { name: 'asc' },
     include: { units: { select: { id: true, name: true } } },
   });
-  const counts = await prisma.booking.groupBy({ by: ['unitId'], where: { status: { not: 'cancelled' } }, _count: true });
+  const counts = await prisma.booking.groupBy({ by: ['unitId'], where: { status: { notIn: ['cancelled', 'enquiry'] } }, _count: true });
   const byUnit = Object.fromEntries(counts.map((c) => [c.unitId, c._count]));
   res.json({
     properties: props.map((p) => ({
@@ -96,7 +96,7 @@ router.get('/transactions', async (req, res) => {
   if (req.query.hostId) AND.push(ownedBy(req.query.hostId));
   const range = dateRange(req.query);
   if (range) where.createdAt = range;
-  if (req.query.status) where.status = req.query.status;
+  where.status = req.query.status || { not: 'enquiry' }; // an enquiry isn't a transaction
   if (AND.length) where.AND = AND;
   const bookings = await prisma.booking.findMany({
     where, orderBy: { createdAt: 'desc' }, take: 1000,

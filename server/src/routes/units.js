@@ -66,7 +66,7 @@ router.delete('/:id', requireOwnedUnit, async (req, res) => {
 // GET /units/:id/bookings?from=ISO&to=ISO
 router.get('/:id/bookings', requireOwnedUnit, async (req, res) => {
   const { from, to } = req.query;
-  const where = { unitId: req.unit.id, status: { not: 'cancelled' } };
+  const where = { unitId: req.unit.id, status: { notIn: ['cancelled', 'enquiry'] } };
   if (from) where.checkOut = { gte: new Date(from) };
   if (to) where.checkIn = { lte: new Date(to) };
   const bookings = await prisma.booking.findMany({ where, orderBy: { checkIn: 'asc' }, include: { cleans: true } });

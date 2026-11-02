@@ -79,6 +79,14 @@ app.get(['/terms', '/terms.html', '/terms-and-conditions'], (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, must-revalidate');
   res.type('html').send(termsHtml);
 });
+// A custom invoice from a conversation: guests open it from the message or email and pay.
+const offerInvoiceHtml = fs.readFileSync(path.join(__dirname, 'pages/invoice.html'), 'utf8');
+app.get('/invoice/:token', (req, res) => {
+  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'");
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.type('html').send(offerInvoiceHtml);
+});
 // Privacy Policy — same plain self-contained style as the terms page.
 const privacyHtml = fs.readFileSync(path.join(__dirname, 'pages/privacy.html'), 'utf8');
 app.get(['/privacy', '/privacy.html', '/privacy-policy'], (req, res) => {

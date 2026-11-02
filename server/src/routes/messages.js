@@ -5,6 +5,7 @@ const express = require('express');
 const prisma = require('../lib/prisma');
 const { authHost } = require('../middleware/auth');
 const messaging = require('../utils/messaging');
+const offers = require('../utils/offers');
 
 const router = express.Router();
 router.use(authHost);
@@ -19,11 +20,14 @@ function bookingSummary(b) {
     guestName: b.guestName || null, guestEmail: b.guestEmail || (b.guestAccount && b.guestAccount.email) || null,
     propertyName: b.unit?.property?.name || null, unitName: b.unit?.name || null,
     checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
+    nights: Math.max(0, Math.round((new Date(b.checkOut) - new Date(b.checkIn)) / 864e5)),
+    amountCents: b.quotedCents != null ? b.quotedCents : (b.totalCents != null ? b.totalCents : null),
+    paidCents: b.amountPaidCents || 0, paid: !!b.paid,
     // Can the guest actually read messages (an email to copy to, or a shopfront account)?
     reachable: !!(b.guestEmail || b.guestAccountId),
   };
 }
-const SUMMARY_INCLUDE = { unit: { include: { property: true } }, guestAccount: { select: { email: true } } };
+const SUMMARY_INCLUDE = { unit: { include: { property: true, pricingGroup: true } }, guestAccount: { select: { email: true } } };
 
 async function loadOwnedBooking(req, res) {
   const b = await prisma.booking.findFirst({ where: { id: req.params.bookingId, ...owned(req.hostId) }, include: SUMMARY_INCLUDE });
@@ -91,14 +95,24 @@ router.get('/booking/:bookingId', async (req, res, next) => {
     const b = await loadOwnedBooking(req, res); if (!b) return;
     const messages = await prisma.message.findMany({
       where: { bookingId: b.id }, orderBy: { createdAt: 'asc' },
-      include: { schedule: { select: { name: true } } },
+      include: { schedule: { select: { name: true } }, offer: true },
     });
     await prisma.message.updateMany({ where: { bookingId: b.id, sender: 'guest', readAt: null }, data: { readAt: new Date() } });
+    const standard = await offers.standardQuote(b).catch(() => null);
+    const latest = messages.filter((m) => m.offer).pop();
     res.json({
       booking: bookingSummary(b),
+      standardCents: standard ? standard.totalCents : null,
+      invoice: {
+        blocked: offers.invoiceBlock(b),
+        // Start from the last invoice sent, else the pricing sheet.
+        draftLines: latest ? latest.offer.lines : offers.draftLines(standard),
+        validHours: offers.OFFER_HOURS,
+      },
       messages: messages.map((m) => ({
         id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt,
         emailedAt: m.emailedAt, scheduleName: m.schedule ? m.schedule.name : (m.scheduleId ? 'Scheduled message' : null),
+        offer: m.offer ? offers.offerOut(m.offer, b) : null,
       })),
     });
   } catch (e) { next(e); }
@@ -113,6 +127,26 @@ router.post('/booking/:bookingId', async (req, res, next) => {
     const r = await messaging.sendHostMessage(b.id, body);
     if (!r.ok) return res.status(400).json({ error: r.reason || 'send_failed' });
     res.status(201).json({ message: r.message, emailed: !!r.message.emailedAt });
+  } catch (e) { next(e); }
+});
+
+// POST /messages/booking/:bookingId/invoice { lines, note } — send a custom-priced invoice.
+router.post('/booking/:bookingId/invoice', async (req, res, next) => {
+  try {
+    const b = await loadOwnedBooking(req, res); if (!b) return;
+    const r = await offers.sendOffer(b, req.body || {});
+    if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
+    res.status(201).json({ offer: offers.offerOut(r.offer, b), emailed: !!r.message.emailedAt });
+  } catch (e) { next(e); }
+});
+
+// POST /messages/booking/:bookingId/close — turn down an enquiry; its invoice can't be paid after this.
+router.post('/booking/:bookingId/close', async (req, res, next) => {
+  try {
+    const b = await loadOwnedBooking(req, res); if (!b) return;
+    if (b.status !== 'enquiry') return res.status(400).json({ error: 'not_enquiry', message: 'Only an enquiry can be closed here.' });
+    await prisma.booking.update({ where: { id: b.id }, data: { status: 'cancelled' } });
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 

@@ -69,11 +69,12 @@ function inboxUrl() {
 const escHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // Email the guest a copy so they see it even if they never sign in. Best-effort.
-async function emailGuest(booking, body) {
+async function emailGuest(booking, body, offer = null) {
   const to = booking.guestEmail || (booking.guestAccount && booking.guestAccount.email);
   if (!to) return false;
   const place = [booking.unit?.property?.name, booking.unit?.name && `Unit ${booking.unit.name}`].filter(Boolean).join(' · ') || 'your stay';
   const link = inboxUrl();
+  if (offer) return emailInvoiceOffer(to, place, body, offer, link);
   return sendMail({
     to,
     subject: `New message about your stay at ${place}`,
@@ -86,12 +87,32 @@ async function emailGuest(booking, body) {
   }).catch(() => false);
 }
 
+const fmtRand = (c) => `${c < 0 ? '-' : ''}R${(Math.abs(c) / 100).toFixed(2)}`;
+
+// The guest's copy of an invoice sent in a conversation, with its pay link.
+function emailInvoiceOffer(to, place, body, offer, inbox) {
+  const { offerLink } = require('./offers');
+  const pay = offerLink(offer);
+  const rows = offer.lines.map((l) => `<tr><td style="padding:6px 0">${escHtml(l.description)}</td><td style="padding:6px 0;text-align:right;white-space:nowrap">${fmtRand(l.amountCents)}</td></tr>`).join('');
+  return sendMail({
+    to,
+    subject: `Your invoice for ${place}: ${fmtRand(offer.totalCents)}`,
+    text: `${body}\n\n${offer.lines.map((l) => `${l.description}: ${fmtRand(l.amountCents)}`).join('\n')}\nTotal: ${fmtRand(offer.totalCents)}\n\nView and pay: ${pay}\n\n—\nPlease don't reply to this email. To reply, open your messages on SimonStays: ${inbox}`,
+    html: `<div style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.55;color:#1d2433">` +
+      `<p style="white-space:pre-line">${escHtml(body)}</p>` +
+      `<table style="width:100%;max-width:480px;border-collapse:collapse;margin:12px 0">${rows}` +
+      `<tr><td style="padding:8px 0;border-top:1px solid #d9dee3;font-weight:700">Total</td><td style="padding:8px 0;border-top:1px solid #d9dee3;font-weight:700;text-align:right;white-space:nowrap">${fmtRand(offer.totalCents)}</td></tr></table>` +
+      `<p><a href="${pay}" style="display:inline-block;background:#1a7a3a;color:#fff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px">View invoice &amp; pay</a></p>` +
+      `<p style="color:#6b7280;font-size:13px">About your stay at <b>${escHtml(place)}</b>. Your dates aren't held until this is paid. To reply, use <a href="${inbox}">your messages on SimonStays</a>.</p></div>`,
+  }).catch(() => false);
+}
+
 function hostIdOf(b) { return b.hostId || (b.unit && b.unit.property ? b.unit.property.hostId : null); }
 
 // Send a host → guest message on a booking. `body` is rendered here, so it may
 // still contain placeholders. With `scheduleId`, a repeat for the same booking
 // is refused by the unique constraint and returns { duplicate: true }.
-async function sendHostMessage(bookingOrId, body, { scheduleId = null } = {}) {
+async function sendHostMessage(bookingOrId, body, { scheduleId = null, offer = null } = {}) {
   const b = typeof bookingOrId === 'string' || !bookingOrId.unit
     ? await prisma.booking.findUnique({ where: { id: bookingOrId.id || bookingOrId }, include: { ...BOOKING_INCLUDE, guestAccount: { select: { email: true } } } })
     : bookingOrId;
@@ -100,12 +121,12 @@ async function sendHostMessage(bookingOrId, body, { scheduleId = null } = {}) {
   if (!text) return { ok: false, reason: 'empty' };
   let message;
   try {
-    message = await prisma.message.create({ data: { hostId: hostIdOf(b), bookingId: b.id, sender: 'host', body: text, scheduleId } });
+    message = await prisma.message.create({ data: { hostId: hostIdOf(b), bookingId: b.id, sender: 'host', body: text, scheduleId, offerId: offer ? offer.id : null } });
   } catch (e) {
     if (e.code === 'P2002') return { ok: false, duplicate: true };
     throw e;
   }
-  if (await emailGuest(b, text)) {
+  if (await emailGuest(b, text, offer)) {
     message = await prisma.message.update({ where: { id: message.id }, data: { emailedAt: new Date() } });
   }
   return { ok: true, message };

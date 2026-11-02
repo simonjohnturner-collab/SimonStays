@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
+import { fmtR, randToCents } from '../money.js';
 import TeachSimon from './TeachSimon.jsx';
 
 // Guest messaging. Four tabs:
@@ -51,6 +52,67 @@ function fmtDay(s) {
 }
 const placeOf = (b) => [b.propertyName, b.unitName && `Unit ${b.unitName}`].filter(Boolean).join(' · ');
 
+const OFFER_STATE = {
+  open: 'Awaiting payment', paid: 'Paid', replaced: 'Replaced by a newer invoice',
+  expired: 'Expired', closed: 'Closed',
+};
+
+// An invoice inside a message (the guest sees the same lines on the shopfront).
+function InvoiceCard({ offer }) {
+  return (
+    <div className="msg-invoice">
+      <div className="msg-invoice-title"><b>Invoice</b><span className={`msg-invoice-state ${offer.state}`}>{OFFER_STATE[offer.state] || offer.state}</span></div>
+      {offer.lines.map((l, i) => (
+        <div key={i} className="msg-invoice-row"><span>{l.description}</span><span>{fmtR(l.amountCents)}</span></div>
+      ))}
+      <div className="msg-invoice-row total"><span>Total</span><span>{fmtR(offer.totalCents)}</span></div>
+      {offer.state === 'open' && <a className="small" href={offer.link} target="_blank" rel="noreferrer">Open the guest’s payment page ↗</a>}
+    </div>
+  );
+}
+
+// Build an invoice from the pricing sheet: edit, remove or add lines. The total
+// is what the guest pays.
+function InvoiceComposer({ bookingId, invoice, standardCents, onSent, onCancel }) {
+  const [lines, setLines] = useState(() => invoice.draftLines.map((l) => ({ description: l.description, amount: (l.amountCents / 100).toFixed(2), deposit: !!l.deposit })));
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const totalCents = lines.reduce((n, l) => n + randToCents(l.amount), 0);
+  const edit = (i, patch) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+
+  async function send() {
+    setBusy(true); setErr('');
+    try {
+      const r = await api.sendInvoice(bookingId, lines.map((l) => ({ description: l.description, amountCents: randToCents(l.amount), deposit: l.deposit })), note);
+      onSent(r.emailed);
+    } catch (e) { setErr((e.data && e.data.message) || e.message); setBusy(false); }
+  }
+
+  return (
+    <div className="msg-composer">
+      <div className="msg-composer-head"><b>Invoice for this guest</b>{standardCents != null && <span className="muted small">Standard price {fmtR(standardCents)}</span>}</div>
+      {lines.map((l, i) => (
+        <div key={i} className="msg-composer-line">
+          <input value={l.description} aria-label="Description" placeholder="Description" onChange={(e) => edit(i, { description: e.target.value })} />
+          <input className="amt" value={l.amount} aria-label="Amount in rand" inputMode="decimal" placeholder="0.00" onChange={(e) => edit(i, { amount: e.target.value })} />
+          <button type="button" className="mini" aria-label={`Remove ${l.description || 'line'}`} onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}>✕</button>
+        </div>
+      ))}
+      <button type="button" className="secondary small" onClick={() => setLines((ls) => [...ls, { description: '', amount: '', deposit: false }])}>＋ Add a line</button>
+      <div className="muted small">Use a minus amount for a discount, for example -500.</div>
+      <div className="msg-invoice-row total"><span>Guest pays</span><span>{fmtR(totalCents)}</span></div>
+      <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note to the guest (optional)" />
+      {err && <div className="msg-warn">{err}</div>}
+      <div className="msg-send-row">
+        <span className="muted small">The guest has {invoice.validHours} hours to pay. Dates aren’t held until they do.</span>
+        <button className="secondary" onClick={onCancel} disabled={busy}>Cancel</button>
+        <button onClick={send} disabled={busy || totalCents <= 0}>{busy ? 'Sending…' : `Send ${fmtR(totalCents)} invoice`}</button>
+      </div>
+    </div>
+  );
+}
+
 // ---------------- Inbox ----------------
 
 function Inbox({ templates, initialBookingId, onUnreadChange }) {
@@ -61,6 +123,7 @@ function Inbox({ templates, initialBookingId, onUnreadChange }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [picking, setPicking] = useState(false);
+  const [invoicing, setInvoicing] = useState(false);
   const [q, setQ] = useState('');
   const [recipients, setRecipients] = useState([]);
   const endRef = useRef(null);
@@ -74,7 +137,7 @@ function Inbox({ templates, initialBookingId, onUnreadChange }) {
     return () => clearInterval(t);
     // eslint-disable-next-line
   }, [activeId]);
-  useEffect(() => { setThread(null); setDraft(''); setNote(''); if (activeId) loadThread(activeId); /* eslint-disable-next-line */ }, [activeId]);
+  useEffect(() => { setThread(null); setDraft(''); setNote(''); setInvoicing(false); if (activeId) loadThread(activeId); /* eslint-disable-next-line */ }, [activeId]);
   useEffect(() => { endRef.current && endRef.current.scrollIntoView({ block: 'end' }); }, [thread]);
   useEffect(() => {
     if (!picking) return;
@@ -100,6 +163,17 @@ function Inbox({ templates, initialBookingId, onUnreadChange }) {
     finally { setBusy(false); }
   }
 
+  async function invoiceSent(emailed) {
+    setInvoicing(false);
+    setNote(emailed ? 'Invoice sent, and emailed to the guest.' : 'Invoice sent. (No email copy: the guest will see it when they sign in.)');
+    await Promise.all([loadThread(activeId), loadThreads()]);
+  }
+  async function closeEnquiry() {
+    if (!window.confirm('Close this enquiry? The guest won’t be able to pay any invoice on it.')) return;
+    try { await api.closeEnquiry(activeId); await Promise.all([loadThread(activeId), loadThreads()]); }
+    catch (e) { setNote((e.data && e.data.message) || e.message); }
+  }
+
   const b = thread && thread.booking;
   return (
     <div className={`msg-layout${activeId ? ' has-active' : ''}`}>
@@ -121,7 +195,7 @@ function Inbox({ templates, initialBookingId, onUnreadChange }) {
           <p className="muted small">No conversations yet. Start one with ＋ New message, or set up ⏰ Scheduled messages.</p>
         ) : threads.map((t) => (
           <button key={t.booking.id} className={`msg-item${t.booking.id === activeId ? ' on' : ''}`} onClick={() => setActiveId(t.booking.id)}>
-            <span className="msg-item-top"><b>{t.booking.guestName || 'Guest'}</b>{t.unread > 0 && <span className="msg-dot">{t.unread}</span>}</span>
+            <span className="msg-item-top"><b>{t.booking.guestName || 'Guest'}</b>{t.booking.status === 'enquiry' && <span className="msg-enquiry-tag">Enquiry</span>}{t.unread > 0 && <span className="msg-dot">{t.unread}</span>}</span>
             <span className="muted small">{placeOf(t.booking)} · {fmtDay(t.booking.checkIn)} → {fmtDay(t.booking.checkOut)}</span>
             <span className="msg-snippet small">{t.last.sender === 'host' ? 'You: ' : ''}{t.last.body}</span>
           </button>
@@ -133,9 +207,17 @@ function Inbox({ templates, initialBookingId, onUnreadChange }) {
           <>
             <div className="msg-thread-head">
               <button className="secondary msg-back" onClick={() => setActiveId(null)}>←</button>
-              <div>
-                <b>{b.guestName || 'Guest'}</b>{b.ref ? <span className="muted small"> · {b.ref}</span> : null}
-                <div className="muted small">{placeOf(b)} · {fmtDay(b.checkIn)} → {fmtDay(b.checkOut)}{b.guestEmail ? ` · ${b.guestEmail}` : ''}</div>
+              <div className="msg-summary">
+                <div>
+                  <b>{b.guestName || 'Guest'}</b>{b.status === 'enquiry' && <span className="msg-enquiry-tag">Enquiry</span>}{b.ref ? <span className="muted small"> · {b.ref}</span> : null}
+                  <div className="muted small">{placeOf(b)}{b.guestEmail ? ` · ${b.guestEmail}` : ''}</div>
+                  <div className="small">{fmtDay(b.checkIn)} → {fmtDay(b.checkOut)} · {b.nights} night{b.nights === 1 ? '' : 's'}</div>
+                </div>
+                <div className="msg-summary-price">
+                  <b>{b.amountCents != null ? fmtR(b.amountCents) : thread.standardCents != null ? fmtR(thread.standardCents) : 'No price yet'}</b>
+                  {thread.standardCents != null && b.amountCents != null && b.amountCents !== thread.standardCents && <div className="muted small">Standard {fmtR(thread.standardCents)}</div>}
+                  {b.paid ? <div className="small msg-paid">Paid</div> : b.paidCents > 0 ? <div className="muted small">{fmtR(b.paidCents)} paid</div> : null}
+                </div>
               </div>
             </div>
             {!b.reachable && (
@@ -147,12 +229,22 @@ function Inbox({ templates, initialBookingId, onUnreadChange }) {
                 <div key={m.id} className={`msg-bubble ${m.sender}`}>
                   {m.scheduleName && <div className="msg-auto">⏰ {m.scheduleName}</div>}
                   <div className="msg-body">{m.body}</div>
+                  {m.offer && <InvoiceCard offer={m.offer} />}
                   <div className="msg-meta">{fmtWhen(m.createdAt)}{m.sender === 'host' ? (m.readAt ? ' · Read' : m.emailedAt ? ' · Emailed' : '') : ''}</div>
                 </div>
               ))}
               <div ref={endRef} />
             </div>
+            {invoicing && thread.invoice && !thread.invoice.blocked ? (
+              <InvoiceComposer bookingId={activeId} invoice={thread.invoice} standardCents={thread.standardCents} onSent={invoiceSent} onCancel={() => setInvoicing(false)} />
+            ) : (
             <div className="msg-compose">
+              {thread.invoice && !thread.invoice.blocked && (
+                <div className="msg-invoice-actions">
+                  <button className="secondary" onClick={() => setInvoicing(true)}>🧾 Send an invoice</button>
+                  {b.status === 'enquiry' && <button className="secondary" onClick={closeEnquiry}>Close enquiry</button>}
+                </div>
+              )}
               {templates.length > 0 && (
                 <select value="" onChange={(e) => insertTemplate(e.target.value)}>
                   <option value="">📝 Insert a saved message…</option>
@@ -165,6 +257,7 @@ function Inbox({ templates, initialBookingId, onUnreadChange }) {
                 <button disabled={busy || !draft.trim()} onClick={send}>{busy ? 'Sending…' : 'Send'}</button>
               </div>
             </div>
+            )}
           </>
         )}
       </section>

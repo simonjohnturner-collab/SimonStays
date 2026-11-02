@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>SimonStays · Your invoice</title>
+<link rel="icon" href="/favicon.svg" />
+<style>
+  :root{ --green:#1a7a3a; --green-d:#14622f; --ink:#1f2430; --muted:#6b7280; --line:#d9dee3; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:#f3f6f4; color:var(--ink); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header{ background:#fff; border-bottom:1px solid var(--line); padding:14px 16px; font-weight:800; font-size:20px; }
+  header span{ color:var(--green); }
+  main{ max-width:560px; margin:0 auto; padding:16px; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:12px; }
+  h1{ font-size:20px; margin:0 0 4px; }
+  .muted{ color:var(--muted); font-size:14px; }
+  .row{ display:flex; justify-content:space-between; gap:16px; padding:5px 0; }
+  .row span:last-child{ white-space:nowrap; }
+  .row.tot{ font-weight:800; font-size:18px; border-top:1px solid var(--line); margin-top:6px; padding-top:10px; }
+  .policy{ font-size:13px; color:var(--muted); white-space:pre-line; margin:0 0 10px; }
+  label{ display:flex; gap:8px; align-items:flex-start; padding:6px 0; font-size:14px; }
+  label input{ margin-top:4px; flex-shrink:0; }
+  a{ color:var(--green-d); }
+  button{ width:100%; font:inherit; font-weight:700; border:0; border-radius:10px; padding:13px; cursor:pointer; background:var(--green); color:#fff; margin-top:8px; }
+  button.alt{ background:#eef1f4; color:var(--ink); }
+  button:disabled{ opacity:.55; cursor:default; }
+  .err{ background:#fdeaea; color:#a12622; border-radius:8px; padding:9px 11px; font-size:14px; margin-top:8px; }
+  .info{ background:#fff7e6; color:#8a5a00; border-radius:8px; padding:9px 11px; font-size:14px; }
+  .ok{ background:#e6f4ea; color:var(--green-d); border-radius:8px; padding:9px 11px; font-weight:600; }
+</style>
+</head>
+<body>
+<header>Simon<span>Stays</span></header>
+<main id="app"><p class="muted">Loading your invoice…</p></main>
+<script>
+(function(){
+  var token=location.pathname.split('/').filter(Boolean).pop();
+  var api='/public/offers/'+encodeURIComponent(token);
+  var query=new URLSearchParams(location.search);
+  var app=document.getElementById('app');
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function rand(c){ var v=Math.abs(c)/100; return (c<0?'-':'')+'R'+v.toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function day(s){ try{ return new Date(s+'T12:00:00').toLocaleDateString('en-ZA',{weekday:'short',day:'numeric',month:'short',year:'numeric'}); }catch(e){ return s; } }
+
+  function summary(d){
+    return '<div class="card"><h1>'+esc(d.property)+(d.unit?(' · Unit '+esc(d.unit)):'')+'</h1>'+
+      (d.guestName?'<div>'+esc(d.guestName)+'</div>':'')+
+      '<div class="muted">'+esc(day(d.checkIn))+' → '+esc(day(d.checkOut))+' · '+d.nights+' night'+(d.nights===1?'':'s')+(d.ref?(' · Ref '+esc(d.ref)):'')+'</div>'+
+      '<div class="muted">Check-in from '+esc(d.checkInTime)+' · checkout by '+esc(d.checkOutTime)+'</div></div>'+
+      '<div class="card">'+d.lines.map(function(l){ return '<div class="row"><span>'+esc(l.description)+'</span><span>'+rand(l.amountCents)+'</span></div>'; }).join('')+
+      '<div class="row tot"><span>Total</span><span>'+rand(d.totalCents)+'</span></div>'+
+      (d.depositCents?'<div class="muted" style="margin-top:6px">Includes a refundable deposit of '+rand(d.depositCents)+', returned after checkout subject to no damage.</div>':'')+'</div>';
+  }
+  function eftBox(ref,eft){
+    if(!eft) return '<div class="card"><p>Your dates aren’t held until payment is received. Please message your host for the bank details and quote reference <b>'+esc(ref||'')+'</b>.</p></div>';
+    return '<div class="card"><b>Pay by EFT or deposit</b><div class="muted" style="margin:4px 0 8px">Your booking is confirmed once your payment is received. Your dates aren’t held until then.</div>'+
+      [eft.accountName&&('Account name: '+esc(eft.accountName)),eft.bankName&&('Bank: '+esc(eft.bankName)),eft.accountNumber&&('Account no.: '+esc(eft.accountNumber)),eft.branch&&('Branch: '+esc(eft.branch)),ref&&('<b>Reference: '+esc(ref)+'</b>')].filter(Boolean).join('<br>')+'</div>';
+  }
+  function closedNote(d){
+    var notes={ replaced:'Your host has sent a newer invoice. Please use the latest one in your messages.', expired:'This invoice has expired. Please message your host for a new one.', closed:'This invoice is closed. Please message your host.' };
+    return '<div class="card info">'+esc(notes[d.state]||'This invoice can no longer be paid.')+'</div>';
+  }
+  function paidNote(d){
+    if(d.status==='confirmed') return '<div class="card"><div class="ok">✅ Payment received. You’re booked!</div><p class="muted" style="margin-bottom:0">Find this stay under <a href="/">My trips</a> on SimonStays.</p></div>';
+    return '<div class="card info">Payment received, but your booking still needs your host’s attention. They will contact you shortly.</div>';
+  }
+
+  function payForm(d){
+    var card=d.cardAvailable;
+    app.innerHTML=(query.get('payment')==='cancelled'?'<div class="card info">The payment was cancelled or declined, so no money was taken. You can try again below.</div>':'')+summary(d)+
+      '<div class="card"><p class="policy"><b>Cancellation policy:</b> '+esc(d.cancellationPolicy)+'</p>'+
+      '<label><input type="checkbox" id="a1"><span>I have read the cancellation policy and accept that no refunds are granted outside of it. I confirm that SimonStays accepts no responsibility for anything that happens at the property.</span></label>'+
+      '<label><input type="checkbox" id="a2"><span>I accept the <a href="/terms" target="_blank" rel="noreferrer">Terms &amp; Conditions</a>.</span></label>'+
+      '<div id="err"></div>'+
+      (card?'<button id="payCard" disabled>Pay '+rand(d.totalCents)+' by card</button>':'')+
+      '<button id="payEft" class="'+(card?'alt':'')+'" disabled>Pay by EFT instead</button></div>';
+    var a1=document.getElementById('a1'), a2=document.getElementById('a2'), bc=document.getElementById('payCard'), be=document.getElementById('payEft');
+    function sync(){ var on=a1.checked&&a2.checked; if(bc) bc.disabled=!on; be.disabled=!on; }
+    a1.onchange=sync; a2.onchange=sync;
+    if(bc) bc.onclick=function(){ pay('card',bc,d); };
+    be.onclick=function(){ pay('eft',be,d); };
+  }
+  async function pay(method,btn,d){
+    var label=btn.textContent, err=document.getElementById('err');
+    btn.disabled=true; btn.textContent=method==='card'?'Taking you to secure payment…':'One moment…'; err.innerHTML='';
+    try{
+      var r=await fetch(api+'/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method:method,acceptedTerms:true})});
+      var p=await r.json();
+      if(!r.ok) throw new Error(p.message||'Could not start the payment. Please try again.');
+      if(p.mode==='form'){
+        var f=document.createElement('form'); f.method='POST'; f.action=p.action; f.style.display='none';
+        Object.keys(p.fields).forEach(function(k){ var i=document.createElement('input'); i.type='hidden'; i.name=k; i.value=p.fields[k]; f.appendChild(i); });
+        document.body.appendChild(f); f.submit(); return;
+      }
+      if(p.mode==='eft'){ app.innerHTML=summary(d)+eftBox(p.ref,p.eft); return; }
+      load();
+    }catch(e){ btn.disabled=false; btn.textContent=label; err.innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
+  }
+
+  async function fetchOffer(check){
+    var r=await fetch(api+(check?'?check=1':''));
+    if(!r.ok) throw new Error(r.status===404?'missing':'failed');
+    return r.json();
+  }
+  async function load(){
+    var d;
+    try{ d=await fetchOffer(false); }
+    catch(e){ app.innerHTML='<div class="card err">'+(e.message==='missing'?'We couldn’t find this invoice. Please check the link in your message.':'We couldn’t load this invoice. Please refresh and try again.')+'</div>'; return; }
+    // Back from Paygate: keep checking until the payment settles.
+    if(query.get('paid') && d.state!=='paid'){
+      app.innerHTML=summary(d)+'<div class="card info">Confirming your payment…</div>';
+      for(var i=0;i<30&&d.state!=='paid';i++){ await new Promise(function(res){ setTimeout(res,2000); }); try{ d=await fetchOffer(true); }catch(e){} }
+      if(d.state!=='paid'){ app.innerHTML=summary(d)+'<div class="card info">We haven’t had confirmation from Paygate yet. If your payment went through, your booking will be confirmed shortly. Refresh this page to check again.</div>'; return; }
+    }
+    if(d.state==='paid'){ app.innerHTML=paidNote(d)+summary(d); return; }
+    if(d.state!=='open'){ app.innerHTML=closedNote(d)+summary(d); return; }
+    payForm(d);
+  }
+  load();
+})();
+</script>
+</body>
+</html>

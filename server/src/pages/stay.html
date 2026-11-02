@@ -202,6 +202,14 @@
   .reply{ display:flex; gap:8px; margin-top:10px; align-items:flex-end; }
   .reply textarea{ flex:1; font:inherit; font-size:16px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; min-height:46px; max-height:160px; resize:vertical; }
   .reply button{ flex-shrink:0; padding:12px 16px; }
+  .th-head{ display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:10px; }
+  .th-amt{ text-align:right; white-space:nowrap; font-weight:700; }
+  .inv-card{ margin-top:8px; padding:10px 12px; background:#fff; border:1px solid var(--line); border-radius:10px; white-space:normal; }
+  .inv-row{ display:flex; justify-content:space-between; gap:12px; font-size:14px; padding:2px 0; }
+  .inv-row.tot{ font-weight:700; border-top:1px solid var(--line); margin-top:4px; padding-top:6px; }
+  .inv-pay{ display:block; margin-top:8px; text-align:center; background:var(--green); color:#fff; font-weight:700; text-decoration:none; padding:10px 12px; border-radius:10px; }
+  .inv-state{ margin-top:6px; font-size:13px; color:var(--muted); }
+  .enq-btn{ margin-top:8px; width:100%; background:#eef1f4; color:var(--ink); }
   .trip-msg{ margin-top:10px; background:#eef1f4; color:var(--ink); }
   .trip-pay{ margin-top:10px; }
   @media(max-width:640px){ .gallery{ grid-template-columns:1fr 1fr; } .gallery .g0{ grid-column:span 2; } .trip{ flex-direction:column; } .trip-thumb{ width:100%; height:170px; } }
@@ -266,7 +274,9 @@
   var $=function(s){ return document.querySelector(s); };
   var el=function(t,c,h){ var e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e; };
   var rand=function(c){ return 'R'+(c/100).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2}); };
-  var iso=function(d){ return d.toISOString().slice(0,10); };
+  // The guest's own calendar day. Not toISOString(): that's UTC, so local midnight in
+  // South Africa would read as the previous day and a click on the 13th would book the 12th.
+  var iso=function(d){ var m=d.getMonth()+1, n=d.getDate(); return d.getFullYear()+'-'+(m<10?'0':'')+m+'-'+(n<10?'0':'')+n; };
   var todayISO=iso(new Date());
   $('#ci').min=todayISO; $('#co').min=todayISO;
 
@@ -603,11 +613,14 @@
     var side=$('#side'); if(!side) return;
     if(!STATE.ciSel||!STATE.coSel){ side.innerHTML='<p class="note">Click a check-in day, then a check-out day on the calendar.</p>'; return; }
     var q=STATE.quote;
+    var ENQ='<button id="enqBtn" class="enq-btn">💬 Message the host about these dates</button>';
+    function bindEnq(){ var b=$('#enqBtn'); if(b) b.onclick=openEnquiry; }
     var head='<div class="note" style="margin-bottom:8px"><b>'+STATE.ciSel+'</b> → <b>'+STATE.coSel+'</b></div>';
-    if(!q){ side.innerHTML=head+'<div class="msg err">'+esc(STATE.quoteErr||'Pricing…')+'</div>'; return; }
+    if(!q){ side.innerHTML=head+'<div class="msg err">'+esc(STATE.quoteErr||'Pricing…')+'</div>'+(STATE.quoteErr?ENQ:''); bindEnq(); return; }
     var minN=(STATE.unit&&STATE.unit.minNights)||0;
     if(minN && q.nights < minN){
-      side.innerHTML=head+'<div class="msg err">⚠️ This property has a <b>minimum stay of '+minN+' nights</b>. Your selection is '+q.nights+' night'+(q.nights>1?'s':'')+' — please change your dates to book '+minN+' nights or more to continue.</div>';
+      side.innerHTML=head+'<div class="msg err">⚠️ This property has a <b>minimum stay of '+minN+' nights</b>. Your selection is '+q.nights+' night'+(q.nights>1?'s':'')+' — please change your dates to book '+minN+' nights or more to continue.</div>'+ENQ;
+      bindEnq();
       return;
     }
     var lines=breakdownLines(q);
@@ -621,10 +634,41 @@
       '</div>';
     side.innerHTML=head+'<div class="qbox">'+lines+'<div class="qrow qtot"><span>Total</span><span>'+rand(q.totalCents)+'</span></div></div>'+
       addons+depoNote+
-      '<button id="contBtn" class="cta-btn">Continue to payment →</button>';
+      '<button id="contBtn" class="cta-btn">Continue to payment →</button>'+ENQ;
+    bindEnq();
     var oe=$('#optEarly'); if(oe) oe.onchange=function(){ STATE.early=oe.checked; getQuote(); };
     var ol=$('#optLate'); if(ol) ol.onchange=function(){ STATE.late=ol.checked; getQuote(); };
     $('#contBtn').onclick=openCheckout;
+  }
+
+  // ---- Ask the host about these dates before booking (needs an account, so the reply has somewhere to go) ----
+  var ENQ_AUTH_NOTE='Sign in or create an account to message the host. Their reply and any invoice will appear in your Messages.';
+  function openEnquiry(){
+    if(!GTOKEN){ AFTER_AUTH=function(){ openEnquiry(); }; openAuth('login', null, ENQ_AUTH_NOTE); return; }
+    var p=STATE.prop, u=STATE.unit, q=STATE.quote, ci=STATE.ciSel, co=STATE.coSel, hostEl=$('#detail');
+    if(!p||!u||!ci||!co) return;
+    var overlay=el('div','overlay');
+    overlay.innerHTML='<div class="sheet" style="max-width:520px"><div class="sheet-head"><button class="co-back">‹ Back</button><h2>Message the host</h2><button class="x">&times;</button></div>'+
+      '<div class="sheet-body"><div class="th-head"><div><div class="trip-nm">'+esc(p.name)+' · Unit '+esc(u.name)+'</div><div class="trip-sub">📅 '+esc(fmtShort(ci))+' → '+esc(fmtShort(co))+(q?(' · '+q.nights+' night'+(q.nights===1?'':'s')):'')+'</div></div>'+(q?'<div class="th-amt">'+rand(q.totalCents)+'</div>':'')+'</div>'+
+      '<div class="frm"><input id="enqGuests" type="number" min="1" placeholder="Number of guests" /><textarea id="enqTxt" rows="4" placeholder="What would you like to ask? You can also ask about the price."></textarea></div>'+
+      '<p class="note small">This doesn’t hold the dates or charge you. If the host sends you an invoice, you can pay it from the message.</p>'+
+      '<div id="enqMsg"></div><button id="enqSend" class="cta-btn">Send message</button></div></div>';
+    hostEl.innerHTML=''; hostEl.appendChild(overlay);
+    overlay.querySelector('.co-back').onclick=function(){ renderDetail(); };
+    overlay.querySelector('.x').onclick=function(){ hostEl.innerHTML=''; };
+    if($('#g')&&$('#g').value) overlay.querySelector('#enqGuests').value=$('#g').value;
+    overlay.querySelector('#enqSend').onclick=async function(){
+      var btn=this, txt=(overlay.querySelector('#enqTxt').value||'').trim(), box=overlay.querySelector('#enqMsg');
+      if(!txt){ box.innerHTML='<div class="msg err">Please type your message.</div>'; return; }
+      btn.disabled=true; btn.textContent='Sending…'; box.innerHTML='';
+      try{
+        var r=await fetch(API+'/public/account/messages/enquiry',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({unitId:u.id,checkIn:ci,checkOut:co,guests:overlay.querySelector('#enqGuests').value||undefined,body:txt})});
+        var d=await r.json().catch(function(){ return {}; });
+        if(r.status===401){ clearSession(); AFTER_AUTH=function(){ openEnquiry(); }; openAuth('login', null, ENQ_AUTH_NOTE); return; }
+        if(!r.ok) throw new Error(d.message||'Could not send your message. Please try again.');
+        openInbox(d.bookingId);
+      }catch(e){ btn.disabled=false; btn.textContent='Send message'; box.innerHTML='<div class="msg err">'+esc(e.message)+'</div>'; }
+    };
   }
 
   // Shared price breakdown (used on the calendar side and the checkout screen).
@@ -969,6 +1013,15 @@
 
   var MSG_AUTH_NOTE='Sign in to read and reply to messages from your host. No account yet? Create one with the email you booked with and your trips and messages will appear.';
   var INBOX_POLL=null;
+  // An invoice inside a message: its lines, total and a link to the payment page.
+  function invoiceCard(o){
+    var state={ paid:'✅ Paid', replaced:'Replaced by a newer invoice', expired:'This invoice has expired. Message your host for a new one.', closed:'This invoice is closed.' };
+    var safeLink=/^https?:\/\//i.test(o.link||'');
+    return '<div class="inv-card"><b>Invoice</b>'+(o.lines||[]).map(function(l){ return '<div class="inv-row"><span>'+esc(l.description)+'</span><span>'+randSigned(l.amountCents)+'</span></div>'; }).join('')+
+      '<div class="inv-row tot"><span>Total</span><span>'+rand(o.totalCents)+'</span></div>'+
+      (o.state==='open'&&safeLink?'<a class="inv-pay" href="'+esc(o.link)+'">View invoice &amp; pay</a>':'<div class="inv-state">'+esc(state[o.state]||'')+'</div>')+'</div>';
+  }
+  function randSigned(c){ return c<0?('-'+rand(-c)):rand(c); }
 
   async function openInbox(focusId){
     clearInterval(INBOX_POLL);
@@ -1004,8 +1057,8 @@
       var t=threads.find(function(x){ return x.bookingId===id; });
       if(!t){ list(); return; }
       body.innerHTML=(threads.length>1?'<button class="th-back">← All messages</button>':'')+
-        '<div class="trip-nm">'+place(t)+'</div><div class="trip-sub" style="margin-bottom:10px">📅 '+esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut))+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div>'+
-        '<div class="bubbles">'+(t.messages.length?t.messages.map(function(m){ return '<div class="bub '+(m.sender==='guest'?'guest':'host')+'">'+esc(m.body)+'<span class="when">'+(m.sender==='guest'?'You · ':'Host · ')+esc(fmtWhen(m.createdAt))+'</span></div>'; }).join(''):'<p class="note" style="text-align:center">No messages yet. Write to your host below.</p>')+'</div>'+
+        '<div class="th-head"><div><div class="trip-nm">'+esc(t.guestName||'')+(t.status==='enquiry'?' <span class="badge pending">Enquiry</span>':'')+'</div><div class="trip-sub">'+place(t)+'</div><div class="trip-sub">📅 '+esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut))+' · '+t.nights+' night'+(t.nights===1?'':'s')+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div></div>'+(t.amountCents!=null?'<div class="th-amt">'+rand(t.amountCents)+'</div>':'')+'</div>'+
+        '<div class="bubbles">'+(t.messages.length?t.messages.map(function(m){ return '<div class="bub '+(m.sender==='guest'?'guest':'host')+'">'+esc(m.body)+(m.offer?invoiceCard(m.offer):'')+'<span class="when">'+(m.sender==='guest'?'You · ':'Host · ')+esc(fmtWhen(m.createdAt))+'</span></div>'; }).join(''):'<p class="note" style="text-align:center">No messages yet. Write to your host below.</p>')+'</div>'+
         '<div class="reply"><textarea id="replyTxt" rows="2" placeholder="Write a message…"></textarea><button id="replyBtn">Send</button></div><div id="rmsg"></div>';
       var bub=body.querySelector('.bubbles'); bub.scrollTop=bub.scrollHeight;
       var back=body.querySelector('.th-back'); if(back) back.onclick=function(){ list(); };
