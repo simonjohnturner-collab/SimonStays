@@ -4,17 +4,36 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Ctext x='16' y='23' font-family='Arial,Helvetica,sans-serif' font-size='22' font-weight='700' fill='white' text-anchor='middle'%3ES%3C/text%3E%3C/svg%3E">
-<title>Report an issue · SimonStays</title>
+<title>Cleanliness or damage report · SimonStays</title>
 <style>
   :root { --green:#1a7a3a; --green-d:#14622f; --ink:#1f2430; --muted:#6b7280; --line:#e3e6ea; --bg:#f4f6f4; --red:#cc2b2b; }
   * { box-sizing:border-box; }
   html,body { margin:0; }
   body { font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); line-height:1.5; }
   .top { background:var(--green); color:#fff; padding:18px 16px; }
-  .brand { font-weight:800; font-size:20px; letter-spacing:-.3px; }
+  .top-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .brand { font-weight:800; font-size:20px; letter-spacing:-.3px; color:#fff; text-decoration:none; }
+  .home { color:#fff; font-size:14px; font-weight:600; text-decoration:none; white-space:nowrap; }
+  .home:hover { text-decoration:underline; }
   .brand span { color:#bfe6cd; }
   .top p { margin:4px 0 0; font-size:13px; opacity:.9; }
+  .layout { max-width:920px; margin:0 auto; }
   .wrap { max-width:560px; margin:0 auto; padding:16px 14px 60px; }
+  .featured { padding:0 14px 40px; max-width:560px; margin:0 auto; }
+  .featured h2 { font-size:16px; margin:0 0 10px; }
+  .stay { display:block; background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; color:var(--ink); text-decoration:none; margin-bottom:12px; }
+  .stay:hover { box-shadow:0 2px 10px rgba(0,0,0,.08); }
+  .stay img { display:block; width:100%; height:130px; object-fit:cover; background:#e8ebef; }
+  .stay-body { padding:9px 12px; }
+  .stay-name { font-weight:600; font-size:14px; }
+  .stay-addr { font-size:12px; color:var(--muted); }
+  .see-all { font-size:14px; font-weight:600; color:var(--green); text-decoration:none; }
+  .see-all:hover { text-decoration:underline; }
+  @media (min-width:860px) {
+    .layout { display:flex; align-items:flex-start; gap:10px; }
+    .wrap { flex:1; min-width:0; margin:0; }
+    .featured { flex:none; width:300px; padding:30px 14px 40px 0; position:sticky; top:0; }
+  }
   label { display:block; font-size:13px; font-weight:600; color:var(--ink); margin:14px 0 5px; }
   .req::after { content:" *"; color:var(--red); }
   input,select,textarea { width:100%; font:inherit; font-size:16px; padding:11px 12px; border:1px solid var(--line); border-radius:10px; background:#fff; }
@@ -50,10 +69,14 @@
 </head>
 <body>
   <div class="top">
-    <div class="brand">Simon<span>Stays</span></div>
-    <p>Report a damaged or unclean item</p>
+    <div class="top-row">
+      <a class="brand" href="https://simonstays.co.za/" target="_blank" rel="noopener">Simon<span>Stays</span></a>
+      <a class="home" href="https://simonstays.co.za/" target="_blank" rel="noopener">SimonStays home →</a>
+    </div>
+    <p>Cleanliness or damage report</p>
   </div>
 
+  <div class="layout">
   <div class="wrap">
     <form id="form">
       <label class="req" for="unit">Which unit are you staying in?</label>
@@ -67,7 +90,7 @@
 
       <div id="issues"></div>
 
-      <button type="button" class="add-issue" id="addIssue">＋ Add another issue</button>
+      <button type="button" class="add-issue" id="addIssue">＋ Add another cleanliness or damage issue</button>
 
       <div id="msg"></div>
       <button type="submit" class="submit" id="submit">Submit report</button>
@@ -77,8 +100,15 @@
       <div class="tick">✅</div>
       <h2>Thank you</h2>
       <p>Your report has been sent. We'll take a look right away.</p>
-      <button class="submit" onclick="location.reload()">Report another issue</button>
+      <button class="submit" onclick="location.reload()">Report another cleanliness or damage issue</button>
     </div>
+  </div>
+
+  <aside id="featured" class="featured hidden">
+    <h2>SimonStays featured properties</h2>
+    <div id="stays"></div>
+    <a class="see-all" href="https://simonstays.co.za/" target="_blank" rel="noopener">See all properties →</a>
+  </aside>
   </div>
 
 <script>
@@ -148,7 +178,7 @@
     issues.forEach(function (iss, idx) {
       var card = document.createElement('div'); card.className = 'issue';
       var head = document.createElement('div'); head.className = 'issue-head';
-      var h = document.createElement('h3'); h.textContent = 'Issue ' + (idx + 1);
+      var h = document.createElement('h3'); h.textContent = 'Cleanliness or damage report issue ' + (idx + 1);
       head.appendChild(h);
       if (issues.length > 1) {
         var rm = document.createElement('button'); rm.type = 'button'; rm.className = 'rm'; rm.textContent = 'Remove';
@@ -157,9 +187,9 @@
       }
       card.appendChild(head);
 
-      var lbl = document.createElement('label'); lbl.className = 'req'; lbl.textContent = 'Describe the issue';
+      var lbl = document.createElement('label'); lbl.className = 'req'; lbl.textContent = 'Describe the cleanliness or damage issue';
       card.appendChild(lbl);
-      var ta = document.createElement('textarea'); ta.placeholder = 'e.g. Broken lamp in the main bedroom';
+      var ta = document.createElement('textarea'); ta.placeholder = 'e.g. Broken lamp or dirty sheets in the main bedroom';
       ta.value = iss.description || '';
       ta.oninput = function () { iss.description = ta.value; scheduleSave(); };
       card.appendChild(ta);
@@ -227,6 +257,28 @@
     if (draftUnit) sel.value = draftUnit; // re-select the unit from the saved draft
   }).catch(function () { document.getElementById('unit').innerHTML = '<option value="">Could not load units</option>'; });
 
+  // Featured properties beside the form (below it on phones): one unit per
+  // property, and only ones a guest can book. They open in a new tab so a report
+  // in progress, with its photos, isn't lost.
+  fetch('/public/units').then(function (r) { return r.json(); }).then(function (d) {
+    var seen = {}, picks = (d.units || []).filter(function (u) {
+      if (!u.hasPricing || !u.coverPhotoId || seen[u.propertyId]) return false;
+      return seen[u.propertyId] = true;
+    }).slice(0, 4);
+    if (!picks.length) return;
+    var box = document.getElementById('stays');
+    picks.forEach(function (u) {
+      var a = document.createElement('a'); a.className = 'stay'; a.target = '_blank'; a.rel = 'noopener';
+      a.href = 'https://simonstays.co.za/?property=' + encodeURIComponent(u.propertyId) + '&unit=' + encodeURIComponent(u.unitId);
+      var im = document.createElement('img'); im.alt = ''; im.loading = 'lazy'; im.src = '/photos/' + encodeURIComponent(u.coverPhotoId) + '?w=640'; a.appendChild(im);
+      var b = document.createElement('div'); b.className = 'stay-body';
+      var n = document.createElement('div'); n.className = 'stay-name'; n.textContent = u.propertyName + ' · ' + u.unitName; b.appendChild(n);
+      if (u.address) { var ad = document.createElement('div'); ad.className = 'stay-addr'; ad.textContent = u.address; b.appendChild(ad); }
+      a.appendChild(b); box.appendChild(a);
+    });
+    document.getElementById('featured').classList.remove('hidden');
+  }).catch(function () {});
+
   function showErr(t) { var m = document.getElementById('msg'); m.className = 'msg err'; m.textContent = t; }
 
   document.getElementById('form').onsubmit = function (e) {
@@ -238,7 +290,7 @@
     if (!unitId) return showErr('Please choose your unit.');
     if (!name) return showErr('Please enter your name.');
     var filled = issues.filter(function (i) { return (i.description || '').trim(); });
-    if (filled.length === 0) return showErr('Please describe at least one issue.');
+    if (filled.length === 0) return showErr('Please describe at least one cleanliness or damage issue.');
 
     var btn = document.getElementById('submit'); btn.disabled = true; btn.textContent = 'Sending…';
 
