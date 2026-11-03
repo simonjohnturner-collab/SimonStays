@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { fmtR } from '../money.js';
@@ -8,7 +8,7 @@ const fmtDay = (d) => (d ? new Date(`${String(d).slice(0, 10)}T00:00:00`).toLoca
 const fmtWhen = (d) => new Date(d).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const place = (r) => [r.property, r.unit && `Unit ${r.unit}`].filter(Boolean).join(' · ') || '—';
 
-// SimonStays admin portal (super-admin only): every host, their properties, the
+// SimonStays admin portal (super-admin only): every host and guest, their properties, the
 // SimonStays bookings with the service fee, and guest ↔ host messages.
 export default function AdminView({ onClose }) {
   const [tab, setTab] = useState('overview');
@@ -37,7 +37,7 @@ export default function AdminView({ onClose }) {
       </header>
 
       <div className="msg-tabs">
-        {[['overview', '📊 Overview'], ['hosts', '👥 Hosts'], ['properties', '🏠 Properties'], ['transactions', '💳 Transactions'], ['messages', '💬 Messages']].map(([k, label]) => (
+        {[['overview', '📊 Overview'], ['hosts', '👥 Hosts'], ['guests', '🧳 Guests'], ['properties', '🏠 Properties'], ['transactions', '💳 Transactions'], ['messages', '💬 Messages']].map(([k, label]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>
         ))}
       </div>
@@ -45,6 +45,7 @@ export default function AdminView({ onClose }) {
       <div className="admin-wrap">
         {tab === 'overview' && <Overview hosts={hosts} onGo={setTab} />}
         {tab === 'hosts' && <Hosts hosts={hosts} onShow={showHost} />}
+        {tab === 'guests' && <Guests hostFilter={hostFilter} HostPicker={HostPicker} />}
         {tab === 'properties' && <Properties hostFilter={hostFilter} HostPicker={HostPicker} />}
         {tab === 'transactions' && <Transactions hostFilter={hostFilter} HostPicker={HostPicker} />}
         {tab === 'messages' && <Messages hostFilter={hostFilter} HostPicker={HostPicker} />}
@@ -135,6 +136,7 @@ function Hosts({ hosts, onShow }) {
                   <td className="num">{h.counts.bookings}</td>
                   <td>{h.hasPayout ? '✅' : <span className="muted small">—</span>}</td>
                   <td className="num">
+                    <button className="ghost sm" title="Their guests" onClick={() => onShow(h.id, 'guests')}>🧳</button>{' '}
                     <button className="ghost sm" title="Their transactions" onClick={() => onShow(h.id, 'transactions')}>💳</button>{' '}
                     <button className="ghost sm" title="Their guest messages" onClick={() => onShow(h.id, 'messages')}>💬</button>{' '}
                     <button className="ghost sm" disabled={busyId === h.id} onClick={() => signInAs(h)}>
@@ -147,6 +149,109 @@ function Hosts({ hosts, onShow }) {
             </tbody>
           </table>
         </div>
+      )}
+    </>
+  );
+}
+
+function Guests({ hostFilter, HostPicker }) {
+  const [data, setData] = useState(null);
+  const [q, setQ] = useState('');
+  const [openKey, setOpenKey] = useState(null);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    setData(null); setOpenKey(null);
+    api.adminGuests(hostFilter).then(setData).catch((e) => setMsg(e.message));
+  }, [hostFilter]);
+
+  const s = q.trim().toLowerCase();
+  const list = ((data && data.guests) || []).filter((g) => !s || [g.name, g.email, g.phone].some((v) => (v || '').toLowerCase().includes(s)));
+  const t = data && data.totals;
+
+  return (
+    <>
+      <div className="admin-tools">
+        <HostPicker />
+        <input type="search" placeholder="Search by name, email or phone…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <span className="muted small">{msg || (data ? `${list.length} of ${t.guests} guest${t.guests === 1 ? '' : 's'}` : 'Loading…')}</span>
+      </div>
+      {data && (
+        <>
+          <div className="mk-tiles">
+            <Tile label="Guests" value={t.guests} sub={`${t.accounts} with an account`} />
+            <Tile label="Staying soon" value={t.staying} sub="confirmed stay ahead" />
+            <Tile label="Repeat guests" value={t.repeat} sub="2+ confirmed bookings" />
+            <Tile label="Awaiting payment" value={t.pending} sub="guests with an unpaid booking" />
+          </div>
+          <p className="muted small">People with a SimonStays account, or who booked or enquired on the website or app. Airbnb and the host’s own direct bookings aren’t listed. Value counts confirmed bookings, excluding deposits.</p>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Guest</th><th>Phone</th><th>Account</th><th>Host</th><th>Next or last stay</th>
+                  <th className="num">Confirmed</th><th className="num">Awaiting</th><th className="num">Cancelled</th><th className="num">Enquiries</th>
+                  <th className="num">Paid</th><th className="num">Value</th><th>Last active</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((g) => {
+                  const stay = g.nextStay || g.lastStay;
+                  return (
+                    <Fragment key={g.key}>
+                      <tr>
+                        <td className="small">
+                          <button className="linklike" disabled={!g.stays.length} title={g.stays.length ? 'Show their bookings' : 'No bookings yet'} onClick={() => setOpenKey(openKey === g.key ? null : g.key)}>
+                            {g.stays.length ? (openKey === g.key ? '▾ ' : '▸ ') : ''}{g.name || 'Guest'}
+                          </button>
+                          <div className="muted">{g.email}</div>
+                        </td>
+                        <td className="small">{g.phone || <span className="muted">—</span>}</td>
+                        <td className="small">{g.hasAccount ? `✅ ${fmtDate(g.joinedAt)}` : <span className="muted">—</span>}</td>
+                        <td className="small">{g.hosts.join(', ') || <span className="muted">—</span>}</td>
+                        <td className="small">
+                          {stay ? <>{place(stay)}<div className="muted">{g.nextStay ? 'Next: ' : 'Last: '}{fmtDay(stay.checkIn)} → {fmtDay(stay.checkOut)}</div></> : <span className="muted">—</span>}
+                        </td>
+                        <td className="num">{g.counts.confirmed}</td>
+                        <td className="num">{g.counts.pending}</td>
+                        <td className="num">{g.counts.cancelled}</td>
+                        <td className="num">{g.counts.enquiries}</td>
+                        <td className="num">{fmtR(g.paidCents)}</td>
+                        <td className="num"><b>{fmtR(g.valueCents)}</b></td>
+                        <td className="small">{fmtDate(g.lastActivity)}</td>
+                      </tr>
+                      {openKey === g.key && (
+                        <tr>
+                          <td colSpan={12} style={{ background: '#fafafa' }}>
+                            <table className="admin-table">
+                              <thead>
+                                <tr><th>Booked</th><th>Ref</th><th>Stay</th><th>Host</th><th>Status</th><th className="num">Paid</th><th className="num">Value</th></tr>
+                              </thead>
+                              <tbody>
+                                {g.stays.map((x) => (
+                                  <tr key={x.id} className={x.status === 'cancelled' ? 'muted' : ''}>
+                                    <td className="small">{fmtDate(x.createdAt)}</td>
+                                    <td className="small">{x.ref || '—'}</td>
+                                    <td className="small">{place(x)}<div className="muted">{fmtDay(x.checkIn)} → {fmtDay(x.checkOut)}</div></td>
+                                    <td className="small">{x.host}</td>
+                                    <td className="small">{STATUS[x.status] || x.status}</td>
+                                    <td className="num">{fmtR(x.paidCents)}</td>
+                                    <td className="num">{fmtR(x.grossCents)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+                {list.length === 0 && <tr><td colSpan={12} className="muted small" style={{ padding: 16 }}>No guests match.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </>
   );
@@ -187,7 +292,7 @@ function Properties({ hostFilter, HostPicker }) {
   );
 }
 
-const STATUS = { confirmed: '✅ Confirmed', pending: '⏳ Awaiting payment', cancelled: '✖ Cancelled' };
+const STATUS = { confirmed: '✅ Confirmed', pending: '⏳ Awaiting payment', cancelled: '✖ Cancelled', enquiry: '💬 Enquiry' };
 
 function Transactions({ hostFilter, HostPicker }) {
   const [data, setData] = useState(null);

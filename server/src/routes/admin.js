@@ -102,19 +102,24 @@ router.get('/transactions', async (req, res) => {
     where, orderBy: { createdAt: 'desc' }, take: 1000,
     include: { ...BOOKING_INCLUDE, payments: { orderBy: { createdAt: 'desc' } } },
   });
+  // An invoice's extra units hold no payments of their own: the invoice's payment
+  // sits on its first booking, so look it up by the invoice.
+  const offerIds = bookings.map((b) => b.sourceOfferId).filter(Boolean);
+  const offerPayments = offerIds.length ? await prisma.payment.findMany({ where: { offerId: { in: offerIds } } }) : [];
   const rows = bookings.map((b) => {
     const hostId = hostOfBooking(b);
     const grossCents = grossOf(b);
+    const payments = b.payments.length ? b.payments : offerPayments.filter((p) => p.offerId === b.sourceOfferId);
     const earns = b.status === 'confirmed'; // the fee is only earned on a confirmed stay
     const feeCents = earns ? feeOf(grossCents) : 0;
-    const card = b.payments.find((p) => p.status === 'COMPLETE');
+    const card = payments.find((p) => p.status === 'COMPLETE');
     return {
       id: b.id, ref: b.ref || null, createdAt: b.createdAt, status: b.status,
       hostId, host: names[hostId] || '—',
       property: b.unit?.property?.name || null, unit: b.unit?.name || null,
       guestName: b.guestName || null, guestEmail: b.guestEmail || null,
       checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
-      method: b.payments.length ? 'Card' : 'EFT',
+      method: payments.length ? 'Card' : 'EFT',
       paygateRef: card && card.raw && card.raw.TRANSACTION_ID ? String(card.raw.TRANSACTION_ID) : null,
       totalCents: b.totalCents != null ? b.totalCents : (b.quotedCents || 0),
       depositCents: b.depositCents || 0,
@@ -135,6 +140,80 @@ router.get('/transactions', async (req, res) => {
       collectedCents: sum(rows, 'paidCents'),
       pending: rows.filter((r) => r.status === 'pending').length,
       cancelled: rows.filter((r) => r.status === 'cancelled').length,
+    },
+  });
+});
+
+// GET /admin/guests?hostId= — everyone who has dealt with SimonStays: guests with
+// an account and anyone who booked or enquired on the website/app, one row per
+// person (matched by account, then email, then phone), latest activity first.
+router.get('/guests', async (req, res) => {
+  const names = await hostNames();
+  const accounts = await prisma.guestAccount.findMany({ select: { id: true, email: true, name: true, phone: true, createdAt: true } });
+  const accountById = Object.fromEntries(accounts.map((a) => [a.id, a]));
+  const accountByEmail = Object.fromEntries(accounts.map((a) => [a.email.trim().toLowerCase(), a]));
+  const bookings = await prisma.booking.findMany({
+    where: { source: 'website', ...(req.query.hostId ? ownedBy(req.query.hostId) : {}) },
+    orderBy: { createdAt: 'desc' },
+    include: BOOKING_INCLUDE,
+  });
+
+  const guests = new Map();
+  const blank = (account) => ({
+    account: account || null, name: account?.name || null, email: account?.email || null, phone: account?.phone || null,
+    hostIds: new Set(), stays: [], lastActivity: account?.createdAt || null,
+  });
+  // Without a host filter, a guest who registered but hasn't booked still counts.
+  if (!req.query.hostId) accounts.forEach((a) => guests.set(`a:${a.id}`, blank(a)));
+
+  for (const b of bookings) {
+    const email = (b.guestEmail || '').trim().toLowerCase();
+    const phone = (b.guestPhone || '').replace(/\D/g, '');
+    const account = accountById[b.guestAccountId] || accountByEmail[email] || null;
+    const key = account ? `a:${account.id}` : email ? `e:${email}` : phone ? `p:${phone}` : `b:${b.id}`;
+    if (!guests.has(key)) guests.set(key, blank(account));
+    const g = guests.get(key);
+    // Bookings arrive newest first, so the most recent details win.
+    g.name = g.name || b.guestName || null;
+    g.email = g.email || email || null;
+    g.phone = g.phone || b.guestPhone || null;
+    const hostId = hostOfBooking(b);
+    if (hostId) g.hostIds.add(hostId);
+    if (!g.lastActivity || b.createdAt > g.lastActivity) g.lastActivity = b.createdAt;
+    g.stays.push({
+      id: b.id, ref: b.ref || null, status: b.status, createdAt: b.createdAt,
+      host: names[hostId] || '—', property: b.unit?.property?.name || null, unit: b.unit?.name || null,
+      checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
+      grossCents: grossOf(b), paidCents: b.amountPaidCents || 0,
+    });
+  }
+
+  const today = iso(new Date());
+  const rows = [...guests.entries()].map(([key, g]) => {
+    const count = (status) => g.stays.filter((s) => s.status === status).length;
+    const confirmed = g.stays.filter((s) => s.status === 'confirmed').sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+    return {
+      key, name: g.name, email: g.email, phone: g.phone,
+      hasAccount: !!g.account, joinedAt: g.account?.createdAt || null,
+      hosts: [...g.hostIds].map((id) => names[id] || '—'),
+      lastActivity: g.lastActivity,
+      counts: { confirmed: confirmed.length, pending: count('pending'), cancelled: count('cancelled'), enquiries: count('enquiry') },
+      valueCents: confirmed.reduce((n, s) => n + s.grossCents, 0),
+      paidCents: g.stays.reduce((n, s) => n + (s.status === 'cancelled' ? 0 : s.paidCents), 0),
+      nextStay: confirmed.find((s) => s.checkOut >= today) || null,
+      lastStay: [...confirmed].reverse().find((s) => s.checkOut < today) || null,
+      stays: g.stays,
+    };
+  }).sort((a, b) => new Date(b.lastActivity || 0) - new Date(a.lastActivity || 0));
+
+  res.json({
+    guests: rows,
+    totals: {
+      guests: rows.length,
+      accounts: rows.filter((r) => r.hasAccount).length,
+      repeat: rows.filter((r) => r.counts.confirmed > 1).length,
+      staying: rows.filter((r) => r.nextStay).length,
+      pending: rows.filter((r) => r.counts.pending > 0).length,
     },
   });
 });
