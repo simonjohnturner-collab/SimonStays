@@ -5,6 +5,7 @@ const { checkAvailability, syncUnit } = require('../utils/sync');
 const { dateOnly } = require('../utils/ical');
 const { quote } = require('../utils/pricing');
 const { onBookingConfirmed } = require('../utils/bookingConfirmed');
+const { confirmByHost } = require('../utils/payments');
 
 const router = express.Router();
 router.use(authHost);
@@ -209,6 +210,16 @@ router.patch('/bookings/:id', async (req, res) => {
   const updated = await prisma.booking.update({ where: { id: booking.id }, data, include: { cleans: true } });
   if (updated.status === 'confirmed' && booking.status !== 'confirmed') onBookingConfirmed(updated.id);
   res.json({ booking: updated });
+});
+
+// POST /bookings/:id/confirm — the host has received an EFT for a pending booking.
+router.post('/bookings/:id/confirm', async (req, res, next) => {
+  try {
+    const booking = await loadOwned(req, res); if (!booking) return;
+    const r = await confirmByHost(booking.id);
+    if (r.error) return res.status(r.status).json({ error: r.error, message: r.message, conflicts: r.conflicts });
+    res.json({ booking: r.booking });
+  } catch (e) { next(e); }
 });
 
 // POST /bookings/:id/remind-cleaner — send the checkout cleaner's WhatsApp reminder

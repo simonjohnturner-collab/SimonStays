@@ -138,6 +138,54 @@ async function applyPaid(payment, txId) {
   return { ok: true, outcome: 'confirmed' };
 }
 
+// The host has seen an EFT reach their account: confirm the booking. Mirrors what a
+// card payment does, including re-checking the dates, since a pending booking
+// doesn't hold them. The guest is told in their thread, and by email.
+async function confirmByHost(bookingId) {
+  const { checkAvailability } = require('./sync');
+  const { onBookingConfirmed } = require('./bookingConfirmed');
+  const offers = require('./offers');
+  const messaging = require('./messaging');
+  let booking = await prisma.booking.findUnique({ where: { id: bookingId }, include: { unit: { include: { property: true } } } });
+  if (!booking || booking.status !== 'pending' || !booking.unitId) return { error: 'not_pending', status: 409, message: 'Only a booking awaiting payment can be confirmed.' };
+
+  // An invoice the guest chose to pay by EFT sets the dates and the units.
+  const offer = await prisma.priceOffer.findFirst({ where: { bookingId, status: 'open', kind: { not: 'change' } }, orderBy: { createdAt: 'desc' } });
+  const stays = offer ? offers.staysOf(offer) : [];
+  if (stays.length) {
+    const clash = await offers.firstClash(stays, bookingId);
+    if (clash) return { error: 'dates_unavailable', status: 409, message: `${clash.propertyName} · Unit ${clash.unitName} has since been booked for those dates. Refund or move this guest.` };
+  } else {
+    const avail = await checkAvailability(booking.unitId, iso(booking.checkIn), iso(booking.checkOut), booking.id);
+    if (!avail.available) return { error: 'dates_unavailable', status: 409, conflicts: avail.conflicts, message: 'Those dates have since been booked. Refund or move this guest.' };
+  }
+
+  if (offer) booking = await applyOfferTerms(offer, booking);
+  const total = booking.quotedCents != null ? booking.quotedCents : booking.totalCents;
+  // A 50/50 split keeps its balance owing; anything else is now paid in full.
+  const balance = booking.paymentStatus === 'partial' ? (booking.amountOwingCents || 0) : 0;
+  const money = balance > 0
+    ? { amountPaidCents: booking.amountPaidCents || Math.max(0, (total || 0) - balance), amountOwingCents: balance, paid: false, paymentStatus: 'partial' }
+    : { amountPaidCents: total, amountOwingCents: 0, paid: true, paymentStatus: 'paid' };
+  const claimed = await prisma.booking.updateMany({ where: { id: booking.id, status: 'pending' }, data: { ...money, quotedCents: total, status: 'confirmed' } });
+  if (!claimed.count) return { error: 'not_pending', status: 409, message: 'Only a booking awaiting payment can be confirmed.' };
+
+  try { await require('./locks').issueGuestCode({ ...booking, status: 'confirmed' }, booking.unit); } catch (e) { /* stubbed until smart locks are live */ }
+  await onBookingConfirmed(booking.id);
+  const extraBookings = offer ? await offers.saveExtraStays(offer, booking, 'confirmed') : [];
+  for (const extra of extraBookings) {
+    const full = await prisma.booking.findUnique({ where: { id: extra.id }, include: { unit: { include: { property: true } } } });
+    try { await require('./locks').issueGuestCode(full, full.unit); } catch (e) { /* stubbed until smart locks are live */ }
+    await onBookingConfirmed(extra.id);
+  }
+  if (booking.guestEmail || booking.guestAccountId) {
+    const dates = `${iso(booking.checkIn)} to ${iso(booking.checkOut)}`;
+    await messaging.sendHostMessage(booking.id, `We've received your payment, thank you. Your booking${booking.ref ? ` ${booking.ref}` : ''} at ${placeOf(booking)}, ${dates}, is confirmed.${balance > 0 ? ` The balance of R${(balance / 100).toFixed(2)} is due at least 3 days before check-in.` : ''}`)
+      .catch((e) => console.error('[confirm] guest message failed', booking.id, e.message));
+  }
+  return { ok: true, booking: await prisma.booking.findUnique({ where: { id: booking.id } }) };
+}
+
 // The guest paid this invoice, so its terms stand even if a newer one was sent
 // while they were on the payment page: they owe what they were shown.
 async function applyOfferTerms(offer, booking) {
@@ -187,7 +235,7 @@ async function reconcileBooking(bookingId, opts = {}) {
 }
 
 // Card bookings whose payment was never completed hold no dates but clutter the
-// board — cancel them after `hours`. Older EFT bookings (no online payment attempt)
+// board — cancel them after `hours`. EFT bookings (no online payment attempt)
 // are left alone: the host confirms those by hand.
 async function expireAbandoned({ hours = 24, now = new Date() } = {}) {
   const cutoff = new Date(now.getTime() - hours * 3600 * 1000);
@@ -217,4 +265,4 @@ async function alertHost(booking, body) {
   } catch (e) { console.error('[payments] host alert failed', e.message); }
 }
 
-module.exports = { alertHost, completeSimulatedOffer, appReturn, createCheckout, verifyPayment, reconcile, reconcileBooking, handleNotify, expireAbandoned, isOnline, MODE };
+module.exports = { alertHost, confirmByHost, completeSimulatedOffer, appReturn, createCheckout, verifyPayment, reconcile, reconcileBooking, handleNotify, expireAbandoned, isOnline, MODE };

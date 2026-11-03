@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Proof of payment — SimonStays</title>
+<link rel="icon" href="/favicon.svg" />
+<style>
+  :root{ --green:#1a7a3a; --green-d:#14622f; --ink:#1f2430; --muted:#6b7280; --line:#e5e7eb; --bg:#f7f8fa; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); line-height:1.5; }
+  main{ max-width:520px; margin:0 auto; padding:24px 16px; }
+  h1{ font-size:22px; margin:0 0 4px; color:var(--green-d); }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; margin-top:14px; }
+  .muted{ color:var(--muted); font-size:14px; }
+  .ref{ font-size:20px; font-weight:700; }
+  input[type=file]{ display:block; width:100%; margin:10px 0; font-size:16px; }
+  button{ width:100%; font:inherit; font-weight:600; padding:12px; border:0; border-radius:10px; background:var(--green); color:#fff; cursor:pointer; }
+  button:disabled{ opacity:.55; cursor:default; }
+  .err{ color:#b42318; margin-top:10px; }
+  .ok{ color:var(--green-d); font-weight:600; margin-top:10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Proof of payment</h1>
+  <div id="app" class="muted">Loading…</div>
+</main>
+<script>
+(function(){
+  var id=location.pathname.split('/').pop(), app=document.getElementById('app');
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function fail(t){ app.innerHTML='<div class="card err">'+esc(t)+'</div>'; }
+  fetch('/public/book/'+encodeURIComponent(id)+'/status').then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(b){
+    if(b.status==='cancelled'){ fail('This booking has been cancelled. Please message your host.'); return; }
+    app.innerHTML='<div class="card"><div class="muted">Booking reference</div><div class="ref">'+esc(b.ref)+'</div>'+
+      '<div class="muted">'+esc(b.property)+' · Unit '+esc(b.unit)+'<br>'+esc(b.checkIn)+' → '+esc(b.checkOut)+'</div></div>'+
+      '<div class="card"><b>Upload your proof of payment</b><div class="muted">A PDF or a photo, up to 8 MB. It goes to your host in your message thread. Your booking is confirmed once your payment has reached their account.</div>'+
+      '<input type="file" id="f" accept="application/pdf,image/*" /><button id="go" disabled>Send to my host</button><div id="out"></div></div>';
+    var f=document.getElementById('f'), go=document.getElementById('go'), out=document.getElementById('out');
+    f.onchange=function(){ go.disabled=!f.files.length; out.innerHTML=''; };
+    go.onclick=function(){
+      var file=f.files[0]; if(!file) return;
+      if(file.size>8*1024*1024){ out.innerHTML='<div class="err">That file is too big. The limit is 8 MB.</div>'; return; }
+      go.disabled=true; go.textContent='Sending…'; out.innerHTML='';
+      var rd=new FileReader();
+      rd.onerror=function(){ go.disabled=false; go.textContent='Send to my host'; out.innerHTML='<div class="err">Could not read that file.</div>'; };
+      rd.onload=async function(){
+        try{
+          var r=await fetch('/public/book/'+encodeURIComponent(id)+'/proof',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:file.name,data:rd.result})});
+          var d=await r.json().catch(function(){ return {}; });
+          if(!r.ok) throw new Error(d.message||'Could not send your file. Please try again.');
+          f.value=''; go.textContent='Send to my host'; out.innerHTML='<div class="ok">✅ Sent. Your host will confirm your booking once your payment has reached their account.</div>';
+        }catch(e){ go.disabled=false; go.textContent='Send to my host'; out.innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
+      };
+      rd.readAsDataURL(file);
+    };
+  }).catch(function(){ fail('We could not find this booking. Please check your link or message your host.'); });
+})();
+</script>
+</body>
+</html>

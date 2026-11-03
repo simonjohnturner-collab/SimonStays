@@ -14,16 +14,31 @@ const { sendMail } = require('../utils/mailer');
 const { invoiceHtml } = require('../utils/invoiceHtml');
 const { optionalGuest } = require('../middleware/auth');
 const { onBookingConfirmed } = require('../utils/bookingConfirmed');
-const { offerState, staysOf, firstClash } = require('../utils/offers');
+const { offerState, staysOf, firstClash, splitOf, saveExtraStays } = require('../utils/offers');
+const { nextRef } = require('../utils/bookingRef');
+const { addProof } = require('../utils/attachments');
+
+// The host's bank details for an EFT. Only given to a guest who has chosen EFT on
+// a booking, never on the public listings.
+async function eftFor(hostId) {
+  const h = await prisma.host.findUnique({ where: { id: hostId }, select: { name: true } });
+  const biller = await prisma.billerProfile.findUnique({ where: { hostId }, select: { companyName: true, bankName: true, accountNumber: true, branch: true } });
+  if (!biller || !(biller.bankName || biller.accountNumber)) return null;
+  return {
+    accountName: biller.companyName || (h && h.name) || null,
+    bankName: biller.bankName || null, accountNumber: biller.accountNumber || null, branch: biller.branch || null,
+  };
+}
 
 // Build + send the guest's invoice email. Non-blocking; swallows its own errors.
 async function emailInvoice(data) {
   const business = await prisma.billerProfile.findUnique({ where: { hostId: data.hostId }, select: { companyName: true, registrationNo: true, addressLines: true, email: true, phone: true, website: true } });
-  const html = invoiceHtml({ ...data, business });
+  const eft = data.method === 'EFT' ? await eftFor(data.hostId) : null;
+  const html = invoiceHtml({ ...data, business, eft });
   const ok = await sendMail({
     to: data.to,
-    // Only a simulated card payment is confirmed at this point; real card payments
-    // are confirmed once the money arrives.
+    // Only a simulated card payment is confirmed at this point; EFT and real card
+    // payments are confirmed once the money arrives.
     subject: data.awaitingPayment ? `Your SimonStays booking · ${data.ref} (awaiting payment)` : `Your SimonStays booking is confirmed · ${data.ref}`,
     html,
     text: `Thank you for booking ${data.propertyName} · Unit ${data.unitName}. Check-in ${data.checkIn} (from ${data.checkInTime || '15:00'}) → Check-out ${data.checkOut} (by ${data.checkOutTime || '10:00'}). Booking reference ${data.ref}. Total: R${((data.quote.totalCents || 0) / 100).toFixed(2)}.`,
@@ -270,7 +285,6 @@ router.post('/quote', async (req, res, next) => {
 router.post('/book', optionalGuest, async (req, res, next) => {
   try {
     const b = req.body || {};
-    if (b.paymentMethod === 'eft') return res.status(400).json({ error: 'card_only', message: 'Please pay by card. We no longer take EFT.' });
     if (!b.unitId || !b.checkIn || !b.checkOut) return res.status(400).json({ error: 'unitId_dates_required' });
     if (!b.guestName || !(b.guestEmail || b.guestPhone)) {
       return res.status(400).json({ error: 'guest_contact_required', message: 'Please give your name and an email or phone number.' });
@@ -295,15 +309,17 @@ router.post('/book', optionalGuest, async (req, res, next) => {
 
     const contact = [b.guestEmail, b.guestPhone].filter(Boolean).join(' · ');
     const depoTxt = q.depositCents ? ` · Refundable deposit R${(q.depositCents / 100).toFixed(2)}` : '';
+    // Payment choice from the checkout screen (card or EFT, no cash).
+    const method = b.paymentMethod === 'eft' ? 'EFT' : 'Card';
     const split = b.paymentPlan === 'split';
     const SPLIT_FEE_CENTS = 25000; // R250 admin fee for the 50/50 split plan
     const adminFeeCents = split ? SPLIT_FEE_CENTS : 0;
     const payableCents = q.totalCents + adminFeeCents;
     const owingCents = split ? Math.round(payableCents / 2) : null; // 50% due at least 3 days before check-in
-    // Human-friendly booking reference, numbered across the whole site.
-    const seq = (await prisma.booking.count({ where: { source: 'website' } })) + 1;
-    const ref = 'SS' + String(1000 + seq);
-    const payTxt = ` · Pay: Card${split ? ` · 50/50 split (50% now, 50% at least 3 days before check-in) · +R${(SPLIT_FEE_CENTS / 100).toFixed(2)} admin fee` : ''}`;
+    // Human-friendly booking reference, numbered across the whole site. It's also
+    // the reference an EFT guest pays with.
+    const ref = await nextRef();
+    const payTxt = ` · Pay: ${method}${split ? ` · 50/50 split (50% now, 50% at least 3 days before check-in) · +R${(SPLIT_FEE_CENTS / 100).toFixed(2)} admin fee` : ''}`;
     const comments = `Website booking ${ref} (awaiting payment) · Contact: ${contact} · Guests: ${b.guests || '—'} · Rental R${(q.rentalCents / 100).toFixed(2)}${depoTxt} · Payable R${(payableCents / 100).toFixed(2)}${payTxt}${b.message ? ` · Note: ${b.message}` : ''}`;
 
     const billing = (b.billing || b.billingDetails || '').trim() || null;
@@ -329,16 +345,20 @@ router.post('/book', optionalGuest, async (req, res, next) => {
         earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut,
       },
     });
-    // Send the guest to Paygate for what's due now (the first half on a 50/50 split).
+    // Card: send the guest to Paygate for what's due now (the first half on a
+    // 50/50 split). EFT is paid by hand, so no online checkout.
     const dueNowCents = split ? payableCents - owingCents : payableCents;
-    let checkout;
-    try { checkout = await payments.createCheckout(booking, dueNowCents, { base: siteBase(req), returnTo: b.appReturn }); }
-    catch (e) {
-      // Paygate refused (e.g. DATA_CHK = the PAYGATE_KEY doesn't match the PAYGATE_ID).
-      // Don't leave a half-made booking behind.
-      console.error('[paygate] checkout failed for', ref, '-', e.message);
-      await prisma.booking.update({ where: { id: booking.id }, data: { status: 'cancelled', comments: `${comments} · Card checkout failed: ${e.message}` } }).catch(() => {});
-      return res.status(502).json({ error: 'payment_unavailable', message: 'Card payments are temporarily unavailable. Please try again a little later.' });
+    const proofUrl = `${siteBase(req)}/proof/${booking.id}`;
+    let checkout = { mode: 'eft', ref, amountCents: dueNowCents, proofUrl, eft: method === 'EFT' ? await eftFor(unit.property.hostId) : null };
+    if (method === 'Card') {
+      try { checkout = await payments.createCheckout(booking, dueNowCents, { base: siteBase(req), returnTo: b.appReturn }); }
+      catch (e) {
+        // Paygate refused (e.g. DATA_CHK = the PAYGATE_KEY doesn't match the PAYGATE_ID).
+        // Don't leave a half-made booking behind; let the guest pick EFT instead.
+        console.error('[paygate] checkout failed for', ref, '-', e.message);
+        await prisma.booking.update({ where: { id: booking.id }, data: { status: 'cancelled', comments: `${comments} · Card checkout failed: ${e.message}` } }).catch(() => {});
+        return res.status(502).json({ error: 'payment_unavailable', message: 'Card payments are temporarily unavailable. Please choose EFT, or try again a little later.' });
+      }
     }
 
     // Email the guest their invoice (fire-and-forget — never block the booking).
@@ -350,14 +370,14 @@ router.post('/book', optionalGuest, async (req, res, next) => {
         checkInTime: unit.checkInTime || '15:00', checkOutTime: unit.checkOutTime || '10:00',
         cancellationPolicy: unit.property.cancellationPolicy || DEFAULT_CANCELLATION_POLICY,
         guestName: b.guestName, guestEmail: b.guestEmail, guestPhone: b.guestPhone,
-        billing, quote: q, split, owingCents, adminFeeCents,
+        billing, quote: q, method, proofUrl, split, owingCents, adminFeeCents,
       }).catch((e) => console.error('[invoice email] failed:', e.message));
     }
     res.status(201).json({
       bookingId: booking.id, ref, amountCents: payableCents, quote: q,
       property: unit.property.name, unit: unit.name,
       checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut),
-      payment: checkout, // { mode:'simulate' } | { mode:'form', action, fields } (Paygate)
+      payment: checkout, // { mode:'simulate' } | { mode:'form', action, fields } (Paygate) | { mode:'eft', ref, eft, proofUrl }
     });
   } catch (e) { next(e); }
 });
@@ -427,11 +447,25 @@ router.get('/book/:id/status', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// POST /public/book/:id/proof { filename, data } — a guest's proof of EFT payment,
+// from the link on their invoice, so it works without an account. It goes in the
+// booking's message thread. The booking id is the capability, as for checkout.
+router.post('/book/:id/proof', async (req, res, next) => {
+  try {
+    const b = await prisma.booking.findUnique({ where: { id: req.params.id }, include: { unit: { include: { property: true } } } });
+    if (!b || b.source !== 'website' || !['pending', 'confirmed'].includes(b.status)) return res.status(404).json({ error: 'not_found', message: 'This booking can\'t take a proof of payment. Please message your host.' });
+    const r = await addProof(b, req.body || {});
+    if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
+    payments.alertHost(b, `📎 Proof of payment received: ${b.unit ? `${b.unit.property.name} · Unit ${b.unit.name}` : 'a booking'}\n👤 ${b.guestName || 'Guest'} · ${b.ref || ''}\nCheck it has reached your account, then confirm the booking.`);
+    res.status(201).json({ ok: true });
+  } catch (e) { next(e); }
+});
+
 // POST /public/book/:id/checkout { kind } — (re)start a Paygate payment: retry
 // after a cancelled payment ('booking'), or pay the rest of a 50/50 split ('balance').
 router.post('/book/:id/checkout', async (req, res, next) => {
   try {
-    if (!payments.isOnline()) return res.status(400).json({ error: 'offline', message: 'Online payment isn’t available right now. Please try again a little later.' });
+    if (!payments.isOnline()) return res.status(400).json({ error: 'offline', message: 'Online payment isn’t available right now. Please pay by EFT, or try again a little later.' });
     const b = await prisma.booking.findUnique({ where: { id: req.params.id }, include: { unit: { include: { property: true } } } });
     if (!b || b.source !== 'website') return res.status(404).json({ error: 'not_found' });
     const kind = (req.body || {}).kind === 'balance' ? 'balance' : 'booking';
@@ -479,10 +513,11 @@ router.get('/offers/:token', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /public/offers/:token/pay { acceptedTerms } — pay the invoice's total by card, through Paygate.
+// POST /public/offers/:token/pay { method:'card'|'eft', acceptedTerms } — pay the
+// invoice's total. Card goes to Paygate; EFT shows the bank details and waits for
+// the host to confirm, like an EFT booking from the normal checkout.
 router.post('/offers/:token/pay', async (req, res, next) => {
   try {
-    if ((req.body || {}).method === 'eft') return res.status(400).json({ error: 'card_only', message: 'Please pay by card. We no longer take EFT.' });
     const o = await loadOffer(req.params.token);
     if (!o || !o.booking.unit) return res.status(404).json({ error: 'not_found' });
     const b = o.booking, state = offerState(o, b);
@@ -496,8 +531,21 @@ router.post('/offers/:token/pay', async (req, res, next) => {
     if (await firstClash(stays, b.id)) return res.status(409).json({ error: 'dates_unavailable', message: 'Sorry, those dates have since been booked, so no payment was taken. Please message your host.' });
     if (!isChange) await prisma.booking.update({ where: { id: b.id }, data: { termsAcceptedAt: new Date() } });
 
+    if ((req.body || {}).method === 'eft') {
+      const proofUrl = `${siteBase(req)}/proof/${b.id}`;
+      // The booking stands as it is; the host marks the change paid when the money arrives.
+      if (isChange) return res.json({ mode: 'eft', ref: b.ref || null, proofUrl, eft: await eftFor(b.unit.property.hostId) });
+      // Now a real hold on the board, waiting for the host to confirm the money.
+      const share = splitOf(o).primaryCents;
+      const held = await prisma.booking.update({
+        where: { id: b.id },
+        data: { status: 'pending', totalCents: share, quotedCents: share, ...(b.status === 'enquiry' ? { comments: `${b.comments || ''} · Pay: EFT` } : {}) },
+      });
+      await saveExtraStays(o, held, 'pending');
+      return res.json({ mode: 'eft', ref: b.ref || null, proofUrl, eft: await eftFor(b.unit.property.hostId) });
+    }
     if (!payments.isOnline()) {
-      if (process.env.RENDER) return res.status(400).json({ error: 'offline', message: 'Card payment isn\'t available right now. Please try again a little later, or message your host.' });
+      if (process.env.RENDER) return res.status(400).json({ error: 'offline', message: 'Card payment isn\'t available right now. Please pay by EFT.' });
       await payments.completeSimulatedOffer(o, b);
       return res.json({ mode: 'simulate' });
     }

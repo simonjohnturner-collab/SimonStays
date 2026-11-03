@@ -107,6 +107,19 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
     } finally { setBusy(false); }
   }
 
+  // The EFT has reached the host's account: block the dates and tell the guest.
+  async function confirmPaid() {
+    const amount = effQuotedCents != null ? ` of ${fmtR(effQuotedCents)}` : '';
+    if (!window.confirm(`Has the payment${amount} reached your account${booking.ref ? `, with reference ${booking.ref}` : ''}?\n\nConfirming blocks these dates and tells the guest their booking is confirmed. Any proof of payment they've sent is in Messages.`)) return;
+    setBusy(true); setMsg(null); setConflicts(null);
+    try { await api.confirmBooking(booking.id); onSaved(); }
+    catch (e) {
+      setMsg({ text: e.message, kind: 'err' });
+      if (e.data?.conflicts) setConflicts(e.data.conflicts);
+      setBusy(false);
+    }
+  }
+
   async function remove() {
     const paidCents = booking.amountPaidCents || 0;
     const q = booking.source === 'website'
@@ -290,6 +303,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
           )}
           {editing && onInvoice && <button className="secondary" disabled={busy} onClick={() => onInvoice(booking)}>🧾 Invoice</button>}
           {editing && booking.unitId && onMessage && <button className="secondary" disabled={busy} onClick={() => onMessage(booking)}>💬 Message guest</button>}
+          {editing && booking.status === 'pending' && <button className="save" disabled={busy} onClick={confirmPaid}>✅ Confirm booking</button>}
           <button className="save" disabled={busy} onClick={() => save(false)}>{editing ? 'Save' : 'Create booking'}</button>
         </div>
       </div>

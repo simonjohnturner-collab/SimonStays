@@ -97,6 +97,15 @@ app.get('/documents/:propertyId/:sig', (req, res) => {
   res.setHeader('X-Robots-Tag', 'noindex');
   res.type('html').send(documentsHtml);
 });
+// Where a guest uploads their proof of EFT payment, linked from their invoice.
+const proofHtml = fs.readFileSync(path.join(__dirname, 'pages/proof.html'), 'utf8');
+app.get('/proof/:bookingId', (req, res) => {
+  res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Robots-Tag', 'noindex');
+  res.type('html').send(proofHtml);
+});
 // Privacy Policy — same plain self-contained style as the terms page.
 const privacyHtml = fs.readFileSync(path.join(__dirname, 'pages/privacy.html'), 'utf8');
 app.get(['/privacy', '/privacy.html', '/privacy-policy'], (req, res) => {

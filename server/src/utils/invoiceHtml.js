@@ -10,7 +10,7 @@ function row(label, value, opts) {
 }
 
 // data: { ref, propertyName, unitName, checkIn, checkOut, guestName, guestEmail,
-//         guestPhone, billing, quote, split, owingCents, hostName,
+//         guestPhone, billing, quote, method, proofUrl, split, owingCents, eft, hostName,
 //         business: the host's own details (BillerProfile) }
 function invoiceHtml(data) {
   const q = data.quote || {};
@@ -37,7 +37,23 @@ function invoiceHtml(data) {
     lines.push(row('Due at least 3 days before check-in (50%)', rand(payable - now)));
   }
 
-  const payLine = 'Payment method: Card (online)';
+  const payLine = data.method === 'EFT'
+    ? 'Payment method: EFT / bank transfer or deposit'
+    : 'Payment method: Card (online)';
+
+  const eft = data.eft;
+  const eftBlock = (data.method === 'EFT' && eft) ? (
+    '<div style="margin-top:16px;padding:12px 14px;background:#f7f8fa;border:1px solid #e3e3e3;border-radius:8px;font-size:13px;line-height:1.6">'
+    + '<b>EFT / bank transfer or deposit</b><br>'
+    + [eft.accountName && ('Account name: ' + esc(eft.accountName)),
+      eft.bankName && ('Bank: ' + esc(eft.bankName)),
+      eft.accountNumber && ('Account no.: ' + esc(eft.accountNumber)),
+      eft.branch && ('Branch: ' + esc(eft.branch))].filter(Boolean).join('<br>')
+    + `<br><b>Reference: ${esc(data.ref)}</b>`
+    + '<br><span style="color:#6b7280">Use exactly this reference on your payment, then send us your proof of payment. Your booking is confirmed, and your dates held, once your payment reaches our account.</span>'
+    + (data.proofUrl ? `<br><a href="${esc(data.proofUrl)}" style="color:#1a7a3a;font-weight:700">Upload your proof of payment</a>` : '')
+    + '</div>'
+  ) : '';
 
   const billBlock = data.billing
     ? `<div style="margin-top:4px;color:#374151;white-space:pre-line">${esc(data.billing)}</div>` : '';
@@ -76,6 +92,7 @@ function invoiceHtml(data) {
     <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:14px">${lines.join('')}</table>
 
     <div style="margin-top:14px;color:#374151;font-size:13px">${payLine}${data.split ? ' &middot; 50/50 split' : ''}</div>
+    ${eftBlock}
 
     ${data.cancellationPolicy ? `<h3 style="margin:20px 0 4px;font-size:14px">Booking rules &amp; cancellation policy</h3>
     <div style="font-size:13px;line-height:1.6;color:#374151;background:#f7f8fa;border:1px solid #e3e3e3;border-radius:8px;padding:10px 12px;white-space:pre-line">${esc(data.cancellationPolicy)}</div>` : ''}

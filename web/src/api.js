@@ -14,6 +14,15 @@ export function getToken() { return token; }
 export function apiBaseUrl() { return BASE; }
 
 // Public URL for a stored photo's bytes (usable directly in <img src>).
+// Open a file on a message. It's private, so it's fetched with the host's token.
+export async function openMessageAttachment(id) {
+  const win = window.open('', '_blank'); // opened now, or a popup blocker stops it
+  const res = await fetch(`${BASE}/messages/attachments/${id}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) { if (win) win.close(); throw new Error('Could not open that file.'); }
+  const url = URL.createObjectURL(await res.blob());
+  if (win) win.location = url; else window.location = url;
+}
+
 export function photoUrl(id) { return `${BASE}/photos/${id}`; }
 
 // Public, shareable URL of a form guests/cleaners fill in.
@@ -212,6 +221,7 @@ export const api = {
   createFloating: (payload) => req('POST', '/bookings/floating', payload),
   listFloating: (from, to) => req('GET', `/bookings/floating?from=${from}&to=${to}`),
   updateBooking: (id, payload) => req('PATCH', `/bookings/${id}`, payload),
+  confirmBooking: (id) => req('POST', `/bookings/${id}/confirm`),
   searchBookings: (q) => req('GET', `/bookings/search?q=${encodeURIComponent(q)}`),
   deleteBooking: (id) => req('DELETE', `/bookings/${id}`),
 };

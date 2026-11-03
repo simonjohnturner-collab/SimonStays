@@ -119,7 +119,8 @@ router.get('/transactions', async (req, res) => {
       property: b.unit?.property?.name || null, unit: b.unit?.name || null,
       guestName: b.guestName || null, guestEmail: b.guestEmail || null,
       checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
-      method: payments.length ? 'Card' : 'EFT',
+      // A card attempt that was abandoned doesn't make a confirmed booking a card payment.
+      method: card || (b.status !== 'confirmed' && payments.some((p) => p.provider !== 'eft')) ? 'Card' : 'EFT',
       paygateRef: card && card.raw && card.raw.TRANSACTION_ID ? String(card.raw.TRANSACTION_ID) : null,
       totalCents: b.totalCents != null ? b.totalCents : (b.quotedCents || 0),
       depositCents: b.depositCents || 0,

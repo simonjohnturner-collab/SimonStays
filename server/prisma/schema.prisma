@@ -587,10 +587,25 @@ model Message {
   emailedAt  DateTime? // when the guest was emailed a copy
   readAt     DateTime? // when the other side read it
   createdAt  DateTime         @default(now())
+  attachments MessageAttachment[]
 
   @@unique([scheduleId, bookingId])
   @@index([bookingId, createdAt])
   @@index([hostId, createdAt])
+}
+
+// A file on a message: a guest's proof of payment. Private to the booking's host
+// (see utils/attachments.js), unlike Photo, which is served publicly.
+model MessageAttachment {
+  id          String   @id @default(uuid())
+  messageId   String
+  message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  data        Bytes
+  contentType String // worked out from the file itself
+  filename    String
+  createdAt   DateTime @default(now())
+
+  @@index([messageId])
 }
 
 // A custom-priced invoice the host sent in a conversation. The guest pays its

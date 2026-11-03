@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api.js';
+import { api, openMessageAttachment } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { fmtR, randToCents } from '../money.js';
 import TeachSimon from './TeachSimon.jsx';
@@ -439,6 +439,9 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
                 <div key={m.id} className={`msg-bubble ${m.sender}`}>
                   {m.scheduleName && <div className="msg-auto">⏰ {m.scheduleName}</div>}
                   <div className="msg-body">{m.body}</div>
+                  {(m.attachments || []).map((a) => (
+                    <div key={a.id}><button type="button" className="linklike" onClick={() => openMessageAttachment(a.id).catch(() => window.alert('Could not open that file.'))}>📎 Open {a.filename}</button></div>
+                  ))}
                   {m.offer && <InvoiceCard offer={m.offer} onMarkPaid={markChangePaid} />}
                   <div className="msg-meta">{fmtWhen(m.createdAt)}{m.sender === 'host' ? (m.readAt ? ' · Read' : m.emailedAt ? ' · Emailed' : '') : ''}</div>
                 </div>

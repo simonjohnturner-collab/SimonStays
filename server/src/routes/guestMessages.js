@@ -11,6 +11,7 @@ const { overridesFor } = require('../utils/nightPrices');
 const { alertHost } = require('../utils/payments');
 const { offerOut, conversationCents, INVOICEABLE_SOURCES } = require('../utils/offers');
 const changes = require('../utils/changes');
+const { nextRef } = require('../utils/bookingRef');
 
 // What this conversation costs: its invoices, else the booking.
 function amountOf(b) {
@@ -106,8 +107,7 @@ router.post('/enquiry', async (req, res, next) => {
     const q = unit.pricingGroup
       ? quote(unit.pricingGroup, { checkIn, checkOut, cleans: 1, overrides: await overridesFor(unit.id, checkIn, checkOut) })
       : null;
-    const seq = (await prisma.booking.count({ where: { source: 'website' } })) + 1; // numbered across the whole site
-    const ref = 'SS' + String(1000 + seq);
+    const ref = await nextRef();
     const count = Number(guests) > 0 ? ` · Guests: ${Math.floor(Number(guests))}` : '';
     const booking = await prisma.booking.create({
       data: {

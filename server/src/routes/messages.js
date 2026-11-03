@@ -71,6 +71,20 @@ router.get('/unread', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /messages/attachments/:id — a file on one of this host's messages. Its type
+// was worked out from the file when it arrived, so a browser can show it safely.
+router.get('/attachments/:id', async (req, res, next) => {
+  try {
+    const a = await prisma.messageAttachment.findFirst({ where: { id: req.params.id, message: { hostId: req.hostId } } });
+    if (!a) return res.status(404).json({ error: 'not_found' });
+    res.set('Content-Type', a.contentType);
+    res.set('Content-Disposition', `inline; filename="${a.filename.replace(/"/g, '')}"`);
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Cache-Control', 'private, no-store');
+    res.send(Buffer.from(a.data));
+  } catch (e) { next(e); }
+});
+
 // GET /messages/threads — every booking with a conversation, latest first.
 router.get('/threads', async (req, res, next) => {
   try {
@@ -120,7 +134,7 @@ router.get('/booking/:bookingId', async (req, res, next) => {
     const b = await loadOwnedBooking(req, res); if (!b) return;
     const messages = await prisma.message.findMany({
       where: { bookingId: b.id }, orderBy: { createdAt: 'asc' },
-      include: { schedule: { select: { name: true } }, offer: true },
+      include: { schedule: { select: { name: true } }, offer: true, attachments: { select: { id: true, filename: true } } },
     });
     await prisma.message.updateMany({ where: { bookingId: b.id, sender: 'guest', readAt: null }, data: { readAt: new Date() } });
     const standard = await offers.standardQuote(b).catch(() => null);
@@ -148,6 +162,7 @@ router.get('/booking/:bookingId', async (req, res, next) => {
         id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt,
         emailedAt: m.emailedAt, scheduleName: m.schedule ? m.schedule.name : (m.scheduleId ? 'Scheduled message' : null),
         offer: m.offer ? offers.offerOut(m.offer, b) : null,
+        attachments: m.attachments,
       })),
     });
   } catch (e) { next(e); }
