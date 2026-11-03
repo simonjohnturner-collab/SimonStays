@@ -5,19 +5,19 @@ import TeachSimon from './TeachSimon.jsx';
 
 // Guest messaging. Four tabs:
 //   Inbox      — one conversation per booking; send now, optionally from a saved message
-//   Saved      — pre-typed messages (with {placeholders}) to reuse
+//   Saved      — pre-typed messages (with [Shortcuts]) to reuse
 //   Scheduled  — automatic messages sent at a time relative to each stay, per property
 //   Teach Simon — answer what the Ask Simon AI couldn't, and manage what it knows
 // Guests read and reply on the shopfront (simonstays.co.za → Messages) and get an email copy.
 export default function MessagesView({ onClose, properties = [], initialBookingId = null, initialTab = 'inbox', onUnreadChange, teachCount = 0 }) {
   const [tab, setTab] = useState(initialTab);
   const [templates, setTemplates] = useState([]);
-  const [placeholders, setPlaceholders] = useState([]);
+  const [shortcuts, setShortcuts] = useState([]);
 
   const loadTemplates = () => api.listMessageTemplates().then((r) => setTemplates(r.templates)).catch(() => {});
   useEffect(() => {
     loadTemplates();
-    api.messageMeta().then((r) => setPlaceholders(r.placeholders)).catch(() => {});
+    api.messageMeta().then((r) => setShortcuts(r.shortcuts || [])).catch(() => {});
   }, []);
 
   return (
@@ -36,9 +36,9 @@ export default function MessagesView({ onClose, properties = [], initialBookingI
         <button className={tab === 'teach' ? 'on' : ''} onClick={() => setTab('teach')}>🧠 Ask Simon{teachCount > 0 && <span className="msg-dot">{teachCount}</span>}</button>
       </div>
 
-      {tab === 'inbox' && <Inbox templates={templates} properties={properties} initialBookingId={initialBookingId} onUnreadChange={onUnreadChange} />}
-      {tab === 'saved' && <SavedMessages templates={templates} placeholders={placeholders} onChanged={loadTemplates} />}
-      {tab === 'scheduled' && <Scheduled templates={templates} properties={properties} />}
+      {tab === 'inbox' && <Inbox templates={templates} shortcuts={shortcuts} properties={properties} initialBookingId={initialBookingId} onUnreadChange={onUnreadChange} onManageSaved={() => setTab('saved')} />}
+      {tab === 'saved' && <SavedMessages templates={templates} shortcuts={shortcuts} onChanged={loadTemplates} />}
+      {tab === 'scheduled' && <Scheduled templates={templates} shortcuts={shortcuts} properties={properties} />}
       {tab === 'teach' && <TeachSimon properties={properties} onCountChange={onUnreadChange} />}
     </div>
   );
@@ -307,7 +307,7 @@ function RefundBanner({ bookingId, booking, onDone }) {
 
 // ---------------- Inbox ----------------
 
-function Inbox({ templates, properties, initialBookingId, onUnreadChange }) {
+function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadChange, onManageSaved }) {
   const [threads, setThreads] = useState(null);
   const [activeId, setActiveId] = useState(initialBookingId);
   const [thread, setThread] = useState(null); // { booking, messages }
@@ -315,6 +315,8 @@ function Inbox({ templates, properties, initialBookingId, onUnreadChange }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [picking, setPicking] = useState(false);
+  const [tool, setTool] = useState(null); // the open composer helper: 'saved', 'shortcuts' or null
+  const draftEl = useRef(null);
   const [invoicing, setInvoicing] = useState(false);
   const [changing, setChanging] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -331,7 +333,7 @@ function Inbox({ templates, properties, initialBookingId, onUnreadChange }) {
     return () => clearInterval(t);
     // eslint-disable-next-line
   }, [activeId]);
-  useEffect(() => { setThread(null); setDraft(''); setNote(''); setInvoicing(false); if (activeId) loadThread(activeId); /* eslint-disable-next-line */ }, [activeId]);
+  useEffect(() => { setThread(null); setDraft(''); setNote(''); setInvoicing(false); setTool(null); if (activeId) loadThread(activeId); /* eslint-disable-next-line */ }, [activeId]);
   useEffect(() => { endRef.current && endRef.current.scrollIntoView({ block: 'end' }); }, [thread]);
   useEffect(() => {
     if (!picking) return;
@@ -342,6 +344,7 @@ function Inbox({ templates, properties, initialBookingId, onUnreadChange }) {
   async function insertTemplate(id) {
     const t = templates.find((x) => x.id === id);
     if (!t || !activeId) return;
+    setTool(null);
     try { const r = await api.renderMessage(activeId, t.body); setDraft((d) => (d.trim() ? `${d}\n\n${r.body}` : r.body)); }
     catch { setDraft((d) => (d.trim() ? `${d}\n\n${t.body}` : t.body)); }
   }
@@ -461,13 +464,25 @@ function Inbox({ templates, properties, initialBookingId, onUnreadChange }) {
                   {!thread.cancel.blocked && <button className="secondary" onClick={() => setCancelling(true)}>Cancel booking</button>}
                 </div>
               )}
-              {templates.length > 0 && (
-                <select value="" onChange={(e) => insertTemplate(e.target.value)}>
-                  <option value="">📝 Insert a saved message…</option>
-                  {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
+              <div className="msg-compose-tools">
+                <button type="button" className="secondary small" aria-expanded={tool === 'saved'} onClick={() => setTool(tool === 'saved' ? null : 'saved')}>📝 Use a saved message</button>
+                <button type="button" className="secondary small" aria-expanded={tool === 'shortcuts'} onClick={() => setTool(tool === 'shortcuts' ? null : 'shortcuts')}>[ ] Shortcuts</button>
+              </div>
+              {tool === 'saved' && (
+                <div className="msg-picker">
+                  {templates.length === 0 && <span className="muted small">No saved messages yet.</span>}
+                  {templates.map((t) => (
+                    <button key={t.id} type="button" className="msg-item" onClick={() => insertTemplate(t.id)}>
+                      <b>{t.name}</b>
+                      <span className="msg-snippet small">{t.body}</span>
+                    </button>
+                  ))}
+                  <button type="button" className="msg-link small" onClick={onManageSaved}>{templates.length === 0 ? 'Create a saved message' : 'Manage saved messages'}</button>
+                </div>
               )}
-              <textarea rows={4} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Write to the guest…" />
+              {tool === 'shortcuts' && <ShortcutChips shortcuts={shortcuts} onPick={(token) => insertInto(draftEl.current, draft, token, setDraft)} />}
+              <textarea ref={draftEl} rows={4} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Write to the guest…" />
+              <ShortcutWarning text={draft} shortcuts={shortcuts} />
               <div className="msg-send-row">
                 <span className="muted small">{note}</span>
                 <button disabled={busy || !draft.trim()} onClick={send}>{busy ? 'Sending…' : 'Send'}</button>
@@ -481,15 +496,45 @@ function Inbox({ templates, properties, initialBookingId, onUnreadChange }) {
   );
 }
 
-// ---------------- Saved messages ----------------
+// ---------------- Shortcuts ----------------
 
-function PlaceholderChips({ placeholders, onPick }) {
+// The compact row of shortcuts above the Inbox's message box.
+function ShortcutChips({ shortcuts, onPick }) {
   return (
     <div className="msg-chips">
-      <span className="muted small">Fill in per booking:</span>
-      {placeholders.map((p) => <button key={p} type="button" className="mini" onMouseDown={(e) => e.preventDefault()} onClick={() => onPick(`{${p}}`)}>{`{${p}}`}</button>)}
+      <span className="muted small">Filled in when you send:</span>
+      {shortcuts.map((s) => <button key={s.key} type="button" className="mini" title={s.hint} onMouseDown={(e) => e.preventDefault()} onClick={() => onPick(`[${s.label}]`)}>{`[${s.label}]`}</button>)}
     </div>
   );
+}
+
+// Every shortcut, beside whatever message is being written. With no onPick there's
+// nothing to insert into, so it's a reference list and `note` says why.
+function ShortcutPanel({ shortcuts, onPick, note }) {
+  return (
+    <aside className="msg-shortcuts">
+      <div className="msg-shortcuts-title">Shortcuts</div>
+      <div className="muted small">{note || 'Click one to add it to your message, or type it in square brackets. It fills in for each booking when sent.'}</div>
+      {shortcuts.map((s) => (
+        <button key={s.key} type="button" className="msg-shortcut" disabled={!onPick} onMouseDown={(e) => e.preventDefault()} onClick={() => onPick(`[${s.label}]`)}>
+          <code>{`[${s.label}]`}</code>
+          <span className="muted small">{s.hint}</span>
+        </button>
+      ))}
+    </aside>
+  );
+}
+
+const shortcutId = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// Warns about bracketed text that isn't a shortcut, such as a typo: it would reach
+// the guest exactly as typed.
+function ShortcutWarning({ text, shortcuts }) {
+  if (!shortcuts.length) return null;
+  const known = new Set(shortcuts.map((s) => shortcutId(s.key)));
+  const unknown = [...new Set(String(text || '').match(/\[[^[\]\n]+\]/g) || [])].filter((t) => !known.has(shortcutId(t)));
+  if (!unknown.length) return null;
+  return <div className="msg-warn">{unknown.join(', ')} {unknown.length === 1 ? 'isn’t a shortcut' : 'aren’t shortcuts'}, so the guest will see {unknown.length === 1 ? 'it' : 'them'} exactly as typed.</div>;
 }
 
 // Insert text at the cursor of a textarea and return the new value.
@@ -499,18 +544,29 @@ function insertAt(el, value, text) {
   return value.slice(0, s) + text + value.slice(e);
 }
 
-function SavedMessages({ templates, placeholders, onChanged }) {
+// Insert text at the cursor, then keep the cursor just after it for the next one.
+function insertInto(el, value, text, apply) {
+  const at = el ? el.selectionStart + text.length : 0;
+  apply(insertAt(el, value, text));
+  if (el) requestAnimationFrame(() => { el.focus(); el.setSelectionRange(at, at); });
+}
+
+// ---------------- Saved messages ----------------
+
+function SavedMessages({ templates, shortcuts, onChanged }) {
   const [rows, setRows] = useState(templates);
   const [nw, setNw] = useState({ name: '', body: '' });
   const [msg, setMsg] = useState('');
-  const focused = useRef(null); // { id, el } — the textarea a placeholder chip inserts into
+  const focused = useRef(null); // { id, el } — the textarea a shortcut inserts into
+  const newBody = useRef(null);
   useEffect(() => setRows(templates), [templates]);
   const flash = (t) => { setMsg(t); setTimeout(() => setMsg(''), 1600); };
 
   function pick(token) {
     const f = focused.current;
-    if (!f || f.id === 'new') setNw((n) => ({ ...n, body: insertAt(f && f.el, n.body, token) }));
-    else setRows((rs) => rs.map((r) => (r.id === f.id ? { ...r, body: insertAt(f.el, r.body, token), dirty: true } : r)));
+    const row = f && rows.find((r) => r.id === f.id);
+    if (row) insertInto(f.el, row.body, token, (body) => edit(row.id, { body }));
+    else insertInto(f && f.id === 'new' ? f.el : newBody.current, nw.body, token, (body) => setNw((n) => ({ ...n, body })));
   }
   async function add() {
     if (!nw.name.trim() || !nw.body.trim()) { setMsg('Give it a name and a message.'); return; }
@@ -529,14 +585,15 @@ function SavedMessages({ templates, placeholders, onChanged }) {
   const edit = (id, patch) => setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch, dirty: true } : r)));
 
   return (
-    <div className="gb-wrap">
-      <p className="muted small">Pre-typed messages you can drop into a conversation or send on a schedule. Placeholders like <code>{'{firstName}'}</code> are filled in for each booking when it’s sent. {msg && <b>{msg}</b>}</p>
-      <PlaceholderChips placeholders={placeholders} onPick={pick} />
+    <div className="msg-with-shortcuts">
+      <div>
+      <p className="muted small">Pre-typed messages you can drop into a conversation or send on a schedule. Shortcuts like <code>[First Name]</code> are filled in for each booking when it’s sent. {msg && <b>{msg}</b>}</p>
 
       <section className="sp-card">
         <input className="sp-name" placeholder="Name, e.g. Check-in instructions" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} />
-        <textarea className="msg-tpl-body" rows={5} placeholder={'Hi {firstName}, welcome to {property}! Check-in is from {checkInTime}…'} value={nw.body}
+        <textarea ref={newBody} className="msg-tpl-body" rows={5} placeholder={'Hi [First Name], welcome to [Property]! Check-in is from [Check In Time]…'} value={nw.body}
           onFocus={(e) => { focused.current = { id: 'new', el: e.target }; }} onChange={(e) => setNw({ ...nw, body: e.target.value })} />
+        <ShortcutWarning text={nw.body} shortcuts={shortcuts} />
         <button onClick={add}>➕ Save message</button>
       </section>
 
@@ -549,8 +606,11 @@ function SavedMessages({ templates, placeholders, onChanged }) {
           <textarea className="msg-tpl-body" rows={5} value={r.body}
             onFocus={(e) => { focused.current = { id: r.id, el: e.target }; }}
             onChange={(e) => edit(r.id, { body: e.target.value })} onBlur={() => save(r)} />
+          <ShortcutWarning text={r.body} shortcuts={shortcuts} />
         </section>
       ))}
+      </div>
+      <ShortcutPanel shortcuts={shortcuts} onPick={pick} />
     </div>
   );
 }
@@ -558,6 +618,21 @@ function SavedMessages({ templates, placeholders, onChanged }) {
 // ---------------- Scheduled messages ----------------
 
 const BLANK = { id: null, name: '', templateId: '', body: '', anchor: 'check_in', offsetDays: -1, sendTime: '10:00', propertyIds: [], active: true };
+
+// Common messages a host can start from. Picking one only opens a draft: nothing
+// sends until the host presses Create.
+const SUGGESTED = [
+  { name: 'Booking confirmed', anchor: 'confirmed', offsetDays: 0,
+    body: 'Hi [First Name], your stay at [Property] is confirmed.\n\nCheck-in: [Check In] from [Check In Time]\nCheck-out: [Check Out] by [Check Out Time]\nReference: [Ref]\n\nWe look forward to hosting you.\n[Host Name]' },
+  { name: 'Check-in details', anchor: 'check_in', offsetDays: -1, sendTime: '10:00',
+    body: 'Hi [First Name], you check in tomorrow from [Check In Time].\n\n[Property], Unit [Unit]\n[Address]\n\nAccess code: [Access Code]\nParking: [Parking]\nWifi: [Wifi Name], password [Wifi Password]\n\n[Host Name]' },
+  { name: 'Welcome on arrival day', anchor: 'check_in', offsetDays: 0, sendTime: '16:00',
+    body: 'Welcome to [Property], [First Name]! We hope you settle in well. Message us here if you need anything.\n\n[Host Name]' },
+  { name: 'Check-out reminder', anchor: 'check_out', offsetDays: -1, sendTime: '18:00',
+    body: 'Hi [First Name], a reminder that check-out is tomorrow by [Check Out Time]. We hope you’ve enjoyed your stay at [Property].\n\n[Host Name]' },
+  { name: 'Thank you after the stay', anchor: 'check_out', offsetDays: 1, sendTime: '10:00',
+    body: 'Thank you for staying at [Property], [First Name]. We’d love to host you again.\n\n[Host Name]' },
+];
 
 function describe(s, properties) {
   let when;
@@ -570,48 +645,87 @@ function describe(s, properties) {
   return `${when} · ${props}`;
 }
 
-function Scheduled({ templates, properties }) {
+const scheduleRow = (s) => ({ ...s, templateId: s.templateId || '', body: s.body || '' });
+
+function Scheduled({ templates, shortcuts, properties }) {
   const [rows, setRows] = useState(null);
+  const [activeKey, setActiveKey] = useState(null);
   const [msg, setMsg] = useState('');
+  const bodyEl = useRef(null);
+  const nextDraft = useRef(0);
   const flash = (t) => { setMsg(t); setTimeout(() => setMsg(''), 1800); };
-  const load = () => api.listMessageSchedules().then((r) => setRows(r.schedules.map((s) => ({ ...s, templateId: s.templateId || '', body: s.body || '' })))).catch((e) => setMsg(e.message));
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    api.listMessageSchedules().then((r) => setRows(r.schedules.map(scheduleRow))).catch((e) => setMsg(e.message));
+  }, []);
 
   const keyOf = (r) => r.id || r._key;
   const edit = (key, patch) => setRows((rs) => rs.map((r) => (keyOf(r) === key ? { ...r, ...patch, dirty: true } : r)));
 
+  function startDraft(from) {
+    const _key = `new${nextDraft.current++}`;
+    setRows((rs) => [{ ...BLANK, ...from, _key, dirty: true }, ...rs]);
+    setActiveKey(_key);
+  }
+  // Only the saved row is replaced, so unsaved edits to the others survive.
   async function save(r) {
     const data = { name: r.name, templateId: r.templateId || null, body: r.templateId ? null : r.body, anchor: r.anchor,
       offsetDays: r.offsetDays, sendTime: r.sendTime, propertyIds: r.propertyIds, active: r.active };
     try {
-      if (r.id) await api.updateMessageSchedule(r.id, data); else await api.createMessageSchedule(data);
-      await load(); flash('Saved.');
+      const { schedule } = r.id ? await api.updateMessageSchedule(r.id, data) : await api.createMessageSchedule(data);
+      setRows((rs) => rs.map((x) => (keyOf(x) === keyOf(r) ? scheduleRow(schedule) : x)));
+      setActiveKey(schedule.id);
+      flash('Saved.');
     } catch (e) { setMsg((e.data && e.data.message) || e.message); }
   }
   async function remove(r, key) {
-    if (!r.id) { setRows((rs) => rs.filter((x) => keyOf(x) !== key)); return; }
-    if (!window.confirm(`Delete the scheduled message “${r.name}”?`)) return;
-    try { await api.deleteMessageSchedule(r.id); await load(); } catch (e) { setMsg(e.message); }
+    if (r.id) {
+      if (!window.confirm(`Delete the scheduled message “${r.name}”?`)) return;
+      try { await api.deleteMessageSchedule(r.id); } catch (e) { setMsg(e.message); return; }
+    }
+    setRows((rs) => rs.filter((x) => keyOf(x) !== key));
+    setActiveKey(null);
   }
 
-  if (!rows) return <div className="gb-wrap"><p className="muted small">Loading…</p></div>;
+  if (!rows) return <div className="gb-wrap"><p className="muted small">{msg || 'Loading…'}</p></div>;
+  const r = rows.find((x) => keyOf(x) === activeKey);
+  const key = r && keyOf(r);
+  const template = r && r.templateId ? templates.find((t) => t.id === r.templateId) : null;
+  const dir = !r ? 'on' : r.offsetDays < 0 ? 'before' : r.offsetDays > 0 ? 'after' : 'on';
+  const n = r ? Math.abs(r.offsetDays) : 0;
+  const setOffset = (d, num) => edit(key, { offsetDays: d === 'on' ? 0 : (d === 'before' ? -1 : 1) * Math.max(1, num || 1) });
+  const taken = new Set(rows.map((x) => x.name.trim().toLowerCase()));
+  const ideas = SUGGESTED.filter((s) => !taken.has(s.name.toLowerCase()));
+
   return (
-    <div className="gb-wrap">
-      <p className="muted small">
+    <>
+      <p className="muted small msg-sched-intro">
         Automatic messages go to every confirmed booking that matches — once per booking — and are emailed to the guest too.
         Only bookings with a guest email or SimonStays account receive them. {msg && <b>{msg}</b>}
       </p>
-      <button onClick={() => setRows([{ ...BLANK, _key: `new${Date.now()}`, dirty: true }, ...rows])}>➕ New scheduled message</button>
+      <div className={`msg-sched-layout${r ? ' has-active' : ''}`}>
+        <aside className="msg-list">
+          <button className="wide" onClick={() => startDraft({})}>➕ New scheduled message</button>
+          {rows.length === 0 && <p className="muted small">None set up yet.</p>}
+          {rows.map((x) => (
+            <button key={keyOf(x)} className={`msg-item${keyOf(x) === activeKey ? ' on' : ''}`} onClick={() => setActiveKey(keyOf(x))}>
+              <b>{x.name || 'Untitled message'}</b>
+              <span className="muted small">{describe(x, properties)}</span>
+              <span className={`msg-item-state${!x.id || x.dirty ? ' draft' : x.active ? '' : ' off'}`}>{!x.id ? 'Draft, not created yet' : x.dirty ? 'Unsaved changes' : x.active ? `Active · sent ${x.sentCount}×` : `Off · sent ${x.sentCount}×`}</span>
+            </button>
+          ))}
+          {ideas.length > 0 && <div className="msg-sched-head">Ideas to start from</div>}
+          {ideas.map((s) => (
+            <button key={s.name} className="msg-item" onClick={() => startDraft(s)}>
+              <b>＋ {s.name}</b>
+              <span className="muted small">{describe({ ...BLANK, ...s }, properties)}</span>
+            </button>
+          ))}
+        </aside>
 
-      {rows.length === 0 && <p className="muted small">None yet. Typical ones: a welcome on confirmation, check-in details the day before, a checkout reminder the evening before.</p>}
-      {rows.map((r) => {
-        const key = keyOf(r);
-        const dir = r.offsetDays < 0 ? 'before' : r.offsetDays > 0 ? 'after' : 'on';
-        const n = Math.abs(r.offsetDays);
-        const setOffset = (d, num) => edit(key, { offsetDays: d === 'on' ? 0 : (d === 'before' ? -1 : 1) * Math.max(1, num || 1) });
-        return (
-          <section key={key} className={`sp-card msg-sched${r.active ? '' : ' off'}`}>
+        {!r ? <p className="muted msg-sched-empty">Pick a scheduled message, or start a new one.</p> : (
+          <section className={`sp-card msg-sched${r.active ? '' : ' off'}`}>
             <div className="sp-top">
+              <button className="secondary msg-back" onClick={() => setActiveKey(null)}>←</button>
               <input className="sp-name" placeholder="Name, e.g. Day-before check-in details" value={r.name} onChange={(e) => edit(key, { name: e.target.value })} />
               <label className="chk"><input type="checkbox" checked={r.active} onChange={(e) => edit(key, { active: e.target.checked })} /> Active</label>
             </div>
@@ -658,19 +772,24 @@ function Scheduled({ templates, properties }) {
               </select>
             </div>
             {r.templateId
-              ? <p className="msg-preview small">{(templates.find((t) => t.id === r.templateId) || {}).body}</p>
-              : <textarea className="msg-tpl-body" rows={4} placeholder="Hi {firstName}, …" value={r.body} onChange={(e) => edit(key, { body: e.target.value })} />}
+              ? <p className="msg-preview small">{(template || {}).body}</p>
+              : <textarea ref={bodyEl} className="msg-tpl-body" rows={9} placeholder="Hi [First Name], …" value={r.body} onChange={(e) => edit(key, { body: e.target.value })} />}
+            <ShortcutWarning text={template ? template.body : r.body} shortcuts={shortcuts} />
 
             <div className="msg-send-row">
-              <span className="muted small">{describe(r, properties)}{r.id ? ` · sent ${r.sentCount}×` : ''}</span>
+              <span className="muted small">{describe(r, properties)}{r.id ? ` · sent ${r.sentCount}×` : ' · nothing sends until you press Create'}</span>
               <span>
                 <button className="secondary" onClick={() => remove(r, key)}>{r.id ? 'Delete' : 'Discard'}</button>{' '}
                 <button disabled={!r.dirty} onClick={() => save(r)}>{r.id ? 'Save' : 'Create'}</button>
               </span>
             </div>
           </section>
-        );
-      })}
-    </div>
+        )}
+
+        <ShortcutPanel shortcuts={shortcuts}
+          onPick={r && !r.templateId ? (token) => insertInto(bodyEl.current, r.body, token, (body) => edit(key, { body })) : null}
+          note={!r ? 'Open a message to add these to it. Each one fills in for the booking when sent.' : r.templateId ? 'This uses a saved message, so change its shortcuts under Saved messages.' : null} />
+      </div>
+    </>
   );
 }

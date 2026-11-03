@@ -38,8 +38,9 @@ async function loadOwnedBooking(req, res) {
   return b;
 }
 
-// GET /messages/meta — the placeholders a message body can use.
-router.get('/meta', (req, res) => res.json({ placeholders: messaging.PLACEHOLDERS }));
+// GET /messages/meta — the shortcuts a message body can use. `placeholders` stays
+// for an admin site not yet redeployed (the static site deploys separately).
+router.get('/meta', (req, res) => res.json({ placeholders: messaging.PLACEHOLDERS, shortcuts: messaging.SHORTCUTS }));
 
 // GET /messages/unread — guest messages the host hasn't opened yet, one entry per
 // conversation, newest first (for the bell).

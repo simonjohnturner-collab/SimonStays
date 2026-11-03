@@ -1,11 +1,11 @@
 // Guest messaging: placeholder rendering, sending a host message to a booking's
 // guest (in-app on the shopfront + an email copy), and the scheduled-message job.
 //
-// Message bodies may contain {placeholders}, filled per booking at send time:
-//   {guestName} {firstName} {property} {unit} {address} {checkIn} {checkOut}
-//   {checkInTime} {checkOutTime} {nights} {ref} {wifiName} {wifiPassword}
-//   {accessCode} {parking} {hostName}
-// Unknown or empty placeholders render as blank.
+// Message bodies may contain shortcuts in square brackets, filled per booking at
+// send time: [Guest Name], [Check In Time] and so on (see SHORTCUTS). Capitals,
+// spaces and hyphens don't matter. The older {guestName} form still works, so
+// messages saved before the change keep filling in. A shortcut with no value for
+// the booking renders blank; anything else in brackets is left as typed.
 const prisma = require('../lib/prisma');
 const { sendMail } = require('./mailer');
 
@@ -18,11 +18,28 @@ const CATCH_UP_MS = 24 * 60 * 60 * 1000;
 // How long the host waits on an email before it carries on in the background.
 const EMAIL_WAIT_MS = 5000;
 
-const PLACEHOLDERS = [
-  'guestName', 'firstName', 'property', 'unit', 'address', 'checkIn', 'checkOut',
-  'checkInTime', 'checkOutTime', 'nights', 'ref', 'wifiName', 'wifiPassword',
-  'accessCode', 'parking', 'hostName',
+const SHORTCUTS = [
+  { key: 'guestName', label: 'Guest Name', hint: 'The guest’s full name' },
+  { key: 'firstName', label: 'First Name', hint: 'The guest’s first name' },
+  { key: 'property', label: 'Property', hint: 'Property name' },
+  { key: 'unit', label: 'Unit', hint: 'Unit name or number' },
+  { key: 'address', label: 'Address', hint: 'Property address' },
+  { key: 'checkIn', label: 'Check In', hint: 'Check-in date' },
+  { key: 'checkOut', label: 'Check Out', hint: 'Check-out date' },
+  { key: 'checkInTime', label: 'Check In Time', hint: 'Time check-in opens' },
+  { key: 'checkOutTime', label: 'Check Out Time', hint: 'Time to check out by' },
+  { key: 'nights', label: 'Nights', hint: 'Number of nights' },
+  { key: 'ref', label: 'Ref', hint: 'Booking reference' },
+  { key: 'wifiName', label: 'Wifi Name', hint: 'The unit’s wifi network' },
+  { key: 'wifiPassword', label: 'Wifi Password', hint: 'The unit’s wifi password' },
+  { key: 'accessCode', label: 'Access Code', hint: 'The booking’s door code' },
+  { key: 'parking', label: 'Parking', hint: 'Parking notes' },
+  { key: 'hostName', label: 'Host Name', hint: 'Your name' },
 ];
+const PLACEHOLDERS = SHORTCUTS.map((s) => s.key);
+
+const shortcutId = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+const SHORTCUT_KEYS = new Map(SHORTCUTS.map((s) => [shortcutId(s.key), s.key]));
 
 // Booking include that carries everything the placeholders need.
 const BOOKING_INCLUDE = { unit: { include: { property: { include: { host: { select: { name: true } } } } } } };
@@ -60,7 +77,10 @@ function valuesFor(b) {
 
 function render(body, booking) {
   const v = valuesFor(booking);
-  return String(body || '').replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m));
+  return String(body || '').replace(/\[([^[\]\n]+)\]|\{(\w+)\}/g, (m, square, curly) => {
+    const key = SHORTCUT_KEYS.get(shortcutId(square || curly));
+    return key ? v[key] : m;
+  });
 }
 
 // Where the guest can read their messages (the shopfront opens its inbox on ?messages).
@@ -208,6 +228,6 @@ async function runConfirmedSchedules(booking) {
 }
 
 module.exports = {
-  PLACEHOLDERS, BOOKING_INCLUDE, render, sendHostMessage, runSchedules, runConfirmedSchedules,
+  PLACEHOLDERS, SHORTCUTS, BOOKING_INCLUDE, render, sendHostMessage, runSchedules, runConfirmedSchedules,
   dueAt, appliesTo, scheduleBody, inboxUrl, hostIdOf,
 };
