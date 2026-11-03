@@ -295,6 +295,7 @@ async function scheduleData(hostId, b, partial) {
     data.anchor = b.anchor;
   }
   if (!partial || 'offsetDays' in b) data.offsetDays = Math.max(-365, Math.min(365, Math.round(Number(b.offsetDays) || 0)));
+  if (!partial || 'offsetMinutes' in b) data.offsetMinutes = Math.max(0, Math.min(10080, Math.round(Number(b.offsetMinutes) || 0)));
   if (!partial || 'sendTime' in b) {
     const t = String(b.sendTime || '10:00');
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) throw Object.assign(new Error('Send time must be HH:MM.'), { status: 400 });

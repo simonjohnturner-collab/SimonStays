@@ -57,13 +57,6 @@
       '<div class="row tot"><span>Total</span><span>'+rand(d.totalCents)+'</span></div>'+
       (d.depositCents?'<div class="muted" style="margin-top:6px">Includes a refundable deposit of '+rand(d.depositCents)+', returned after checkout subject to no damage.</div>':'')+'</div>';
   }
-  function eftBox(ref,eft,isChange){
-    if(isChange&&eft) return '<div class="card"><b>Pay by EFT or deposit</b><div class="muted" style="margin:4px 0 8px">Your booking updates once your payment is received.</div>'+
-      [eft.accountName&&('Account name: '+esc(eft.accountName)),eft.bankName&&('Bank: '+esc(eft.bankName)),eft.accountNumber&&('Account no.: '+esc(eft.accountNumber)),eft.branch&&('Branch: '+esc(eft.branch)),ref&&('<b>Reference: '+esc(ref)+'</b>')].filter(Boolean).map(function(x){ return '<div>'+x+'</div>'; }).join('')+'</div>';
-    if(!eft) return '<div class="card"><p>Your dates aren’t held until payment is received. Please message your host for the bank details and quote reference <b>'+esc(ref||'')+'</b>.</p></div>';
-    return '<div class="card"><b>Pay by EFT or deposit</b><div class="muted" style="margin:4px 0 8px">Your booking is confirmed once your payment is received. Your dates aren’t held until then.</div>'+
-      [eft.accountName&&('Account name: '+esc(eft.accountName)),eft.bankName&&('Bank: '+esc(eft.bankName)),eft.accountNumber&&('Account no.: '+esc(eft.accountNumber)),eft.branch&&('Branch: '+esc(eft.branch)),ref&&('<b>Reference: '+esc(ref)+'</b>')].filter(Boolean).join('<br>')+'</div>';
-  }
   function closedNote(d){
     var notes={ replaced:'Your host has sent a newer invoice. Please use the latest one in your messages.', expired:'This invoice has expired. Please message your host for a new one.', closed:'This invoice is closed. Please message your host.' };
     return '<div class="card info">'+esc(notes[d.state]||'This invoice can no longer be paid.')+'</div>';
@@ -81,19 +74,18 @@
       '<label><input type="checkbox" id="a1"><span>I have read the cancellation policy and accept that no refunds are granted outside of it. I confirm that SimonStays accepts no responsibility for anything that happens at the property.</span></label>'+
       '<label><input type="checkbox" id="a2"><span>I accept the <a href="/terms" target="_blank" rel="noreferrer">Terms &amp; Conditions</a>.</span></label>'+
       '<div id="err"></div>'+
-      (card?'<button id="payCard" disabled>Pay '+rand(d.totalCents)+' by card</button>':'')+
-      '<button id="payEft" class="'+(card?'alt':'')+'" disabled>Pay by EFT instead</button></div>';
-    var a1=document.getElementById('a1'), a2=document.getElementById('a2'), bc=document.getElementById('payCard'), be=document.getElementById('payEft');
-    function sync(){ var on=a1.checked&&a2.checked; if(bc) bc.disabled=!on; be.disabled=!on; }
+      (card?'<button id="payCard" disabled>Pay '+rand(d.totalCents)+' by card</button>':'<div class="err">Card payment isn’t available right now. Please try again a little later, or message your host.</div>')+'</div>';
+    if(!card) return;
+    var a1=document.getElementById('a1'), a2=document.getElementById('a2'), bc=document.getElementById('payCard');
+    function sync(){ bc.disabled=!(a1.checked&&a2.checked); }
     a1.onchange=sync; a2.onchange=sync;
-    if(bc) bc.onclick=function(){ pay('card',bc,d); };
-    be.onclick=function(){ pay('eft',be,d); };
+    bc.onclick=function(){ pay(bc); };
   }
-  async function pay(method,btn,d){
+  async function pay(btn){
     var label=btn.textContent, err=document.getElementById('err');
-    btn.disabled=true; btn.textContent=method==='card'?'Taking you to secure payment…':'One moment…'; err.innerHTML='';
+    btn.disabled=true; btn.textContent='Taking you to secure payment…'; err.innerHTML='';
     try{
-      var r=await fetch(api+'/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method:method,acceptedTerms:true})});
+      var r=await fetch(api+'/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method:'card',acceptedTerms:true})});
       var p=await r.json();
       if(!r.ok) throw new Error(p.message||'Could not start the payment. Please try again.');
       if(p.mode==='form'){
@@ -101,7 +93,6 @@
         Object.keys(p.fields).forEach(function(k){ var i=document.createElement('input'); i.type='hidden'; i.name=k; i.value=p.fields[k]; f.appendChild(i); });
         document.body.appendChild(f); f.submit(); return;
       }
-      if(p.mode==='eft'){ app.innerHTML=summary(d)+eftBox(p.ref,p.eft,d.kind==='change'); return; }
       load();
     }catch(e){ btn.disabled=false; btn.textContent=label; err.innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
   }

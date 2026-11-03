@@ -29,6 +29,7 @@ app.use('/listings', require('./routes/listings'));
 // Public guest accounts (shopfront login → "my trips"). Mount before /public so
 // its paths are matched first (the /public router has no /account/* routes).
 app.use('/public/account/messages', require('./routes/guestMessages'));
+app.use('/public/documents', require('./routes/documents').publicRouter);
 app.use('/public/account', require('./routes/guestAuth'));
 // Paygate PayWeb3 callbacks (notify + guest return) — public, verified with Paygate.
 app.use('/public/paygate', require('./routes/paygate'));
@@ -87,6 +88,15 @@ app.get('/invoice/:token', (req, res) => {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.type('html').send(offerInvoiceHtml);
 });
+// A property's shared documents, reached from a link a host sends their guests.
+const documentsHtml = fs.readFileSync(path.join(__dirname, 'pages/documents.html'), 'utf8');
+app.get('/documents/:propertyId/:sig', (req, res) => {
+  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'");
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Robots-Tag', 'noindex');
+  res.type('html').send(documentsHtml);
+});
 // Privacy Policy — same plain self-contained style as the terms page.
 const privacyHtml = fs.readFileSync(path.join(__dirname, 'pages/privacy.html'), 'utf8');
 app.get(['/privacy', '/privacy.html', '/privacy-policy'], (req, res) => {
@@ -112,6 +122,7 @@ app.use('/cleaners', require('./routes/cleaners'));
 app.use('/providers', require('./routes/providers'));
 app.use('/guests', require('./routes/guests'));
 app.use('/messages', require('./routes/messages'));
+app.use('/documents', require('./routes/documents').hostRouter);
 app.use('/teach', require('./routes/teach'));
 app.use('/smartlocks', require('./routes/smartlocks'));
 app.use('/groups', require('./routes/groups'));
@@ -212,9 +223,9 @@ if (require.main === module) {
   cron.schedule('41 * * * *', expireHolds);
 
   // Scheduled guest messages ("2 days before check-in at 10:00", …). Checks every
-  // 10 minutes; each schedule sends once per booking. Override with MESSAGE_CRON.
+  // 5 minutes; each schedule sends once per booking. Override with MESSAGE_CRON.
   const messaging = require('./utils/messaging');
-  const messageExpr = process.env.MESSAGE_CRON || '*/10 * * * *';
+  const messageExpr = process.env.MESSAGE_CRON || '*/5 * * * *';
   if (cron.validate(messageExpr)) {
     cron.schedule(messageExpr, async () => {
       try { const s = await messaging.runSchedules(); if (s.sent || s.failed) console.log('[messages]', JSON.stringify(s)); }

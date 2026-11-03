@@ -7,7 +7,7 @@ export default function ManageDrawer({
   properties, bookingsByUnit, onClose,
   onAddProperty, onRenameProperty, onDeleteProperty,
   onAddUnit, onDeleteUnit, onOpenUnit, onOpenPricing,
-  onAddBooking, onAddFloating, onEditBooking, onOpenInvoices, onOpenListings, onOpenForms, onOpenCleaners, onOpenGuests, onOpenMessages, teachCount = 0, onOpenSmartLocks, onOpenAccount, onOpenPayments, onOpenMarket,
+  onAddBooking, onAddFloating, onEditBooking, onOpenInvoices, onOpenListings, onOpenForms, onOpenCleaners, onOpenGuests, onOpenMessages, teachCount = 0, onOpenSmartLocks, onOpenAccount, onOpenBusiness, onOpenDocuments, onOpenPayments, onOpenMarket,
   isAdmin, onOpenAdmin,
   onReorderProperties,
   groups = [], onAssignGroup, onCreateGroup,
@@ -52,6 +52,7 @@ export default function ManageDrawer({
             <button className="wide menu-item" onClick={() => setView('booking')}>📅 Add or edit a booking</button>
             <button className="wide menu-item" onClick={onOpenListings}>🖼️ Listings</button>
             <button className="wide menu-item" onClick={onOpenForms}>📋 Forms</button>
+            <button className="wide menu-item" onClick={onOpenDocuments}>📁 Documents</button>
             <button className="wide menu-item" onClick={onOpenCleaners}>🧰 Service providers</button>
             <button className="wide menu-item" onClick={onOpenGuests}>📇 Guest contact book</button>
             {onOpenMessages && <button className="wide menu-item" onClick={onOpenMessages}>💬 Messaging &amp; Ask Simon{teachCount > 0 && <span className="msg-dot">{teachCount}</span>}</button>}
@@ -59,6 +60,7 @@ export default function ManageDrawer({
             <button className="wide menu-item" onClick={onOpenPricing}>💲 Pricing</button>
             <button className="wide menu-item" onClick={onOpenMarket}>📈 Market watch · The Vantage</button>
             <button className="wide menu-item" onClick={onOpenInvoices}>🧾 Invoicing</button>
+            <button className="wide menu-item" onClick={onOpenBusiness}>🏢 Business details</button>
             <button className="wide menu-item" onClick={onOpenAccount}>👤 Account</button>
             <button className="wide menu-item" onClick={onOpenPayments}>💰 Payment history</button>
             <a className="wide menu-item" href={`${apiBaseUrl().replace(/\/$/, '')}/stay`} target="_blank" rel="noreferrer">🛍️ View booking shopfront ↗</a>

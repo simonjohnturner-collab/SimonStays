@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, photoUrl, formLink } from '../api.js';
+import { useAuth } from '../auth.jsx';
 
 // Bar with the public, shareable links guests/cleaners use to FILL IN a form.
 function FormLinks() {
+  const { host } = useAuth();
   const [copied, setCopied] = useState('');
   function copy(type) {
-    const url = formLink(type);
+    const url = formLink(type, host.id);
     (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject())
       .catch(() => { const t = document.createElement('textarea'); t.value = url; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); });
     setCopied(type); setTimeout(() => setCopied(''), 1500);
@@ -14,15 +16,15 @@ function FormLinks() {
     <div className="forms-links">
       <span className="fl-label">Send these links to fill in a form:</span>
       <span className="fl-group">
-        <a className="fl-btn damage" href={formLink('damage')} target="_blank" rel="noreferrer">⚠️ Damage report ↗</a>
+        <a className="fl-btn damage" href={formLink('damage', host.id)} target="_blank" rel="noreferrer">⚠️ Damage report ↗</a>
         <button className="fl-copy" onClick={() => copy('damage')}>{copied === 'damage' ? 'Copied ✓' : 'Copy link'}</button>
       </span>
       <span className="fl-group">
-        <a className="fl-btn clean" href={formLink('clean')} target="_blank" rel="noreferrer">🧹 Cleaner report ↗</a>
+        <a className="fl-btn clean" href={formLink('clean', host.id)} target="_blank" rel="noreferrer">🧹 Cleaner report ↗</a>
         <button className="fl-copy" onClick={() => copy('clean')}>{copied === 'clean' ? 'Copied ✓' : 'Copy link'}</button>
       </span>
       <span className="fl-group">
-        <a className="fl-btn repair" href={formLink('repair')} target="_blank" rel="noreferrer">🛠 Repair report ↗</a>
+        <a className="fl-btn repair" href={formLink('repair', host.id)} target="_blank" rel="noreferrer">🛠 Repair report ↗</a>
         <button className="fl-copy" onClick={() => copy('repair')}>{copied === 'repair' ? 'Copied ✓' : 'Copy link'}</button>
       </span>
     </div>

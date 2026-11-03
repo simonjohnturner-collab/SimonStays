@@ -19,6 +19,8 @@ import GuestBookView from './GuestBookView.jsx';
 import PaymentHistoryView from './PaymentHistoryView.jsx';
 import SmartLockView from './SmartLockView.jsx';
 import AccountView from './AccountView.jsx';
+import DocumentsView from './DocumentsView.jsx';
+import { BusinessDetails } from './BillerSettings.jsx';
 import AdminView from './AdminView.jsx';
 import MarketView from './MarketView.jsx';
 import MessagesView from './MessagesView.jsx';
@@ -58,6 +60,8 @@ export default function Main() {
   const [forms, setForms] = useState(false);
   const [smartLocks, setSmartLocks] = useState(false);
   const [account, setAccount] = useState(false);
+  const [business, setBusiness] = useState(false);
+  const [documents, setDocuments] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [market, setMarket] = useState(false);
   const [messages, setMessages] = useState(null); // { bookingId, tab } when open
@@ -271,6 +275,9 @@ export default function Main() {
   if (account) {
     return withChrome(<AccountView onClose={() => setAccount(false)} />);
   }
+  if (documents) {
+    return withChrome(<DocumentsView onClose={() => setDocuments(false)} />);
+  }
   if (providersOpen) {
     return withChrome(
       <ServiceProvidersView
@@ -372,6 +379,8 @@ export default function Main() {
         />
       )}
 
+      {business && <BusinessDetails onClose={() => setBusiness(false)} />}
+
       {menuOpen && (
         <ManageDrawer
           properties={properties}
@@ -400,6 +409,8 @@ export default function Main() {
           teachCount={teachCount}
           onOpenSmartLocks={() => { setMenuOpen(false); setSmartLocks(true); }}
           onOpenAccount={() => { setMenuOpen(false); setAccount(true); }}
+          onOpenBusiness={() => { setMenuOpen(false); setBusiness(true); }}
+          onOpenDocuments={() => { setMenuOpen(false); setDocuments(true); }}
           onOpenPayments={() => { setMenuOpen(false); setPaymentsOpen(true); }}
           isAdmin={host?.isAdmin && !impersonating}
           onOpenAdmin={() => { setMenuOpen(false); setAdminOpen(true); }}

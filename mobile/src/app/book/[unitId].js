@@ -11,7 +11,7 @@ import { C } from '../../lib/theme';
 
 const SPLIT_FEE = 25000; // R250 admin fee for the 50/50 plan (matches the server)
 
-// Guest details, how to pay, the T&Cs, then off to Paygate (or EFT details).
+// Guest details, how to pay, the T&Cs, then off to Paygate.
 export default function BookScreen() {
   const { unitId, propertyId, checkIn, checkOut } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
@@ -19,7 +19,6 @@ export default function BookScreen() {
   const [quote, setQuote] = useState(null);
   const [host, setHost] = useState(null);
   const [f, setF] = useState({ name: '', email: '', phone: '', guests: '', message: '' });
-  const [method, setMethod] = useState('card');
   const [plan, setPlan] = useState('full');
   const [agree, setAgree] = useState(false);
   const [agreeTnc, setAgreeTnc] = useState(false);
@@ -47,7 +46,7 @@ export default function BookScreen() {
         unitId, checkIn, checkOut,
         guestName: f.name.trim(), guestEmail: f.email.trim(), guestPhone: f.phone.trim(),
         guests: f.guests.trim(), message: f.message.trim(),
-        paymentMethod: method, paymentPlan: split ? 'split' : 'full',
+        paymentMethod: 'card', paymentPlan: split ? 'split' : 'full',
         acceptedTerms: true, appReturn: appReturnUrl(),
       });
       const result = await runCheckout(r.bookingId, r.payment);
@@ -89,8 +88,7 @@ export default function BookScreen() {
 
         <Card>
           <H>How would you like to pay?</H>
-          <Choice selected={method === 'card'} onPress={() => setMethod('card')} title="💳 Card" sub={host && host.cardOnline ? 'Secure payment with Paygate. Confirmed instantly.' : 'Test mode: no card is charged.'} />
-          <Choice selected={method === 'eft'} onPress={() => setMethod('eft')} title="🏦 EFT (bank transfer)" sub="Confirmed once your payment reflects." />
+          <Choice selected onPress={() => {}} title="💳 Card" sub={host && host.cardOnline ? 'Secure payment with Paygate. Confirmed instantly.' : 'Test mode: no card is charged.'} />
           {canSplit && (
             <>
               <View style={styles.sep} />
@@ -111,7 +109,7 @@ export default function BookScreen() {
 
         {!!error && <Text style={styles.err}>{error}</Text>}
         <Button
-          title={method === 'eft' ? 'Reserve and get bank details' : `Pay ${rand(dueNow)}`}
+          title={`Pay ${rand(dueNow)}`}
           onPress={book} busy={busy} disabled={!ready}
         />
         {!ready && <Text style={[styles.muted, { textAlign: 'center', marginTop: 8 }]}>Add your name, an email or phone number, and tick both boxes.</Text>}

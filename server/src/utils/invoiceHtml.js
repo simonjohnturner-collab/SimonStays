@@ -10,9 +10,16 @@ function row(label, value, opts) {
 }
 
 // data: { ref, propertyName, unitName, checkIn, checkOut, guestName, guestEmail,
-//         guestPhone, billing, quote, method, split, owingCents, eft, hostName }
+//         guestPhone, billing, quote, split, owingCents, hostName,
+//         business: the host's own details (BillerProfile) }
 function invoiceHtml(data) {
   const q = data.quote || {};
+  const biz = data.business || {};
+  const hostBlock = [
+    biz.companyName && `<b>${esc(biz.companyName)}</b>${biz.registrationNo ? ` (registration number ${esc(biz.registrationNo)})` : ''}`,
+    biz.addressLines && esc(biz.addressLines).replace(/\n/g, ', '),
+    [biz.email, biz.phone, biz.website].filter(Boolean).map(esc).join(' &middot; '),
+  ].filter(Boolean).join('<br>');
   const lines = [];
   lines.push(row(`${q.nights} night${q.nights > 1 ? 's' : ''} @ ${rand(q.avgNightlyCents)}`, rand(q.accommodationCents)));
   if (q.discountCents) lines.push(row(`${q.discountPercent}% length discount`, '&minus;' + rand(q.discountCents)));
@@ -30,22 +37,7 @@ function invoiceHtml(data) {
     lines.push(row('Due at least 3 days before check-in (50%)', rand(payable - now)));
   }
 
-  const payLine = data.method === 'EFT'
-    ? 'Payment method: EFT / bank transfer or deposit'
-    : 'Payment method: Card (online)';
-
-  const eft = data.eft;
-  const eftBlock = (data.method === 'EFT' && eft) ? (
-    '<div style="margin-top:16px;padding:12px 14px;background:#f7f8fa;border:1px solid #e3e3e3;border-radius:8px;font-size:13px;line-height:1.6">'
-    + '<b>EFT / bank transfer or deposit</b><br>'
-    + [eft.accountName && ('Account name: ' + esc(eft.accountName)),
-      eft.bankName && ('Bank: ' + esc(eft.bankName)),
-      eft.accountNumber && ('Account no.: ' + esc(eft.accountNumber)),
-      eft.branch && ('Branch: ' + esc(eft.branch))].filter(Boolean).join('<br>')
-    + `<br><b>Reference: ${esc(data.ref)}</b>`
-    + '<br><span style="color:#6b7280">Use the booking reference as your payment reference and send proof of payment — your booking is confirmed once it&rsquo;s received.</span>'
-    + '</div>'
-  ) : '';
+  const payLine = 'Payment method: Card (online)';
 
   const billBlock = data.billing
     ? `<div style="margin-top:4px;color:#374151;white-space:pre-line">${esc(data.billing)}</div>` : '';
@@ -84,13 +76,12 @@ function invoiceHtml(data) {
     <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:14px">${lines.join('')}</table>
 
     <div style="margin-top:14px;color:#374151;font-size:13px">${payLine}${data.split ? ' &middot; 50/50 split' : ''}</div>
-    ${eftBlock}
 
     ${data.cancellationPolicy ? `<h3 style="margin:20px 0 4px;font-size:14px">Booking rules &amp; cancellation policy</h3>
     <div style="font-size:13px;line-height:1.6;color:#374151;background:#f7f8fa;border:1px solid #e3e3e3;border-radius:8px;padding:10px 12px;white-space:pre-line">${esc(data.cancellationPolicy)}</div>` : ''}
 
     <div style="margin-top:18px;padding:12px 14px;background:#f6f7f9;border:1px solid #e3e3e3;border-radius:10px;font-size:13px;line-height:1.6">
-      <b>Questions about your stay?</b> Just reply to this email or reach us on the contact details below — we're happy to help.
+      ${hostBlock ? `<b>Questions about your stay?</b> Your host is here to help:<div style="margin-top:6px">${hostBlock}</div>` : `<b>Questions about your stay?</b> Just reply to this email or reach us on the contact details below — we're happy to help.`}
     </div>
 
     <div style="margin-top:20px;color:#6b7280;font-size:12px;line-height:1.6;border-top:1px solid #eee;padding-top:12px">

@@ -7,13 +7,12 @@ import { appReturnUrl, runCheckout } from '../../lib/pay';
 import { fmtDay, rand } from '../../lib/format';
 import { C } from '../../lib/theme';
 
-// After checkout: confirmed / still confirming / payment not completed / EFT
+// After checkout: confirmed / still confirming / payment not completed
 // instructions. The server is always asked (it checks with Paygate) — the
 // result passed in from the payment page is only a hint.
 export default function BookingScreen() {
   const { id, result } = useLocalSearchParams();
   const [b, setB] = useState(null);
-  const [eft, setEft] = useState(null);
   const [error, setError] = useState('');
   const [waited, setWaited] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -29,7 +28,7 @@ export default function BookingScreen() {
     const tick = async () => {
       const s = await load();
       // Card payment just finished: Paygate can take a few seconds to confirm.
-      if (s && s.status === 'pending' && result !== 'eft' && result !== 'cancelled' && tries.current < 15) {
+      if (s && s.status === 'pending' && result !== 'cancelled' && tries.current < 15) {
         tries.current += 1;
         timer = setTimeout(tick, 2500);
       } else {
@@ -37,7 +36,6 @@ export default function BookingScreen() {
       }
     };
     tick();
-    api.host().then((r) => setEft(r.host && r.host.eft)).catch(() => {});
     return () => clearTimeout(timer);
   }, [load, result]);
 
@@ -59,20 +57,18 @@ export default function BookingScreen() {
 
   const confirmed = b.status === 'confirmed';
   const cancelled = b.status === 'cancelled';
-  const isEft = result === 'eft';
   const stillChecking = b.status === 'pending' && !waited;
 
   return (
     <ScrollView contentContainerStyle={styles.body}>
       <View style={styles.hero}>
-        <Text style={styles.icon}>{confirmed ? '✅' : stillChecking ? '⏳' : isEft ? '🏦' : cancelled ? '✖️' : '⚠️'}</Text>
+        <Text style={styles.icon}>{confirmed ? '✅' : stillChecking ? '⏳' : cancelled ? '✖️' : '⚠️'}</Text>
         <Text style={styles.heading}>
-          {confirmed ? 'Booking confirmed' : stillChecking ? 'Confirming your payment…' : isEft ? 'Reserved: pay by EFT' : cancelled ? 'Booking cancelled' : 'Payment not completed'}
+          {confirmed ? 'Booking confirmed' : stillChecking ? 'Confirming your payment…' : cancelled ? 'Booking cancelled' : 'Payment not completed'}
         </Text>
         <Text style={styles.sub}>
           {confirmed ? `See you soon! We’ve emailed your confirmation${b.guestEmail ? ` to ${b.guestEmail}` : ''}.`
             : stillChecking ? 'This usually takes a few seconds. Please don’t close the app.'
-              : isEft ? 'Your booking is confirmed once your payment reflects in our account.'
                 : cancelled ? 'This booking is no longer active.'
                   : 'Your card wasn’t charged. You can try again; the dates aren’t held until you pay.'}
         </Text>
@@ -86,20 +82,8 @@ export default function BookingScreen() {
         {confirmed && b.amountOwingCents > 0 && <Row left="Balance due 3 days before check-in" right={rand(b.amountOwingCents)} />}
       </Card>
 
-      {isEft && !confirmed && eft && (
-        <Card>
-          <H>Bank details</H>
-          {!!eft.accountName && <Row left="Account name" right={eft.accountName} />}
-          {!!eft.bankName && <Row left="Bank" right={eft.bankName} />}
-          {!!eft.accountNumber && <Row left="Account number" right={eft.accountNumber} />}
-          {!!eft.branch && <Row left="Branch code" right={eft.branch} />}
-          <Row left="Reference" right={b.ref || ''} bold />
-          <Text style={styles.note}>Please use the booking reference so we can match your payment. Your invoice has also been emailed to you.</Text>
-        </Card>
-      )}
-
       {!!error && <Text style={styles.err}>{error}</Text>}
-      {!confirmed && !cancelled && !isEft && waited && <Button title="Try paying again" onPress={retry} busy={busy} style={{ marginBottom: 12 }} />}
+      {!confirmed && !cancelled && waited && <Button title="Try paying again" onPress={retry} busy={busy} style={{ marginBottom: 12 }} />}
       <Button title="Back to stays" kind={confirmed ? 'primary' : 'secondary'} onPress={() => router.dismissTo('/')} />
     </ScrollView>
   );

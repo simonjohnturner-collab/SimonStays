@@ -1,7 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 
 // Edit the host's "invoice from" details + bank info (reused on every invoice).
+// Opens from the menu: loads this host's details, then shows the form.
+export function BusinessDetails({ onClose }) {
+  const [biller, setBiller] = useState(null);
+  useEffect(() => { api.getBiller().then((r) => setBiller(r.biller)).catch(onClose); /* eslint-disable-next-line */ }, []);
+  return biller ? <BillerSettings biller={biller} onClose={onClose} onSaved={onClose} /> : null;
+}
+
 export default function BillerSettings({ biller, onClose, onSaved }) {
   const [f, setF] = useState({
     companyName: biller?.companyName || '', registrationNo: biller?.registrationNo || '',
@@ -22,8 +29,8 @@ export default function BillerSettings({ biller, onClose, onSaved }) {
   return (
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head"><h3>Biller settings (your details)</h3><button className="x" onClick={onClose}>×</button></div>
-        <p className="muted small">These appear as the “from” on every invoice.</p>
+        <div className="modal-head"><h3>Business details</h3><button className="x" onClick={onClose}>×</button></div>
+        <p className="muted small">Yours alone. They appear on your invoices and on the booking emails your guests get. Your bank details only appear on invoices you make yourself.</p>
 
         <label>Company name<input value={f.companyName} onChange={(e) => set('companyName', e.target.value)} /></label>
         <div className="row2">

@@ -143,6 +143,13 @@
   </div>
 
 <script>
+  (function () {
+    var host = new URLSearchParams(location.search).get('host'), plain = window.fetch;
+    if (host) window.fetch = function (url, opts) {
+      if (typeof url === 'string' && url.indexOf('/public/forms') === 0) url += (url.indexOf('?') < 0 ? '?' : '&') + 'host=' + encodeURIComponent(host);
+      return plain.call(window, url, opts);
+    };
+  })();
   var PROPS = [], TEMPLATE = null, UNIT = null;
   var answers = {}, photoFiles = {}, rendered = [], SUBID = null;
   // Duplicate-clean guard: an existing clean for this unit + checkout day + cleaner.

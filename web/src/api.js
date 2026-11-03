@@ -17,7 +17,7 @@ export function apiBaseUrl() { return BASE; }
 export function photoUrl(id) { return `${BASE}/photos/${id}`; }
 
 // Public, shareable URL of a form guests/cleaners fill in.
-export function formLink(type) { return `${BASE}/${type === 'clean' ? 'clean' : type === 'repair' ? 'repair' : 'report'}`; }
+export function formLink(type, hostId) { return `${BASE}/${type === 'clean' ? 'clean' : type === 'repair' ? 'repair' : 'report'}?host=${encodeURIComponent(hostId)}`; }
 
 async function req(method, path, body) {
   const headers = { 'Content-Type': 'application/json' };
@@ -161,6 +161,9 @@ export const api = {
 
   // guest messaging: conversations, saved messages, scheduled messages
   messageMeta: () => req('GET', '/messages/meta'),
+  listDocuments: () => req('GET', '/documents'),
+  uploadDocument: (data) => req('POST', '/documents', data),
+  deleteDocument: (id) => req('DELETE', `/documents/${id}`),
   messageUnread: () => req('GET', '/messages/unread'),
   messageThreads: () => req('GET', '/messages/threads'),
   messageRecipients: (q = '') => req('GET', `/messages/recipients${q ? `?q=${encodeURIComponent(q)}` : ''}`),

@@ -106,7 +106,7 @@ router.post('/enquiry', async (req, res, next) => {
     const q = unit.pricingGroup
       ? quote(unit.pricingGroup, { checkIn, checkOut, cleans: 1, overrides: await overridesFor(unit.id, checkIn, checkOut) })
       : null;
-    const seq = (await prisma.booking.count({ where: { hostId, source: 'website' } })) + 1;
+    const seq = (await prisma.booking.count({ where: { source: 'website' } })) + 1; // numbered across the whole site
     const ref = 'SS' + String(1000 + seq);
     const count = Number(guests) > 0 ? ` · Guests: ${Math.floor(Number(guests))}` : '';
     const booking = await prisma.booking.create({

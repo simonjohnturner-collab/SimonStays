@@ -8,10 +8,12 @@
 // the booking renders blank; anything else in brackets is left as typed.
 const prisma = require('../lib/prisma');
 const { sendMail } = require('./mailer');
+const { folderLink } = require('./documents');
 
 // SAST is UTC+2 year-round (no DST).
 const SAST_MS = 2 * 60 * 60 * 1000;
 const DAY_MS = 864e5;
+const MINUTE_MS = 6e4;
 // How far back the job will still send a message whose time has passed (e.g.
 // the server was asleep). Older than this is skipped rather than sent late.
 const CATCH_UP_MS = 24 * 60 * 60 * 1000;
@@ -35,6 +37,7 @@ const SHORTCUTS = [
   { key: 'accessCode', label: 'Access Code', hint: 'The booking’s door code' },
   { key: 'parking', label: 'Parking', hint: 'Parking notes' },
   { key: 'hostName', label: 'Host Name', hint: 'Your name' },
+  { key: 'documentsLink', label: 'Documents Link', hint: 'Link to this property’s shared documents' },
 ];
 const PLACEHOLDERS = SHORTCUTS.map((s) => s.key);
 
@@ -72,6 +75,7 @@ function valuesFor(b) {
     accessCode: b.accessCode || '',
     parking: u.parkingNotes || p.parkingNotes || '',
     hostName: (p.host && p.host.name) || 'SimonStays',
+    documentsLink: p.id ? folderLink(p.id) : '',
   };
 }
 
@@ -90,6 +94,8 @@ function inboxUrl() {
 }
 
 const escHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// A message as email HTML, with any web links clickable.
+const bodyHtml = (s) => escHtml(s).replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)]/g, (url) => `<a href="${url}" style="color:#1a7a3a">${url}</a>`);
 
 // Email the guest a copy so they see it even if they never sign in. Best-effort.
 async function emailGuest(booking, body, offer = null) {
@@ -103,7 +109,7 @@ async function emailGuest(booking, body, offer = null) {
     subject: `New message about your stay at ${place}`,
     text: `${body}\n\n—\nPlease don't reply to this email. To reply, open your messages on SimonStays: ${link}`,
     html: `<div style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.55;color:#1d2433">` +
-      `<p style="white-space:pre-line">${escHtml(body)}</p>` +
+      `<p style="white-space:pre-line">${bodyHtml(body)}</p>` +
       `<p><a href="${link}" style="display:inline-block;background:#1a7a3a;color:#fff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px">Reply on SimonStays</a></p>` +
       `<p style="color:#6b7280;font-size:13px">About your stay at <b>${escHtml(place)}</b>. ` +
       `Please don't reply to this email — replies only reach your host through the button above.</p></div>`,
@@ -122,7 +128,7 @@ function emailInvoiceOffer(to, place, body, offer, inbox) {
     subject: `Your invoice for ${place}: ${fmtRand(offer.totalCents)}`,
     text: `${body}\n\n${offer.lines.map((l) => `${l.description}: ${fmtRand(l.amountCents)}`).join('\n')}\nTotal: ${fmtRand(offer.totalCents)}\n\nView and pay: ${pay}\n\n—\nPlease don't reply to this email. To reply, open your messages on SimonStays: ${inbox}`,
     html: `<div style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.55;color:#1d2433">` +
-      `<p style="white-space:pre-line">${escHtml(body)}</p>` +
+      `<p style="white-space:pre-line">${bodyHtml(body)}</p>` +
       `<table style="width:100%;max-width:480px;border-collapse:collapse;margin:12px 0">${rows}` +
       `<tr><td style="padding:8px 0;border-top:1px solid #d9dee3;font-weight:700">Total</td><td style="padding:8px 0;border-top:1px solid #d9dee3;font-weight:700;text-align:right;white-space:nowrap">${fmtRand(offer.totalCents)}</td></tr></table>` +
       `<p><a href="${pay}" style="display:inline-block;background:#1a7a3a;color:#fff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px">View invoice &amp; pay</a></p>` +
@@ -166,7 +172,7 @@ function scheduleBody(s) { return (s.template && s.template.body) || s.body || '
 
 // When a schedule is due for a booking (UTC Date), or null if it never is.
 function dueAt(s, b) {
-  if (s.anchor === 'confirmed') return b.confirmedAt ? new Date(b.confirmedAt) : null;
+  if (s.anchor === 'confirmed') return b.confirmedAt ? new Date(new Date(b.confirmedAt).getTime() + (s.offsetMinutes || 0) * MINUTE_MS) : null;
   const anchorDate = s.anchor === 'check_out' ? shownCheckOut(b) : b.checkIn;
   const [y, m, d] = iso(anchorDate).split('-').map(Number);
   const [hh, mm] = String(s.sendTime || '10:00').split(':').map(Number);
@@ -191,7 +197,7 @@ async function runSchedules(now = new Date()) {
   for (const s of schedules) {
     const where = { ...reachable, unit: { property: { hostId: s.hostId } } };
     if (s.anchor === 'confirmed') {
-      where.confirmedAt = { gte: new Date(now.getTime() - CATCH_UP_MS) };
+      where.confirmedAt = { gte: new Date(now.getTime() - (s.offsetMinutes || 0) * MINUTE_MS - CATCH_UP_MS) };
     } else {
       // Anchor dates whose send time could fall inside [now − catch-up, now].
       const field = s.anchor === 'check_out' ? 'checkOut' : 'checkIn';
@@ -214,14 +220,14 @@ async function runSchedules(now = new Date()) {
   return out;
 }
 
-// Fire this host's "when a booking is confirmed" schedules for one booking now.
+// Fire this host's "as soon as booked" schedules for one booking now.
 async function runConfirmedSchedules(booking) {
   const hostId = hostIdOf(booking);
   if (!hostId || !booking.unit || !(booking.guestEmail || booking.guestAccountId)) return 0;
   const schedules = await prisma.messageSchedule.findMany({ where: { hostId, active: true, anchor: 'confirmed' }, include: { template: true } });
   let sent = 0;
   for (const s of schedules) {
-    if (!appliesTo(s, booking)) continue;
+    if (!appliesTo(s, booking) || s.offsetMinutes > 0) continue; // a delayed one waits for the job
     const r = await sendHostMessage(booking, scheduleBody(s), { scheduleId: s.id });
     if (r.ok) sent++;
   }

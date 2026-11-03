@@ -187,7 +187,7 @@ async function reconcileBooking(bookingId, opts = {}) {
 }
 
 // Card bookings whose payment was never completed hold no dates but clutter the
-// board — cancel them after `hours`. EFT bookings (no online payment attempt)
+// board — cancel them after `hours`. Older EFT bookings (no online payment attempt)
 // are left alone: the host confirms those by hand.
 async function expireAbandoned({ hours = 24, now = new Date() } = {}) {
   const cutoff = new Date(now.getTime() - hours * 3600 * 1000);

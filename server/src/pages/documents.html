@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Documents — SimonStays</title>
+<link rel="icon" href="/favicon.svg" />
+<style>
+  :root{ --green:#1a7a3a; --green-d:#14622f; --ink:#1f2430; --muted:#6b7280; --line:#e5e7eb; --bg:#f7f8fa; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+  a{ color:var(--green); text-decoration:none; }
+  header{ background:#fff; border-bottom:1px solid var(--line); }
+  .top{ max-width:1120px; margin:0 auto; padding:12px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .brand{ font-weight:800; font-size:22px; color:var(--green); letter-spacing:-.5px; }
+  .brand span{ color:var(--ink); }
+  .all{ font-weight:600; font-size:14px; }
+  main{ max-width:1120px; margin:0 auto; padding:22px 18px 40px; }
+  h1{ font-size:24px; margin:0 0 4px; }
+  h2{ font-size:18px; margin:30px 0 12px; }
+  .muted{ color:var(--muted); font-size:14px; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:6px 16px; margin-top:16px; max-width:720px; }
+  .doc{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid var(--line); }
+  .doc:last-child{ border-bottom:0; }
+  .doc-name{ font-weight:600; word-break:break-word; }
+  .btn{ flex:none; background:var(--green); color:#fff; border-radius:8px; padding:8px 14px; font-weight:600; font-size:14px; }
+  .btn:hover{ background:var(--green-d); }
+  .return{ max-width:720px; margin-top:12px; padding:12px 14px; background:#eef6f0; border:1px solid #cfe6d6; border-radius:10px; font-size:14px; line-height:1.5; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }
+  .stay{ display:block; background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; color:var(--ink); }
+  .stay:hover{ box-shadow:0 2px 10px rgba(0,0,0,.08); }
+  .ph{ height:150px; background:#e8ebef center/cover no-repeat; }
+  .body{ padding:10px 12px; }
+  .nm{ font-weight:600; }
+  footer{ border-top:1px solid var(--line); background:#fafafa; font-size:13px; color:var(--muted); }
+  .foot{ max-width:1120px; margin:0 auto; padding:16px 18px; }
+</style>
+</head>
+<body>
+<header><div class="top"><a class="brand" href="/">Simon<span>Stays</span></a><a class="all" href="/">See all stays →</a></div></header>
+<main>
+  <div id="folder"><p class="muted">Loading…</p></div>
+  <div id="stays" hidden>
+    <h2>Stays on SimonStays</h2>
+    <div class="grid" id="grid"></div>
+  </div>
+</main>
+<footer><div class="foot"><a href="/privacy">Privacy Policy</a> &middot; <a href="/terms">Terms &amp; Conditions</a></div></footer>
+<script>
+  (function(){
+    var parts=location.pathname.split('/').filter(Boolean), api='/public/documents/'+encodeURIComponent(parts[1]||'')+'/'+encodeURIComponent(parts[2]||'');
+    var folder=document.getElementById('folder');
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+    function size(b){ return b>=1048576?(b/1048576).toFixed(1)+' MB':Math.max(1,Math.round(b/1024))+' KB'; }
+    fetch(api).then(function(r){ if(!r.ok) throw new Error('missing'); return r.json(); }).then(function(d){
+      document.title='Documents for '+d.property+' — SimonStays';
+      folder.innerHTML='<h1>Documents for '+esc(d.property)+'</h1>'+
+        (d.host?'<div class="muted">Shared by '+esc(d.host)+'</div>':'')+
+        (d.documents.length
+          ?'<div class="card">'+d.documents.map(function(f){ return '<div class="doc"><div><div class="doc-name">'+esc(f.name)+'</div><div class="muted">'+size(f.sizeBytes)+'</div></div><a class="btn" href="'+api+'/'+encodeURIComponent(f.id)+'">Download</a></div>'; }).join('')+'</div>'
+          :'<div class="card"><div class="doc"><div class="muted">There’s nothing here yet. Please check back soon, or message your host.</div></div></div>')+
+        (d.returnEmail&&d.documents.length?'<div class="return">If a form needs to be returned, complete it and email it to <a href="mailto:'+esc(d.returnEmail)+'"><b>'+esc(d.returnEmail)+'</b></a>.</div>':'');
+    }).catch(function(){
+      folder.innerHTML='<h1>We couldn’t find that folder</h1><div class="muted">Please check the link in your message, or ask your host for a new one.</div>';
+    });
+    fetch('/public/units').then(function(r){ return r.json(); }).then(function(d){
+      if(!d.units||!d.units.length) return;
+      document.getElementById('grid').innerHTML=d.units.slice(0,8).map(function(u){
+        var img=u.coverPhotoId?' style="background-image:url(/photos/'+encodeURIComponent(u.coverPhotoId)+'?w=960)"':'';
+        return '<a class="stay" href="/?property='+encodeURIComponent(u.propertyId)+'&unit='+encodeURIComponent(u.unitId)+'"><div class="ph"'+img+'></div><div class="body"><div class="nm">'+esc(u.propertyName)+' · Unit '+esc(u.unitName)+'</div>'+(u.address?'<div class="muted">'+esc(u.address)+'</div>':'')+'</div></a>';
+      }).join('');
+      document.getElementById('stays').hidden=false;
+    }).catch(function(){});
+  })();
+</script>
+</body>
+</html>

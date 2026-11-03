@@ -27,6 +27,7 @@ model Host {
   payoutNotes         String?
   createdAt    DateTime      @default(now())
   properties    Property[]
+  documents     Document[]
   guestLookups  GuestLookup[]
   biller        BillerProfile?
   invoices      Invoice[]
@@ -191,6 +192,7 @@ model Property {
   name        String
   address     String?
   description String? // listing description (for the public booking site)
+  documents   Document[]
   // ---- listing attributes (populated on the Listings page) ----
   latitude     Float?  // map pin
   longitude    Float?
@@ -528,6 +530,23 @@ model MessageTemplate {
   @@index([hostId])
 }
 
+// A file a host shares with guests, in a property's folder (see utils/documents.js).
+model Document {
+  id          String   @id @default(uuid())
+  hostId      String
+  host        Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  name        String
+  contentType String
+  sizeBytes   Int
+  data        Bytes
+  createdAt   DateTime @default(now())
+
+  @@index([propertyId])
+  @@index([hostId])
+}
+
 // An automatic message, sent once to every matching booking at a time relative
 // to the stay — e.g. "2 days before check-in at 10:00, Firenza only".
 model MessageSchedule {
@@ -540,6 +559,7 @@ model MessageSchedule {
   body        String? // …or this custom text when no template is picked
   anchor      String           @default("check_in") // 'confirmed' (send straight away) | 'check_in' | 'check_out'
   offsetDays  Int              @default(0) // days relative to the anchor date; negative = before
+  offsetMinutes Int            @default(0) // anchor 'confirmed' only: how long after booking to send
   sendTime    String           @default("10:00") // HH:MM SAST (ignored for 'confirmed')
   propertyIds Json             @default("[]") // properties this applies to; empty = all
   noProperties Boolean         @default(false) // tied to no property, so it never sends to a booking

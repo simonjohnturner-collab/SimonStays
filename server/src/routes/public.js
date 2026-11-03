@@ -14,27 +14,16 @@ const { sendMail } = require('../utils/mailer');
 const { invoiceHtml } = require('../utils/invoiceHtml');
 const { optionalGuest } = require('../middleware/auth');
 const { onBookingConfirmed } = require('../utils/bookingConfirmed');
-const { offerState, staysOf, firstClash, splitOf, saveExtraStays } = require('../utils/offers');
-
-// The host's EFT details for the invoice (same shape as /public/host).
-async function eftFor(hostId) {
-  const h = await prisma.host.findUnique({ where: { id: hostId }, select: { name: true } });
-  const biller = await prisma.billerProfile.findUnique({ where: { hostId }, select: { companyName: true, bankName: true, accountNumber: true, branch: true } });
-  if (!biller || !(biller.bankName || biller.accountNumber)) return null;
-  return {
-    accountName: biller.companyName || (h && h.name) || null,
-    bankName: biller.bankName || null, accountNumber: biller.accountNumber || null, branch: biller.branch || null,
-  };
-}
+const { offerState, staysOf, firstClash } = require('../utils/offers');
 
 // Build + send the guest's invoice email. Non-blocking; swallows its own errors.
 async function emailInvoice(data) {
-  const eft = data.method === 'EFT' ? await eftFor(data.hostId) : null;
-  const html = invoiceHtml({ ...data, eft });
+  const business = await prisma.billerProfile.findUnique({ where: { hostId: data.hostId }, select: { companyName: true, registrationNo: true, addressLines: true, email: true, phone: true, website: true } });
+  const html = invoiceHtml({ ...data, business });
   const ok = await sendMail({
     to: data.to,
-    // Only a simulated card payment is confirmed at this point; EFT and real card
-    // payments are confirmed once the money arrives.
+    // Only a simulated card payment is confirmed at this point; real card payments
+    // are confirmed once the money arrives.
     subject: data.awaitingPayment ? `Your SimonStays booking · ${data.ref} (awaiting payment)` : `Your SimonStays booking is confirmed · ${data.ref}`,
     html,
     text: `Thank you for booking ${data.propertyName} · Unit ${data.unitName}. Check-in ${data.checkIn} (from ${data.checkInTime || '15:00'}) → Check-out ${data.checkOut} (by ${data.checkOutTime || '10:00'}). Booking reference ${data.ref}. Total: R${((data.quote.totalCents || 0) / 100).toFixed(2)}.`,
@@ -47,12 +36,27 @@ const router = express.Router();
 
 const iso = (d) => new Date(d).toISOString().slice(0, 10);
 
-// Which host's properties this public site sells. PUBLIC_HOST_ID pins it;
-// otherwise, if there's exactly one host in the DB, use that.
-async function publicHostId() {
+// Which host a public form (cleaner, damage, repair) belongs to. Unlike the
+// booking site these aren't shared, as they list a host's cleaners and clean
+// rates. Each host's links carry ?host=; links sent before hosts had their own
+// have none, and they all belong to the first host (or PUBLIC_HOST_ID if set).
+async function formHostId(req) {
+  const wanted = String((req.query && req.query.host) || '');
+  if (wanted) {
+    const h = await prisma.host.findUnique({ where: { id: wanted }, select: { id: true } });
+    return h ? h.id : null;
+  }
   if (process.env.PUBLIC_HOST_ID) return process.env.PUBLIC_HOST_ID;
-  const hosts = await prisma.host.findMany({ select: { id: true }, take: 2 });
-  return hosts.length === 1 ? hosts[0].id : null;
+  const first = await prisma.host.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
+  return first ? first.id : null;
+}
+
+// What a guest sees of a property's host.
+async function hostInfo(hostId) {
+  const h = await prisma.host.findUnique({ where: { id: hostId }, select: { name: true } });
+  const photo = await prisma.photo.findFirst({ where: { hostId }, orderBy: { createdAt: 'desc' }, select: { id: true } });
+  const biller = await prisma.billerProfile.findUnique({ where: { hostId }, select: { companyName: true } });
+  return { name: (h && h.name) || (biller && biller.companyName) || null, photoId: photo ? photo.id : null };
 }
 
 // Cheapest nightly rate on a pricing group, for a "from R…" badge.
@@ -64,22 +68,11 @@ function fromNightlyCents(rc) {
 
 const unitInclude = { pricingGroup: true, photos: { orderBy: { sort: 'asc' } } };
 
-// GET /public/host — who hosts this shopfront ("Hosted by …") + profile photo,
-// and the host's EFT bank details (from the invoice biller profile) for guests
-// who choose to pay by EFT at checkout.
+// GET /public/host — whether card payments are switched on. Who hosts a property
+// comes with the property itself.
 router.get('/host', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
-    if (!hostId) return res.json({ host: null });
-    const h = await prisma.host.findUnique({ where: { id: hostId }, select: { name: true } });
-    const photo = await prisma.photo.findFirst({ where: { hostId }, orderBy: { createdAt: 'desc' }, select: { id: true } });
-    const biller = await prisma.billerProfile.findUnique({ where: { hostId }, select: { companyName: true, bankName: true, accountNumber: true, branch: true, paymentInstruction: true } });
-    const eft = biller && (biller.bankName || biller.accountNumber) ? {
-      accountName: biller.companyName || (h && h.name) || null,
-      bankName: biller.bankName || null, accountNumber: biller.accountNumber || null,
-      branch: biller.branch || null, reference: biller.paymentInstruction || null,
-    } : null;
-    res.json({ host: { name: (h && h.name) || null, photoId: photo ? photo.id : null, eft, cardOnline: payments.isOnline() } });
+    res.json({ host: { cardOnline: payments.isOnline() } });
   } catch (e) { next(e); }
 });
 
@@ -110,15 +103,12 @@ router.get('/geocode', async (req, res) => {
 // stayFromCents is the cheapest available total for those dates.
 router.get('/properties', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
-    if (!hostId) return res.json({ properties: [], filtered: false });
     const { checkIn, checkOut, guests } = req.query;
     const filtering = !!(checkIn && checkOut);
     const minGuests = guests ? Number(guests) : 0;
 
     const props = await prisma.property.findMany({
-      where: { hostId },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       include: { photos: { orderBy: { sort: 'asc' } }, units: { include: unitInclude } },
     });
 
@@ -163,15 +153,15 @@ router.get('/properties', async (req, res, next) => {
 // GET /public/properties/:id — detail (photos, description, bookable units)
 router.get('/properties/:id', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
     const p = await prisma.property.findFirst({
-      where: { id: req.params.id, hostId },
+      where: { id: req.params.id },
       include: { photos: { orderBy: { sort: 'asc' } }, units: { include: unitInclude } },
     });
     if (!p) return res.status(404).json({ error: 'not_found' });
     res.json({
       property: {
         id: p.id, name: p.name, address: p.address || null, description: p.description || null,
+        host: await hostInfo(p.hostId),
         latitude: p.latitude ?? null, longitude: p.longitude ?? null,
         cancellationPolicy: p.cancellationPolicy || DEFAULT_CANCELLATION_POLICY,
         photos: p.photos.map((ph) => ({ id: ph.id })),
@@ -199,14 +189,12 @@ router.get('/properties/:id', async (req, res, next) => {
 // unit records are de-duped by property+name (keeping the richest: most photos).
 router.get('/units', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
-    if (!hostId) return res.json({ units: [], filtered: false });
     const { checkIn, checkOut, guests } = req.query;
     const filtering = !!(checkIn && checkOut);
     const minGuests = guests ? Number(guests) : 0;
 
     const props = await prisma.property.findMany({
-      where: { hostId }, orderBy: { sortOrder: 'asc' },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       include: { photos: { orderBy: { sort: 'asc' } }, units: { include: unitInclude } },
     });
 
@@ -249,8 +237,7 @@ router.get('/units', async (req, res, next) => {
 // GET /public/units/:unitId/calendar?from=&to= — confirmed booked ranges (to grey out)
 router.get('/units/:unitId/calendar', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
-    const unit = await prisma.unit.findFirst({ where: { id: req.params.unitId, property: { hostId } }, select: { id: true } });
+    const unit = await prisma.unit.findFirst({ where: { id: req.params.unitId }, select: { id: true } });
     if (!unit) return res.status(404).json({ error: 'not_found' });
     const from = req.query.from ? dateOnly(req.query.from) : new Date();
     const to = req.query.to ? dateOnly(req.query.to) : new Date(Date.now() + 365 * 864e5);
@@ -266,10 +253,9 @@ router.get('/units/:unitId/calendar', async (req, res, next) => {
 // POST /public/quote — { unitId, checkIn, checkOut }
 router.post('/quote', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
     const { unitId, checkIn, checkOut, earlyCheckIn, lateCheckOut } = req.body || {};
     if (!unitId || !checkIn || !checkOut) return res.status(400).json({ error: 'unitId_dates_required' });
-    const unit = await prisma.unit.findFirst({ where: { id: unitId, property: { hostId } }, include: { pricingGroup: true } });
+    const unit = await prisma.unit.findFirst({ where: { id: unitId }, include: { pricingGroup: true } });
     if (!unit) return res.status(404).json({ error: 'not_found' });
     if (!unit.pricingGroup) return res.status(400).json({ error: 'no_pricing', message: 'This unit has no online pricing — please call to book.' });
     const overrides = await require('../utils/nightPrices').overridesFor(unit.id, iso(checkIn), iso(checkOut));
@@ -283,13 +269,13 @@ router.post('/quote', async (req, res, next) => {
 // calendar is only blocked once payment succeeds (POST /public/book/:id/pay).
 router.post('/book', optionalGuest, async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
     const b = req.body || {};
+    if (b.paymentMethod === 'eft') return res.status(400).json({ error: 'card_only', message: 'Please pay by card. We no longer take EFT.' });
     if (!b.unitId || !b.checkIn || !b.checkOut) return res.status(400).json({ error: 'unitId_dates_required' });
     if (!b.guestName || !(b.guestEmail || b.guestPhone)) {
       return res.status(400).json({ error: 'guest_contact_required', message: 'Please give your name and an email or phone number.' });
     }
-    const unit = await prisma.unit.findFirst({ where: { id: b.unitId, property: { hostId } }, include: { pricingGroup: true, property: true } });
+    const unit = await prisma.unit.findFirst({ where: { id: b.unitId }, include: { pricingGroup: true, property: true } });
     if (!unit) return res.status(404).json({ error: 'not_found' });
     if (!unit.pricingGroup) return res.status(400).json({ error: 'no_pricing', message: 'This unit has no online pricing — please call to book.' });
 
@@ -309,17 +295,15 @@ router.post('/book', optionalGuest, async (req, res, next) => {
 
     const contact = [b.guestEmail, b.guestPhone].filter(Boolean).join(' · ');
     const depoTxt = q.depositCents ? ` · Refundable deposit R${(q.depositCents / 100).toFixed(2)}` : '';
-    // Payment choice from the checkout screen (card or EFT — no cash).
-    const method = b.paymentMethod === 'eft' ? 'EFT' : 'Card';
     const split = b.paymentPlan === 'split';
     const SPLIT_FEE_CENTS = 25000; // R250 admin fee for the 50/50 split plan
     const adminFeeCents = split ? SPLIT_FEE_CENTS : 0;
     const payableCents = q.totalCents + adminFeeCents;
     const owingCents = split ? Math.round(payableCents / 2) : null; // 50% due at least 3 days before check-in
-    // Human-friendly booking reference (also the EFT payment reference).
-    const seq = (await prisma.booking.count({ where: { hostId, source: 'website' } })) + 1;
+    // Human-friendly booking reference, numbered across the whole site.
+    const seq = (await prisma.booking.count({ where: { source: 'website' } })) + 1;
     const ref = 'SS' + String(1000 + seq);
-    const payTxt = ` · Pay: ${method}${split ? ` · 50/50 split (50% now, 50% at least 3 days before check-in) · +R${(SPLIT_FEE_CENTS / 100).toFixed(2)} admin fee` : ''}`;
+    const payTxt = ` · Pay: Card${split ? ` · 50/50 split (50% now, 50% at least 3 days before check-in) · +R${(SPLIT_FEE_CENTS / 100).toFixed(2)} admin fee` : ''}`;
     const comments = `Website booking ${ref} (awaiting payment) · Contact: ${contact} · Guests: ${b.guests || '—'} · Rental R${(q.rentalCents / 100).toFixed(2)}${depoTxt} · Payable R${(payableCents / 100).toFixed(2)}${payTxt}${b.message ? ` · Note: ${b.message}` : ''}`;
 
     const billing = (b.billing || b.billingDetails || '').trim() || null;
@@ -345,38 +329,35 @@ router.post('/book', optionalGuest, async (req, res, next) => {
         earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut,
       },
     });
-    // Card: send the guest to Paygate for what's due now (the first half on a
-    // 50/50 split). EFT is paid by hand, so no online checkout.
+    // Send the guest to Paygate for what's due now (the first half on a 50/50 split).
     const dueNowCents = split ? payableCents - owingCents : payableCents;
-    let checkout = { mode: 'eft' };
-    if (method === 'Card') {
-      try { checkout = await payments.createCheckout(booking, dueNowCents, { base: siteBase(req), returnTo: b.appReturn }); }
-      catch (e) {
-        // Paygate refused (e.g. DATA_CHK = the PAYGATE_KEY doesn't match the PAYGATE_ID).
-        // Don't leave a half-made booking behind; let the guest pick EFT instead.
-        console.error('[paygate] checkout failed for', ref, '-', e.message);
-        await prisma.booking.update({ where: { id: booking.id }, data: { status: 'cancelled', comments: `${comments} · Card checkout failed: ${e.message}` } }).catch(() => {});
-        return res.status(502).json({ error: 'payment_unavailable', message: 'Card payments are temporarily unavailable — please choose EFT, or try again a little later.' });
-      }
+    let checkout;
+    try { checkout = await payments.createCheckout(booking, dueNowCents, { base: siteBase(req), returnTo: b.appReturn }); }
+    catch (e) {
+      // Paygate refused (e.g. DATA_CHK = the PAYGATE_KEY doesn't match the PAYGATE_ID).
+      // Don't leave a half-made booking behind.
+      console.error('[paygate] checkout failed for', ref, '-', e.message);
+      await prisma.booking.update({ where: { id: booking.id }, data: { status: 'cancelled', comments: `${comments} · Card checkout failed: ${e.message}` } }).catch(() => {});
+      return res.status(502).json({ error: 'payment_unavailable', message: 'Card payments are temporarily unavailable. Please try again a little later.' });
     }
 
     // Email the guest their invoice (fire-and-forget — never block the booking).
     if (b.guestEmail) {
       emailInvoice({
-        hostId, to: b.guestEmail, ref, awaitingPayment: checkout.mode !== 'simulate',
+        hostId: unit.property.hostId, to: b.guestEmail, ref, awaitingPayment: checkout.mode !== 'simulate',
         propertyName: unit.property.name, unitName: unit.name,
         checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut),
         checkInTime: unit.checkInTime || '15:00', checkOutTime: unit.checkOutTime || '10:00',
         cancellationPolicy: unit.property.cancellationPolicy || DEFAULT_CANCELLATION_POLICY,
         guestName: b.guestName, guestEmail: b.guestEmail, guestPhone: b.guestPhone,
-        billing, quote: q, method, split, owingCents, adminFeeCents,
+        billing, quote: q, split, owingCents, adminFeeCents,
       }).catch((e) => console.error('[invoice email] failed:', e.message));
     }
     res.status(201).json({
       bookingId: booking.id, ref, amountCents: payableCents, quote: q,
       property: unit.property.name, unit: unit.name,
       checkIn: iso(booking.checkIn), checkOut: iso(booking.checkOut),
-      payment: checkout, // { mode:'simulate' } | { mode:'form', action, fields } (Paygate) | { mode:'eft' }
+      payment: checkout, // { mode:'simulate' } | { mode:'form', action, fields } (Paygate)
     });
   } catch (e) { next(e); }
 });
@@ -385,9 +366,8 @@ router.post('/book', optionalGuest, async (req, res, next) => {
 // mode this succeeds immediately; with a live vendor a validated webhook drives it.
 router.post('/book/:id/pay', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
     const booking = await prisma.booking.findFirst({
-      where: { id: req.params.id, unit: { property: { hostId } } },
+      where: { id: req.params.id, unitId: { not: null } },
       include: { unit: { include: { property: true } } },
     });
     if (!booking) return res.status(404).json({ error: 'not_found' });
@@ -451,7 +431,7 @@ router.get('/book/:id/status', async (req, res, next) => {
 // after a cancelled payment ('booking'), or pay the rest of a 50/50 split ('balance').
 router.post('/book/:id/checkout', async (req, res, next) => {
   try {
-    if (!payments.isOnline()) return res.status(400).json({ error: 'offline', message: 'Online payment isn’t switched on yet — please pay by EFT.' });
+    if (!payments.isOnline()) return res.status(400).json({ error: 'offline', message: 'Online payment isn’t available right now. Please try again a little later.' });
     const b = await prisma.booking.findUnique({ where: { id: req.params.id }, include: { unit: { include: { property: true } } } });
     if (!b || b.source !== 'website') return res.status(404).json({ error: 'not_found' });
     const kind = (req.body || {}).kind === 'balance' ? 'balance' : 'booking';
@@ -499,11 +479,10 @@ router.get('/offers/:token', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /public/offers/:token/pay { method:'card'|'eft', acceptedTerms } — pay the
-// invoice's total. Card goes to Paygate; EFT shows the bank details and waits for
-// the host to confirm, like an EFT booking from the normal checkout.
+// POST /public/offers/:token/pay { acceptedTerms } — pay the invoice's total by card, through Paygate.
 router.post('/offers/:token/pay', async (req, res, next) => {
   try {
+    if ((req.body || {}).method === 'eft') return res.status(400).json({ error: 'card_only', message: 'Please pay by card. We no longer take EFT.' });
     const o = await loadOffer(req.params.token);
     if (!o || !o.booking.unit) return res.status(404).json({ error: 'not_found' });
     const b = o.booking, state = offerState(o, b);
@@ -517,20 +496,8 @@ router.post('/offers/:token/pay', async (req, res, next) => {
     if (await firstClash(stays, b.id)) return res.status(409).json({ error: 'dates_unavailable', message: 'Sorry, those dates have since been booked, so no payment was taken. Please message your host.' });
     if (!isChange) await prisma.booking.update({ where: { id: b.id }, data: { termsAcceptedAt: new Date() } });
 
-    if ((req.body || {}).method === 'eft') {
-      // The booking stands as it is; the host marks the change paid when the money arrives.
-      if (isChange) return res.json({ mode: 'eft', ref: b.ref || null, eft: await eftFor(b.unit.property.hostId) });
-      // Now a real hold on the board, waiting for the host to confirm the money.
-      const share = splitOf(o).primaryCents;
-      const held = await prisma.booking.update({
-        where: { id: b.id },
-        data: { status: 'pending', totalCents: share, quotedCents: share, ...(b.status === 'enquiry' ? { comments: `${b.comments || ''} · Pay: EFT` } : {}) },
-      });
-      await saveExtraStays(o, held, 'pending');
-      return res.json({ mode: 'eft', ref: b.ref || null, eft: await eftFor(b.unit.property.hostId) });
-    }
     if (!payments.isOnline()) {
-      if (process.env.RENDER) return res.status(400).json({ error: 'offline', message: 'Card payment isn\'t available right now. Please pay by EFT.' });
+      if (process.env.RENDER) return res.status(400).json({ error: 'offline', message: 'Card payment isn\'t available right now. Please try again a little later, or message your host.' });
       await payments.completeSimulatedOffer(o, b);
       return res.json({ mode: 'simulate' });
     }
@@ -543,7 +510,7 @@ router.post('/offers/:token/pay', async (req, res, next) => {
 // GET /public/forms/units — properties + units (with bed/bath) for the cleaner picker.
 router.get('/forms/units', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
+    const hostId = await formHostId(req);
     if (!hostId) return res.json({ properties: [], cleaners: [] });
     const [properties, providers, host] = await Promise.all([
       prisma.property.findMany({
@@ -562,7 +529,7 @@ router.get('/forms/units', async (req, res, next) => {
 // contractor can mark their repair against. Scoped and read-only.
 router.get('/forms/open-issues', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
+    const hostId = await formHostId(req);
     if (!hostId) return res.json({ issues: [] });
     const where = { hostId, type: 'damage', status: { notIn: ['resolved', 'incomplete'] } };
     if (req.query.unitId) where.unitId = String(req.query.unitId);
@@ -598,7 +565,7 @@ function invoiceRateOk(ip) {
 }
 router.post('/forms/analyze-invoice', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
+    const hostId = await formHostId(req);
     if (!hostId) return res.status(404).json({ ok: false, reason: 'not_available' });
     const ip = (req.headers['x-forwarded-for'] || req.ip || 'unknown').toString().split(',')[0].trim();
     if (!invoiceRateOk(ip)) return res.status(429).json({ ok: false, reason: 'rate_limited' });
@@ -615,7 +582,7 @@ router.post('/forms/analyze-invoice', async (req, res, next) => {
 // page can repeat per-room questions.
 router.get('/forms/clean-for-unit/:unitId', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
+    const hostId = await formHostId(req);
     if (!hostId) return res.status(404).json({ error: 'not_available' });
     const unit = await prisma.unit.findFirst({
       where: { id: req.params.unitId, property: { hostId } },
@@ -635,7 +602,7 @@ router.get('/forms/clean-for-unit/:unitId', async (req, res, next) => {
 // GET /public/forms/:type — the active form definition + properties/units picker.
 router.get('/forms/:type', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
+    const hostId = await formHostId(req);
     if (!hostId) return res.status(404).json({ error: 'not_available' });
     const type = req.params.type;
     const { defaultTemplate, TYPES } = require('../utils/formDefaults');
@@ -659,7 +626,7 @@ router.get('/forms/:type', async (req, res, next) => {
 // one at a time afterwards, so no single request is huge.
 router.post('/forms', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
+    const hostId = await formHostId(req);
     if (!hostId) return res.status(404).json({ error: 'not_available' });
     const b = req.body || {};
     const { TYPES } = require('../utils/formDefaults');
@@ -712,7 +679,7 @@ router.post('/forms', async (req, res, next) => {
 // missing, so a cleaner whose uploads failed can't accidentally submit blank.
 router.post('/forms/:id/finalize', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
+    const hostId = await formHostId(req);
     if (!hostId) return res.status(404).json({ error: 'not_available' });
     const sub = await prisma.formSubmission.findFirst({
       where: { id: req.params.id, hostId },
@@ -748,7 +715,7 @@ router.post('/forms/:id/finalize', async (req, res, next) => {
 // POST /public/forms/:id/photos — attach one photo (base64) to a submission.
 router.post('/forms/:id/photos', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
+    const hostId = await formHostId(req);
     if (!hostId) return res.status(404).json({ error: 'not_available' });
     const sub = await prisma.formSubmission.findFirst({ where: { id: req.params.id, hostId }, select: { id: true } });
     if (!sub) return res.status(404).json({ error: 'not_found' });
@@ -772,7 +739,7 @@ router.post('/forms/:id/photos', async (req, res, next) => {
 // cleaner is offered to update the saved form instead of creating a new one.
 router.get('/forms/clean-exists', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
+    const hostId = await formHostId(req);
     if (!hostId) return res.json({ exists: false });
     const unitId = String(req.query.unitId || '');
     const checkoutDay = String(req.query.checkoutDay || '');
@@ -800,7 +767,7 @@ router.get('/forms/clean-exists', async (req, res, next) => {
 // sees the update.
 router.put('/forms/:id', async (req, res, next) => {
   try {
-    const hostId = await publicHostId();
+    const hostId = await formHostId(req);
     if (!hostId) return res.status(404).json({ error: 'not_available' });
     const sub = await prisma.formSubmission.findFirst({ where: { id: req.params.id, hostId, type: 'clean' }, select: { id: true, answers: true } });
     if (!sub) return res.status(404).json({ error: 'not_found' });

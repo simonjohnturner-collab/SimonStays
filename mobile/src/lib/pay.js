@@ -10,7 +10,6 @@ export const appReturnUrl = () => Linking.createURL('payment');
 // — 'unknown' when the guest closed the payment page themselves; the booking
 // screen then asks the server (which asks Paygate) how it went.
 export async function runCheckout(bookingId, payment) {
-  if (!payment || payment.mode === 'eft') return 'eft';
   if (payment.mode === 'simulate') {
     await api.simulatePay(bookingId); // test mode: no real card payment
     return 'paid';

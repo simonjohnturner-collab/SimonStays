@@ -588,7 +588,7 @@ function SavedMessages({ templates, shortcuts, onChanged }) {
   return (
     <div className="msg-with-shortcuts">
       <div>
-      <p className="muted small">Pre-typed messages you can drop into a conversation or send on a schedule. Shortcuts like <code>[First Name]</code> are filled in for each booking when it’s sent. {msg && <b>{msg}</b>}</p>
+      <p className="muted small">Pre-typed messages you can drop into a conversation. Shortcuts like <code>[First Name]</code> are filled in for each booking when it’s sent. {msg && <b>{msg}</b>}</p>
 
       <section className="sp-card">
         <input className="sp-name" placeholder="Name, e.g. Check-in instructions" value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} />
@@ -618,7 +618,7 @@ function SavedMessages({ templates, shortcuts, onChanged }) {
 
 // ---------------- Scheduled messages ----------------
 
-const BLANK = { id: null, name: '', templateId: '', body: '', anchor: 'check_in', offsetDays: -1, sendTime: '10:00', propertyIds: [], noProperties: false, active: true };
+const BLANK = { id: null, name: '', templateId: '', body: '', anchor: 'confirmed', offsetDays: 0, offsetMinutes: 0, sendTime: '10:00', propertyIds: [], noProperties: false, active: true };
 
 // Common messages a host can start from. Picking one only opens a draft: nothing
 // sends until the host presses Create.
@@ -635,13 +635,27 @@ const SUGGESTED = [
     body: 'Thank you for staying at [Property], [First Name]. We’d love to host you again.\n\n[Host Name]' },
 ];
 
+// The choices for when to send: minutes after a booking, or days around a stay.
+const BOOKED_DELAYS = [0, 5, 15, 30, 60, 120, 240, 480, 1440];
+const STAY_DAYS = [-7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7];
+
+function delayLabel(m) {
+  if (!m) return 'Immediately after';
+  if (m < 60) return `${m} minutes after`;
+  const h = m / 60;
+  return `${h} hour${h === 1 ? '' : 's'} after`;
+}
+function dayLabel(d, what) {
+  if (!d) return `Day of ${what}`;
+  const n = Math.abs(d);
+  return `${n} day${n === 1 ? '' : 's'} ${d < 0 ? 'before' : 'after'}`;
+}
+
 function describe(s, properties) {
+  const what = s.anchor === 'check_out' ? 'check-out' : 'check-in';
   let when;
-  if (s.anchor === 'confirmed') when = 'As soon as a booking is confirmed';
-  else {
-    const n = Math.abs(s.offsetDays), what = s.anchor === 'check_out' ? 'check-out' : 'check-in';
-    when = (s.offsetDays === 0 ? `On ${what} day` : `${n} day${n === 1 ? '' : 's'} ${s.offsetDays < 0 ? 'before' : 'after'} ${what}`) + ` at ${s.sendTime}`;
-  }
+  if (s.anchor === 'confirmed') when = `${delayLabel(s.offsetMinutes)} booking`;
+  else when = (s.offsetDays ? `${dayLabel(s.offsetDays, what)} ${what}` : dayLabel(0, what)) + ` at ${s.sendTime}`;
   if (s.noProperties) return `${when} · no properties, so it won’t send`;
   const props = s.propertyIds.length ? properties.filter((p) => s.propertyIds.includes(p.id)).map((p) => p.name).join(', ') : 'all properties';
   return `${when} · ${props}`;
@@ -679,7 +693,7 @@ function Scheduled({ templates, shortcuts, properties }) {
   // Only the saved row is replaced, so unsaved edits to the others survive.
   async function save(r) {
     const data = { name: r.name, templateId: r.templateId || null, body: r.templateId ? null : r.body, anchor: r.anchor,
-      offsetDays: r.offsetDays, sendTime: r.sendTime, propertyIds: r.propertyIds, noProperties: !!r.noProperties, active: r.active };
+      offsetDays: r.offsetDays, offsetMinutes: r.offsetMinutes, sendTime: r.sendTime, propertyIds: r.propertyIds, noProperties: !!r.noProperties, active: r.active };
     try {
       const { schedule } = r.id ? await api.updateMessageSchedule(r.id, data) : await api.createMessageSchedule(data);
       setRows((rs) => rs.map((x) => (keyOf(x) === keyOf(r) ? scheduleRow(schedule) : x)));
@@ -707,9 +721,13 @@ function Scheduled({ templates, shortcuts, properties }) {
   const r = rows.find((x) => keyOf(x) === activeKey);
   const key = r && keyOf(r);
   const template = r && r.templateId ? templates.find((t) => t.id === r.templateId) : null;
-  const dir = !r ? 'on' : r.offsetDays < 0 ? 'before' : r.offsetDays > 0 ? 'after' : 'on';
-  const n = r ? Math.abs(r.offsetDays) : 0;
-  const setOffset = (d, num) => edit(key, { offsetDays: d === 'on' ? 0 : (d === 'before' ? -1 : 1) * Math.max(1, num || 1) });
+  const booked = r && r.anchor === 'confirmed';
+  const whenValue = r ? (booked ? r.offsetMinutes || 0 : r.offsetDays) : 0;
+  // One already saved outside these choices stays on the list until it's changed.
+  const whenChoices = r ? [...new Set([...(booked ? BOOKED_DELAYS : STAY_DAYS), whenValue])].sort((x, y) => x - y) : [];
+  const setEvent = (anchor) => edit(key, anchor === 'confirmed'
+    ? { anchor, offsetDays: 0, offsetMinutes: 0 }
+    : { anchor, offsetMinutes: 0, offsetDays: booked ? -1 : r.offsetDays });
   const taken = new Set(rows.map((x) => x.name.trim().toLowerCase()));
   const ideas = SUGGESTED.filter((s) => !taken.has(s.name.toLowerCase()) && !hiddenIdeas.includes(s.name));
 
@@ -755,26 +773,22 @@ function Scheduled({ templates, shortcuts, properties }) {
             </div>
 
             <div className="msg-sched-row">
-              <span className="msg-lbl">Send</span>
-              <select value={r.anchor === 'confirmed' ? 'confirmed' : 'relative'} onChange={(e) => edit(key, e.target.value === 'confirmed' ? { anchor: 'confirmed' } : { anchor: 'check_in' })}>
-                <option value="confirmed">when a booking is confirmed</option>
-                <option value="relative">at a set time around the stay</option>
-              </select>
-              {r.anchor !== 'confirmed' && (
-                <>
-                  {dir !== 'on' && <input type="number" min="1" max="365" className="msg-num" value={n} onChange={(e) => setOffset(dir, Number(e.target.value))} />}
-                  <select value={dir} onChange={(e) => setOffset(e.target.value, n)}>
-                    <option value="before">day(s) before</option>
-                    <option value="on">on the day of</option>
-                    <option value="after">day(s) after</option>
-                  </select>
-                  <select value={r.anchor} onChange={(e) => edit(key, { anchor: e.target.value })}>
-                    <option value="check_in">check-in</option>
-                    <option value="check_out">check-out</option>
-                  </select>
-                  <span>at</span>
-                  <input type="time" value={r.sendTime} onChange={(e) => edit(key, { sendTime: e.target.value })} />
-                </>
+              <label className="msg-field">Event
+                <select aria-label="Event" value={r.anchor} onChange={(e) => setEvent(e.target.value)}>
+                  <option value="confirmed">Booking confirmed</option>
+                  <option value="check_in">Check-in</option>
+                  <option value="check_out">Check-out</option>
+                </select>
+              </label>
+              <label className="msg-field">When to send
+                <select aria-label="When to send" value={whenValue} onChange={(e) => edit(key, booked ? { offsetMinutes: Number(e.target.value) } : { offsetDays: Number(e.target.value) })}>
+                  {whenChoices.map((v) => <option key={v} value={v}>{booked ? delayLabel(v) : dayLabel(v, r.anchor === 'check_out' ? 'check-out' : 'check-in')}</option>)}
+                </select>
+              </label>
+              {!booked && (
+                <label className="msg-field">Time
+                  <input type="time" aria-label="Time" value={r.sendTime} onChange={(e) => edit(key, { sendTime: e.target.value })} />
+                </label>
               )}
             </div>
 
@@ -789,15 +803,12 @@ function Scheduled({ templates, shortcuts, properties }) {
               })}
             </div>
 
-            <div className="msg-sched-row">
-              <span className="msg-lbl">Message</span>
-              <select value={r.templateId} onChange={(e) => edit(key, { templateId: e.target.value })}>
-                <option value="">✍ Type a custom message</option>
-                {templates.map((t) => <option key={t.id} value={t.id}>📝 {t.name}</option>)}
-              </select>
-            </div>
+            <div className="msg-sched-row"><span className="msg-lbl">Message</span></div>
             {r.templateId
-              ? <p className="msg-preview small">{(template || {}).body}</p>
+              ? <>
+                  <p className="msg-preview small">{(template || {}).body}</p>
+                  <button type="button" className="msg-link small" onClick={() => edit(key, { templateId: '', body: (template || {}).body || '' })}>Edit this message</button>
+                </>
               : <textarea ref={bodyEl} className="msg-tpl-body" rows={9} placeholder="Hi [First Name], …" value={r.body} onChange={(e) => edit(key, { body: e.target.value })} />}
             <ShortcutWarning text={template ? template.body : r.body} shortcuts={shortcuts} />
 
@@ -813,7 +824,7 @@ function Scheduled({ templates, shortcuts, properties }) {
 
         <ShortcutPanel shortcuts={shortcuts}
           onPick={r && !r.templateId ? (token) => insertInto(bodyEl.current, r.body, token, (body) => edit(key, { body })) : null}
-          note={!r ? 'Open a message to add these to it. Each one fills in for the booking when sent.' : r.templateId ? 'This uses a saved message, so change its shortcuts under Saved messages.' : null} />
+          note={!r ? 'Open a message to add these to it. Each one fills in for the booking when sent.' : r.templateId ? 'Press Edit this message to add shortcuts to it.' : null} />
       </div>
     </>
   );

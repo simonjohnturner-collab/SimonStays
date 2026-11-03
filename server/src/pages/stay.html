@@ -139,7 +139,6 @@
   .pay-opt{ display:flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:10px; padding:10px 12px; cursor:pointer; font-size:14px; }
   .pay-opt:hover{ border-color:#cdd3da; }
   .pay-opt input{ width:auto; }
-  .eft-box{ background:#eef6f0; border:1px solid #cfe6d6; border-radius:10px; padding:12px 14px; font-size:14px; line-height:1.6; margin:6px 0; }
   .ref-badge{ display:inline-block; background:#eef6f0; border:1px dashed #a9d4b8; border-radius:10px; padding:8px 16px; margin:6px 0; font-size:14px; color:var(--green-d); }
   .ref-badge b{ font-size:20px; letter-spacing:.5px; }
   .frm textarea{ font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; width:100%; min-height:60px; background:#fff; }
@@ -223,6 +222,7 @@
   .trip-msg{ margin-top:10px; background:#eef1f4; color:var(--ink); }
   .trip-pay{ margin-top:10px; }
   @media(max-width:640px){ .gallery{ grid-template-columns:1fr 1fr; } .gallery .g0{ grid-column:span 2; } .trip{ flex-direction:column; } .trip-thumb{ width:100%; height:170px; } }
+  .bub a{ color:inherit; text-decoration:underline; word-break:break-all; }
 </style>
 </head>
 <body>
@@ -280,7 +280,7 @@
 (function(){
   var API=''; // same origin (served by the API)
   var UNITS=[], VIEW='list', MAP=null, LAYER=null, HOST=null, GEO=null;
-  fetch('/public/host').then(function(r){return r.json();}).then(function(d){ HOST=d.host||null; }).catch(function(){});
+  fetch('/public/host').then(function(r){return r.json();}).then(function(d){ HOST=Object.assign({},d.host,HOST); }).catch(function(){});
   var $=function(s){ return document.querySelector(s); };
   var el=function(t,c,h){ var e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e; };
   var rand=function(c){ return 'R'+(c/100).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2}); };
@@ -411,6 +411,7 @@
     host.firstChild.onclick=function(e){ if(e.target===host.firstChild) host.innerHTML=''; };
     try{
       var r=await fetch(API+'/public/properties/'+card.propertyId); var d=await r.json(); var p=d.property;
+      HOST=Object.assign({},HOST,p.host); // whose name and bank details to show: this property's host
       var unit=(p.units||[]).find(function(x){return x.id===card.unitId;}) || (p.units||[])[0];
       STATE={ prop:p, unit:unit, month:startMonth(), booked:[], ciSel:null, coSel:null, quote:null };
       renderDetail();
@@ -712,18 +713,12 @@
         (q.depositCents?('<div class="note" style="margin:8px 0">🔒 The '+rand(q.depositCents)+' breakage deposit is refunded after checkout, subject to no damage.</div>'):'')+
         '<h3 class="sec">Your details</h3>'+
         '<div class="frm"><input id="gName" placeholder="Full name" /><div class="two"><input id="gEmail" type="email" placeholder="Email — we’ll send your invoice here" /><input id="gPhone" placeholder="Phone" /></div><input id="gGuests" type="number" min="1" placeholder="Number of guests" /><textarea id="gBiz" placeholder="Business / billing details for your invoice (optional) — company name, VAT no., address"></textarea><input id="gMsg" placeholder="Anything we should know? (optional)" /><input id="gRecommend" placeholder="Who recommended us? (optional) — so we can thank them" /></div>'+
-        '<h3 class="sec">How would you like to pay?</h3>'+
-        '<div class="pay-opts">'+
-          '<label class="pay-opt"><input type="radio" name="pm" value="card" checked> 💳 Card (online)</label>'+
-          '<label class="pay-opt"><input type="radio" name="pm" value="eft"> 🏦 EFT bank transfer or deposit</label>'+
-        '</div>'+
-        '<h3 class="sec">When would you like to pay?</h3>'+
+        '<h3 class="sec">💳 When would you like to pay by card?</h3>'+
         '<div class="pay-opts">'+
           '<label class="pay-opt"><input type="radio" name="pp" value="full" checked> Pay the full amount now — '+rand(q.totalCents)+'</label>'+
           (canSplit?('<label class="pay-opt"><input type="radio" name="pp" value="split"> Pay 50% now, 50% at least 3 days before check-in <span class="muted">(+'+rand(SPLIT_FEE)+' admin fee)</span></label>'):'')+
         '</div>'+
         '<div id="payNote" class="note small" style="margin-top:6px"></div>'+
-        '<div id="eftBox" class="eft-box" hidden></div>'+
         '<h3 class="sec">Terms &amp; conditions</h3>'+
         (p.cancellationPolicy?('<div class="desc policy small"><b>Cancellation policy:</b> '+esc(p.cancellationPolicy)+'</div>'):'')+
         '<label class="tnc"><input type="checkbox" id="agree"> <span>I confirm that <b>SimonStays accepts no responsibility whatsoever</b> for anything that happens at the property. I have read, reviewed and understood the <b>cancellation policy</b> above, and I accept that <b>no refunds</b> will be granted outside of that policy.</span></label>'+
@@ -735,11 +730,6 @@
     host.innerHTML=''; host.appendChild(overlay);
     overlay.querySelector('.co-back').onclick=function(){ renderDetail(); };
     overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
-    var eftBox=overlay.querySelector('#eftBox');
-    function updEft(){ var m=overlay.querySelector('input[name=pm]:checked').value;
-      if(m==='eft'){ eftBox.hidden=false; eftBox.innerHTML=(HOST&&HOST.eft)?('<b>EFT / bank transfer or deposit</b><br>'+[HOST.eft.accountName&&('Account name: '+esc(HOST.eft.accountName)),HOST.eft.bankName&&('Bank: '+esc(HOST.eft.bankName)),HOST.eft.accountNumber&&('Account no.: '+esc(HOST.eft.accountNumber)),HOST.eft.branch&&('Branch: '+esc(HOST.eft.branch))].filter(Boolean).join('<br>')+'<br><span class="muted small">Use your <b>booking reference</b> (shown once you confirm) as the payment reference, and send proof of payment — your booking is confirmed once it’s received.</span>'):'<span class="muted small">We’ll send you the EFT details after you book.</span>'; }
-      else { eftBox.hidden=true; } }
-    overlay.querySelectorAll('input[name=pm]').forEach(function(r){ r.onchange=updEft; }); updEft();
     // Payment-plan note: show amounts, adding the R250 admin fee when split.
     function updPayNote(){ var plan=(overlay.querySelector('input[name=pp]:checked')||{}).value;
       var el2=overlay.querySelector('#payNote');
@@ -767,41 +757,33 @@
     if(!name){ cm.innerHTML='<div class="msg err">Please enter your name.</div>'; return; }
     if(!email && !phone){ cm.innerHTML='<div class="msg err">Please give an email or phone number.</div>'; return; }
     if(!overlay.querySelector('#agree').checked || !overlay.querySelector('#agreeTnc').checked){ cm.innerHTML='<div class="msg err">Please tick both boxes to accept the cancellation policy and the Terms &amp; Conditions.</div>'; return; }
-    var method=overlay.querySelector('input[name=pm]:checked').value;
     var plan=overlay.querySelector('input[name=pp]:checked').value;
     var btn=overlay.querySelector('#confirmBtn'); btn.disabled=true; btn.textContent='Booking…'; cm.innerHTML='';
     var biz=(overlay.querySelector('#gBiz').value||'').trim();
     var recommend=(overlay.querySelector('#gRecommend').value||'').trim();
     STATE.guest={ name:name, email:email, phone:phone, guests:overlay.querySelector('#gGuests').value||'', message:overlay.querySelector('#gMsg').value||'', billing:biz, recommendedBy:recommend };
-    STATE.method=method; STATE.plan=plan;
+    STATE.plan=plan;
     try{
-      var body={ unitId:STATE.unit.id, checkIn:STATE.ciSel, checkOut:STATE.coSel, guestName:name, guestEmail:email, guestPhone:phone, guests:STATE.guest.guests||undefined, message:STATE.guest.message||undefined, billing:biz||undefined, recommendedBy:recommend||undefined, earlyCheckIn:!!STATE.early, lateCheckOut:!!STATE.late, paymentMethod:method, paymentPlan:plan, acceptedTerms:true };
+      var body={ unitId:STATE.unit.id, checkIn:STATE.ciSel, checkOut:STATE.coSel, guestName:name, guestEmail:email, guestPhone:phone, guests:STATE.guest.guests||undefined, message:STATE.guest.message||undefined, billing:biz||undefined, recommendedBy:recommend||undefined, earlyCheckIn:!!STATE.early, lateCheckOut:!!STATE.late, paymentMethod:'card', paymentPlan:plan, acceptedTerms:true };
       var r=await fetch(API+'/public/book',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify(body)});
       var d=await r.json();
       if(!r.ok){ cm.innerHTML='<div class="msg err">'+esc(d.message||'Could not create the booking.')+'</div>'; btn.disabled=false; btn.textContent='Confirm booking'; return; }
       STATE.ref=d.ref||null;
-      if(method==='card' && d.payment && d.payment.mode==='form'){ btn.textContent='Taking you to secure payment…'; goToGateway(d.payment); return; }
-      if(method==='card' && d.payment && d.payment.mode==='redirect'){ window.location=d.payment.url; return; }
-      if(method==='card'){
-        btn.textContent='Confirming…';
-        var pr=await fetch(API+'/public/book/'+d.bookingId+'/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-        var pd=await pr.json();
-        if(!pr.ok){ cm.innerHTML='<div class="msg err">'+esc(pd.message||'Could not confirm.')+'</div>'; btn.disabled=false; btn.textContent='Confirm booking'; return; }
-        showDone({ property:d.property, unit:d.unit, booking:{ id:d.bookingId, checkIn:STATE.ciSel, checkOut:STATE.coSel } });
-      } else {
-        showDone({ property:STATE.prop.name, unit:STATE.unit.name, booking:{ id:d.bookingId, checkIn:STATE.ciSel, checkOut:STATE.coSel } });
-      }
+      if(d.payment && d.payment.mode==='form'){ btn.textContent='Taking you to secure payment…'; goToGateway(d.payment); return; }
+      if(d.payment && d.payment.mode==='redirect'){ window.location=d.payment.url; return; }
+      btn.textContent='Confirming…';
+      var pr=await fetch(API+'/public/book/'+d.bookingId+'/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      var pd=await pr.json();
+      if(!pr.ok){ cm.innerHTML='<div class="msg err">'+esc(pd.message||'Could not confirm.')+'</div>'; btn.disabled=false; btn.textContent='Confirm booking'; return; }
+      showDone({ property:d.property, unit:d.unit, booking:{ id:d.bookingId, checkIn:STATE.ciSel, checkOut:STATE.coSel } });
     }catch(e){ cm.innerHTML='<div class="msg err">Something went wrong. Please try again.</div>'; btn.disabled=false; btn.textContent='Confirm booking'; }
   }
 
   function showDone(pd){
-    var host=$('#detail'), method=STATE.method, plan=STATE.plan, ref=STATE.ref||('SS'+String(pd.booking.id).slice(0,6).toUpperCase()), g=STATE.guest||{};
+    var host=$('#detail'), plan=STATE.plan, ref=STATE.ref||('SS'+String(pd.booking.id).slice(0,6).toUpperCase()), g=STATE.guest||{};
     STATE.done=pd;
-    var mNote;
-    if(method==='eft'){ mNote='Please pay by <b>EFT / bank transfer or deposit</b> using your booking reference <b>'+esc(ref)+'</b> as the payment reference, then send us proof of payment. Your booking is confirmed once it’s received.'; }
-    else { mNote='This is a <b>test confirmation</b> — online card payment is being finalised, so no charge was taken.'; }
+    var mNote='This is a <b>test confirmation</b> — online card payment is being finalised, so no charge was taken.';
     if(plan==='split') mNote+=' You chose to pay 50% now and 50% at least 3 days before check-in (a '+rand(25000)+' admin fee applies).';
-    var eftHtml = (method==='eft' && HOST && HOST.eft) ? ('<div class="eft-box" style="text-align:left">'+[HOST.eft.accountName&&('Account name: '+esc(HOST.eft.accountName)),HOST.eft.bankName&&('Bank: '+esc(HOST.eft.bankName)),HOST.eft.accountNumber&&('Account no.: '+esc(HOST.eft.accountNumber)),HOST.eft.branch&&('Branch: '+esc(HOST.eft.branch)),('<b>Reference: '+esc(ref)+'</b>')].filter(Boolean).join('<br>')+'</div>') : '';
     // Nudge anonymous guests to make an account so this trip is tracked for them.
     var acctCta = (!GUEST && g.email) ? '<div class="trip-info" style="text-align:left;margin-top:10px">📱 <b>Track this trip.</b> Create an account with <b>'+esc(g.email)+'</b> to see this and future bookings any time. <a id="ctaSignup" style="cursor:pointer;font-weight:700">Create an account →</a></div>' : '';
     var overlay=el('div','overlay');
@@ -812,7 +794,7 @@
       '<p class="note">'+esc(pd.property)+' · Unit '+esc(pd.unit)+'<br>'+esc(pd.booking.checkIn)+' → '+esc(pd.booking.checkOut)+'</p>'+
       (g.email?('<p class="note">📧 An invoice has been emailed to <b>'+esc(g.email)+'</b>.</p>'):'')+
       '<div class="todo" style="text-align:left">'+mNote+'</div>'+
-      eftHtml+
+      
       acctCta+
       '<div class="frm" style="text-align:left;margin-top:10px"><label class="muted small">Need to change the billing details on your invoice? Edit &amp; re-download below.</label><textarea id="billTo" placeholder="e.g. Company name, VAT no., postal address">'+esc(g.billing||'')+'</textarea></div>'+
       '<div style="display:flex;gap:8px;margin-top:12px"><button id="invBtn" class="ghost" style="flex:1;background:#eef1f4;color:var(--ink)">🧾 Download invoice</button><button id="doneBtn" class="cta-btn" style="flex:1;margin:0">Done</button></div>'+
@@ -826,7 +808,7 @@
   // A printable invoice in a new window: breakdown + guest details + reference.
   function openInvoice(pd, ref, billTo){
     var q=STATE.quote, g=STATE.guest||{}, p=STATE.prop, u=STATE.unit;
-    var hostName=(HOST&&HOST.name)||'SimonStays', eft=(HOST&&HOST.eft)||null;
+    var hostName=(HOST&&HOST.name)||'SimonStays';
     var rows='';
     rows+='<tr><td>'+q.nights+' night'+(q.nights>1?'s':'')+' @ '+rand(q.avgNightlyCents)+'</td><td>'+rand(q.accommodationCents)+'</td></tr>';
     if(q.discountCents) rows+='<tr><td>'+q.discountPercent+'% length discount</td><td>−'+rand(q.discountCents)+'</td></tr>';
@@ -839,11 +821,11 @@
     if(splitFee) rows+='<tr><td>50/50 split admin fee</td><td>'+rand(splitFee)+'</td></tr>';
     rows+='<tr class="tot"><td>Total</td><td>'+rand(payable)+'</td></tr>';
     if(splitFee){ var sh=Math.round(payable/2); rows+='<tr><td>50% due now</td><td>'+rand(sh)+'</td></tr><tr><td>50% due at least 3 days before check-in</td><td>'+rand(payable-sh)+'</td></tr>'; }
-    var payLine = STATE.method==='eft' && eft ? ('Pay by EFT to '+esc(eft.bankName||'')+' · Acct '+esc(eft.accountNumber||'')+(eft.branch?(' · Branch '+esc(eft.branch)):'')+' · <b>Reference '+esc(ref)+'</b>') : 'Paid by card (online).';
+    var payLine = 'Paid by card (online).';
     var html='<!doctype html><html><head><meta charset="utf-8"><title>Invoice '+esc(ref)+'</title>'+
       '<style>body{font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#1f2430;max-width:640px;margin:24px auto;padding:0 18px}h1{color:#1a7a3a;margin:0}.muted{color:#6b7280}table{width:100%;border-collapse:collapse;margin:14px 0}td{padding:6px 0;border-bottom:1px solid #eee}td:last-child{text-align:right;white-space:nowrap}tr.sub td{border-top:1px solid #ccc;font-weight:600}tr.tot td{font-weight:800;font-size:17px;border-bottom:0}.box{background:#f6f7f9;border-radius:10px;padding:12px 14px;margin:10px 0}.row{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}@media print{.noprint{display:none}}</style></head><body>'+
       '<div class="row"><div><h1>Simon<span style="color:#1f2430">Stays</span></h1><div class="muted">Booking invoice</div></div><div style="text-align:right"><div><b>'+esc(ref)+'</b></div><div class="muted">'+new Date().toLocaleDateString('en-ZA')+'</div></div></div>'+
-      '<div class="box"><b>From:</b> '+esc(hostName)+(eft&&eft.accountName?(' ('+esc(eft.accountName)+')'):'')+'<br><b>To:</b> '+esc(g.name||'')+(g.email?(' · '+esc(g.email)):'')+(g.phone?(' · '+esc(g.phone)):'')+(billTo?('<br>'+esc(billTo).replace(/\n/g,'<br>')):'')+'</div>'+
+      '<div class="box"><b>From:</b> '+esc(hostName)+'<br><b>To:</b> '+esc(g.name||'')+(g.email?(' · '+esc(g.email)):'')+(g.phone?(' · '+esc(g.phone)):'')+(billTo?('<br>'+esc(billTo).replace(/\n/g,'<br>')):'')+'</div>'+
       '<div class="box"><b>'+esc(p.name)+' · Unit '+esc(u.name)+'</b><br>Check-in '+esc(STATE.ciSel)+' → Check-out '+esc(STATE.coSel)+' · '+(g.guests?(esc(g.guests)+' guest(s)'):'')+'</div>'+
       '<table>'+rows+'</table>'+
       '<div class="box">'+payLine+'</div>'+
@@ -1105,6 +1087,8 @@
   var MSG_AUTH_NOTE='Sign in to read and reply to messages from your host. No account yet? Create one with the email you booked with and your trips and messages will appear.';
   var INBOX_POLL=null;
   // An invoice inside a message: its lines, total and a link to the payment page.
+  // Web links in an already-escaped message become clickable.
+  function linkify(s){ return s.replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)]/g,function(u){ return '<a href="'+u+'" target="_blank" rel="noopener">'+u+'</a>'; }); }
   function invoiceCard(o){
     var state={ paid:'✅ Paid', replaced:'Replaced by a newer invoice', expired:'This invoice has expired. Message your host for a new one.', closed:'This invoice is closed.' };
     var safeLink=/^https?:\/\//i.test(o.link||'');
@@ -1150,7 +1134,7 @@
       if(!t){ list(); return; }
       body.innerHTML=(threads.length>1?'<button class="th-back">← All messages</button>':'')+
         '<div class="th-head"><div><div class="trip-nm">'+esc(t.guestName||'')+(t.status==='enquiry'?' <span class="badge pending">Enquiry</span>':t.status==='cancelled'?' <span class="badge cancelled">Cancelled</span>':'')+'</div><div class="trip-sub">'+place(t)+'</div><div class="trip-sub">📅 '+(t.dayUse?esc(fmtShort(t.checkIn))+' · day use':esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut))+' · '+t.nights+' night'+(t.nights===1?'':'s'))+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div></div>'+(t.amountCents!=null?'<div class="th-amt">'+rand(t.amountCents)+'</div>':'')+'</div>'+
-        '<div class="bubbles">'+(t.messages.length?t.messages.map(function(m){ return '<div class="bub '+(m.sender==='guest'?'guest':'host')+'">'+esc(m.body)+(m.offer?invoiceCard(m.offer):'')+'<span class="when">'+(m.sender==='guest'?'You · ':'Host · ')+esc(fmtWhen(m.createdAt))+'</span></div>'; }).join(''):'<p class="note" style="text-align:center">No messages yet. Write to your host below.</p>')+'</div>'+
+        '<div class="bubbles">'+(t.messages.length?t.messages.map(function(m){ return '<div class="bub '+(m.sender==='guest'?'guest':'host')+'">'+linkify(esc(m.body))+(m.offer?invoiceCard(m.offer):'')+'<span class="when">'+(m.sender==='guest'?'You · ':'Host · ')+esc(fmtWhen(m.createdAt))+'</span></div>'; }).join(''):'<p class="note" style="text-align:center">No messages yet. Write to your host below.</p>')+'</div>'+
         (t.refundDueCents>0?'<div class="note" style="margin-top:10px">'+(t.refundedAt?'✅ Your refund of '+rand(t.refundDueCents)+' has been paid.':'Refund due to you: <b>'+rand(t.refundDueCents)+'</b>. Your host will pay it back and let you know.')+'</div>':'')+
         (t.canRequest?'<div class="th-actions"><button class="th-act" data-act="dates">Change dates</button><button class="th-act" data-act="late">Late checkout</button><button class="th-act" data-act="clean">Extra clean</button><button class="th-act danger" data-act="cancel">Cancel booking</button></div><div id="actBox"></div>':'')+
         '<div class="reply"><textarea id="replyTxt" rows="2" placeholder="Write a message…"></textarea><button id="replyBtn">Send</button></div><div id="rmsg"></div>';
@@ -1275,6 +1259,8 @@
   loadSession(); renderAcct(); refreshAccount();
   refreshUnread(); setInterval(refreshUnread, 60000);
   if(/[?&]messages\b/.test(location.search)) openInbox();
+  // A stay linked from another page, such as a documents folder.
+  (function(){ var q=new URLSearchParams(location.search), p=q.get('property'); if(p) openUnit({ propertyId:p, unitId:q.get('unit') }); })();
   (function(){ var t=new URLSearchParams(location.search).get('reset');
     // Take the token out of the address bar and browser history straight away.
     if(t){ history.replaceState(null,'',location.pathname); openReset(t); } })();
