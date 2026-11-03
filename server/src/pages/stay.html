@@ -229,6 +229,7 @@
   .th-x{ background:none; color:var(--muted); padding:0 2px; font-size:12px; text-decoration:underline; }
   .th-x:hover{ background:none; color:var(--red); }
   #inviteLink{ margin:6px 0; font-size:13px; }
+  .confirm-note{ margin:10px 16px 0; }
 </style>
 </head>
 <body>
@@ -1016,6 +1017,22 @@
     };
   }
 
+  // An account that hasn't proved its email sees no trips booked with it. Says why, and how to fix it.
+  function showConfirmNote(body,verified){
+    if(verified!==false) return;
+    var box=el('div','trip-info confirm-note');
+    box.innerHTML='📧 <b>Please confirm your email to see your trips and messages.</b> We sent a link to '+esc((GUEST&&GUEST.email)||'your email')+'. <button class="th-x" id="confirmAgain">Send it again</button><span id="confirmMsg"></span>';
+    body.parentNode.insertBefore(box,body);
+    box.querySelector('#confirmAgain').onclick=async function(){
+      var note=box.querySelector('#confirmMsg');
+      try{
+        var r=await fetch(API+'/public/account/verify-email/resend',{method:'POST',headers:authHeaders()});
+        var d=await r.json().catch(function(){ return {}; });
+        note.textContent=' '+(r.ok?'Sent. Please check your inbox.':(d.message||'Could not send it. Please try again.'));
+      }catch(e){ note.textContent=' Could not send it. Please try again.'; }
+    };
+  }
+
   async function openTrips(){
     if(!GTOKEN){ openAuth('login'); return; }
     var host=$('#detail');
@@ -1033,6 +1050,7 @@
     }catch(e){ overlay.querySelector('.sheet-body').innerHTML='<div class="msg err">Could not load your trips. Please try again.</div>'; return; }
     var up=data.upcoming||[], prev=data.previous||[];
     var body=overlay.querySelector('.sheet-body');
+    showConfirmNote(body,data.emailVerified);
     var tab='upcoming';
     function draw(){
       var list=tab==='upcoming'?up:prev;
@@ -1130,13 +1148,14 @@
     host.innerHTML=''; host.appendChild(overlay);
     overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
     var body=overlay.querySelector('.sheet-body');
-    var threads=[];
+    var threads=[], emailVerified;
     async function load(){
       var r=await fetch(API+'/public/account/messages',{headers:authHeaders()});
       if(r.status===401){ clearSession(); AFTER_AUTH=function(){ openInbox(focusId); }; openAuth('login', null, MSG_AUTH_NOTE); return false; }
-      var d=await r.json(); threads=d.threads||[]; return true;
+      var d=await r.json(); threads=d.threads||[]; emailVerified=d.emailVerified; return true;
     }
     try{ if(!(await load())) return; }catch(e){ body.innerHTML='<div class="msg err">Could not load your messages. Please try again.</div>'; return; }
+    showConfirmNote(body,emailVerified);
 
     function place(t){ return esc(t.propertyName||'Stay')+(t.unitName?(' · Unit '+esc(t.unitName)):''); }
     function list(){
@@ -1315,6 +1334,20 @@
   loadSession(); renderAcct(); refreshAccount();
   refreshUnread(); setInterval(refreshUnread, 60000);
   if(/[?&]messages\b/.test(location.search)) openInbox();
+  // The link from a confirmation email.
+  (function(){
+    var token=new URLSearchParams(location.search).get('verify'); if(!token) return;
+    history.replaceState(null,'','/');
+    fetch(API+'/public/account/verify-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token})}).then(async function(r){
+      var d=await r.json().catch(function(){ return {}; });
+      if(!r.ok) throw new Error(d.message||'Could not confirm your email.');
+      if(GTOKEN){ await refreshAccount(); openTrips(); }
+      else { AFTER_AUTH=openTrips; openAuth('login', d.email, 'Your email is confirmed. Sign in to see your trips.'); }
+    }).catch(function(e){
+      $('#detail').innerHTML='<div class="overlay"><div class="sheet" style="max-width:440px"><div class="sheet-head"><h2>Confirm your email</h2></div><div class="sheet-body"><div class="msg err">'+esc(e.message)+'</div></div></div></div>';
+      $('#detail').firstChild.onclick=function(ev){ if(ev.target===this) $('#detail').innerHTML=''; };
+    });
+  })();
   // A friend arriving from a trip invite: sign in, join, then straight to the trip.
   (function(){
     var token=new URLSearchParams(location.search).get('invite'); if(!token) return;

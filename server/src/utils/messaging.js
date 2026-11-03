@@ -101,7 +101,8 @@ const bodyHtml = (s) => escHtml(s).replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)]/g, (
 // goes to the guest who booked. Answers whether the guest who booked got theirs.
 async function emailGuest(booking, body, offer = null, bookerOnly = false) {
   if (!offer && !bookerOnly) {
-    const friends = await prisma.tripGuest.findMany({ where: { bookingId: booking.id }, select: { account: { select: { email: true } } } });
+    // Only to a proved address: a mistyped one shouldn't get the door code.
+    const friends = await prisma.tripGuest.findMany({ where: { bookingId: booking.id, account: { emailVerifiedAt: { not: null } } }, select: { account: { select: { email: true } } } });
     await Promise.all(friends.map((f) => emailOne(f.account.email, booking, body))).catch(() => {});
   }
   return emailOne(booking.guestEmail || (booking.guestAccount && booking.guestAccount.email), booking, body, offer);

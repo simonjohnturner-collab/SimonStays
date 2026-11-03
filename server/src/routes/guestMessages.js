@@ -13,6 +13,7 @@ const { offerOut, conversationCents, INVOICEABLE_SOURCES } = require('../utils/o
 const changes = require('../utils/changes');
 const { nextRef } = require('../utils/bookingRef');
 const { createInvite, acceptInvite } = require('../utils/tripInvites');
+const { ownTrips, onTrip, isBooker } = require('../utils/guestAccess');
 
 // What this conversation costs: its invoices, else the booking.
 function amountOf(b) {
@@ -31,10 +32,6 @@ async function accountOf(req, res) {
   if (!acct) res.status(404).json({ error: 'not_found' });
   return acct;
 }
-const mine = (acct) => ({ OR: [{ guestAccountId: acct.id }, { guestEmail: { equals: acct.email, mode: 'insensitive' } }] });
-// Trips this guest can see: their own, and any shared with them.
-const onTrip = (acct) => ({ OR: [...mine(acct).OR, { tripGuests: { some: { guestAccountId: acct.id } } }] });
-const isBooker = (b, acct) => b.guestAccountId === acct.id || (b.guestEmail || '').toLowerCase() === acct.email.toLowerCase();
 
 // A friend on the trip reads the conversation but nothing about money: what the
 // booker paid is theirs, so invoices, refunds and proof of payment stay with them.
@@ -86,7 +83,7 @@ router.get('/', async (req, res, next) => {
     });
     const lastAt = (t) => (t.messages.length ? new Date(t.messages[t.messages.length - 1].createdAt).getTime() : 0);
     threads.sort((a, b) => lastAt(b) - lastAt(a) || (a.checkIn < b.checkIn ? -1 : 1));
-    res.json({ threads, unread: threads.reduce((n, t) => n + t.unread, 0) });
+    res.json({ threads, unread: threads.reduce((n, t) => n + t.unread, 0), emailVerified: !!acct.emailVerifiedAt });
   } catch (e) { next(e); }
 });
 
@@ -94,7 +91,7 @@ router.get('/', async (req, res, next) => {
 router.get('/unread', async (req, res, next) => {
   try {
     const acct = await accountOf(req, res); if (!acct) return;
-    const count = await prisma.message.count({ where: { sender: 'host', readAt: null, OR: [{ booking: mine(acct) }, { bookerOnly: false, offerId: null, booking: onTrip(acct) }] } });
+    const count = await prisma.message.count({ where: { sender: 'host', readAt: null, OR: [{ booking: ownTrips(acct) }, { bookerOnly: false, offerId: null, booking: onTrip(acct) }] } });
     res.json({ count });
   } catch (e) { next(e); }
 });
@@ -115,6 +112,8 @@ router.post('/invites/accept', async (req, res, next) => {
 router.post('/enquiry', async (req, res, next) => {
   try {
     const acct = await accountOf(req, res); if (!acct) return;
+    // They couldn't read the reply, and the reply goes to an address nobody has proved.
+    if (!acct.emailVerifiedAt) return res.status(403).json({ error: 'email_unverified', message: 'Please confirm your email first, using the link we sent you. You can send it again from My trips.' });
     const { unitId, checkIn, checkOut, guests } = req.body || {};
     const text = String((req.body || {}).body || '').trim().slice(0, 4000);
     if (!unitId || !YMD.test(checkIn || '') || !YMD.test(checkOut || '')) return res.status(400).json({ error: 'unitId_dates_required', message: 'Please choose your dates first.' });
@@ -156,7 +155,7 @@ router.post('/enquiry', async (req, res, next) => {
 });
 
 async function ownedBooking(req, res, acct, { bookerOnly = false } = {}) {
-  const b = await prisma.booking.findFirst({ where: { id: req.params.bookingId, ...(bookerOnly ? mine(acct) : onTrip(acct)) }, include: { unit: { include: { property: true } } } });
+  const b = await prisma.booking.findFirst({ where: { id: req.params.bookingId, ...(bookerOnly ? ownTrips(acct) : onTrip(acct)) }, include: { unit: { include: { property: true } } } });
   if (!b) res.status(404).json({ error: 'not_found' });
   return b;
 }

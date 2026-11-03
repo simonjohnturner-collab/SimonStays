@@ -12,6 +12,7 @@
 //
 // Env (optional): ASK_SIMON_MODEL (default claude-opus-5-5).
 const prisma = require('../lib/prisma');
+const { onTrip } = require('./guestAccess');
 const messaging = require('./messaging');
 const { DEFAULT_CANCELLATION_POLICY } = require('./policy');
 
@@ -150,13 +151,13 @@ async function callSimon(factsText, question, history = []) {
 // later answer can land in their messages.
 async function guestBookingAt(guestAccountId, propertyId) {
   if (!guestAccountId) return null;
-  const acct = await prisma.guestAccount.findUnique({ where: { id: guestAccountId }, select: { id: true, email: true } });
+  const acct = await prisma.guestAccount.findUnique({ where: { id: guestAccountId }, select: { id: true, email: true, emailVerifiedAt: true } });
   if (!acct) return null;
   const today = new Date(); today.setUTCHours(0, 0, 0, 0);
   return prisma.booking.findFirst({
     where: {
       unit: { propertyId }, status: { in: ['confirmed', 'pending'] }, checkOut: { gte: today },
-      OR: [{ guestAccountId: acct.id }, { guestEmail: { equals: acct.email, mode: 'insensitive' } }, { tripGuests: { some: { guestAccountId: acct.id } } }],
+      ...onTrip(acct),
     },
     orderBy: { checkIn: 'asc' }, select: { id: true },
   });

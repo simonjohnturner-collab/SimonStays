@@ -3,6 +3,7 @@
 // and only its hash is stored, because a trip shows its door code.
 const crypto = require('crypto');
 const prisma = require('../lib/prisma');
+const { isBooker } = require('./guestAccess');
 
 const INVITE_DAYS = 14;
 const hashOf = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
@@ -23,9 +24,8 @@ async function acceptInvite(token, acct) {
   const gone = { error: 'invite_invalid', status: 410, message: 'This invite has expired or has already been used. Please ask for a new one.' };
   if (!invite || invite.usedAt || invite.expiresAt < new Date() || invite.booking.status === 'cancelled') return gone;
   const b = invite.booking;
-  const isBooker = b.guestAccountId === acct.id || (b.guestEmail || '').toLowerCase() === acct.email.toLowerCase();
   // The booker opening their own link leaves it for the friend it was meant for.
-  if (isBooker) return { bookingId: b.id };
+  if (isBooker(b, acct)) return { bookingId: b.id };
   const claimed = await prisma.tripInvite.updateMany({ where: { id: invite.id, usedAt: null }, data: { usedAt: new Date(), usedByAccountId: acct.id } });
   if (!claimed.count) return gone;
   const already = await prisma.tripGuest.findUnique({ where: { bookingId_guestAccountId: { bookingId: b.id, guestAccountId: acct.id } } });
