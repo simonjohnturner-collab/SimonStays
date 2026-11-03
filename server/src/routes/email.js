@@ -3,14 +3,20 @@ const prisma = require('../lib/prisma');
 const { authHost } = require('../middleware/auth');
 const { parseAirbnbEmail } = require('../utils/guestEmail');
 const { applyGuestNames } = require('../utils/sync');
-const { pollOnce, enabled } = require('../utils/mailPoller');
+const { pollOnce, enabled, config } = require('../utils/mailPoller');
 
 const router = express.Router();
 
 // POST /email/poll — pull the Zoho Airbnb folder now (manual trigger).
 router.post('/poll', authHost, async (req, res) => {
   if (!enabled()) return res.status(400).json({ error: 'imap_not_configured' });
-  try { res.json(await pollOnce()); }
+  try {
+    // The mailbox belongs to one host, and a poll's result lists its guests'
+    // names, so nobody else may run it. Their board's sync button lands here too.
+    const host = await prisma.host.findUnique({ where: { id: req.hostId }, select: { email: true } });
+    if (!host || host.email.toLowerCase() !== config().hostEmail.toLowerCase()) return res.json({ skipped: 'not_your_mailbox' });
+    res.json(await pollOnce());
+  }
   catch (e) { res.status(500).json({ error: 'poll_failed', message: e.message }); }
 });
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
+import { useAuth } from '../auth.jsx';
 import { fmtR, randToCents } from '../money.js';
 import TeachSimon from './TeachSimon.jsx';
 
@@ -617,7 +618,7 @@ function SavedMessages({ templates, shortcuts, onChanged }) {
 
 // ---------------- Scheduled messages ----------------
 
-const BLANK = { id: null, name: '', templateId: '', body: '', anchor: 'check_in', offsetDays: -1, sendTime: '10:00', propertyIds: [], active: true };
+const BLANK = { id: null, name: '', templateId: '', body: '', anchor: 'check_in', offsetDays: -1, sendTime: '10:00', propertyIds: [], noProperties: false, active: true };
 
 // Common messages a host can start from. Picking one only opens a draft: nothing
 // sends until the host presses Create.
@@ -641,23 +642,25 @@ function describe(s, properties) {
     const n = Math.abs(s.offsetDays), what = s.anchor === 'check_out' ? 'check-out' : 'check-in';
     when = (s.offsetDays === 0 ? `On ${what} day` : `${n} day${n === 1 ? '' : 's'} ${s.offsetDays < 0 ? 'before' : 'after'} ${what}`) + ` at ${s.sendTime}`;
   }
+  if (s.noProperties) return `${when} · no properties, so it won’t send`;
   const props = s.propertyIds.length ? properties.filter((p) => s.propertyIds.includes(p.id)).map((p) => p.name).join(', ') : 'all properties';
   return `${when} · ${props}`;
 }
 
 const scheduleRow = (s) => ({ ...s, templateId: s.templateId || '', body: s.body || '' });
 
-// The ideas this host has dismissed, remembered in this browser.
-const HIDDEN_IDEAS_KEY = 'staysync_hidden_ideas';
-function readHiddenIdeas() {
-  try { return JSON.parse(localStorage.getItem(HIDDEN_IDEAS_KEY)) || []; } catch { return []; }
+// The ideas this host has dismissed, remembered per host in this browser.
+const hiddenIdeasKey = (hostId) => `staysync_hidden_ideas_${hostId}`;
+function readHiddenIdeas(hostId) {
+  try { return JSON.parse(localStorage.getItem(hiddenIdeasKey(hostId))) || []; } catch { return []; }
 }
 
 function Scheduled({ templates, shortcuts, properties }) {
   const [rows, setRows] = useState(null);
   const [activeKey, setActiveKey] = useState(null);
   const [msg, setMsg] = useState('');
-  const [hiddenIdeas, setHiddenIdeas] = useState(readHiddenIdeas);
+  const { host } = useAuth();
+  const [hiddenIdeas, setHiddenIdeas] = useState(() => readHiddenIdeas(host.id));
   const bodyEl = useRef(null);
   const nextDraft = useRef(0);
   const flash = (t) => { setMsg(t); setTimeout(() => setMsg(''), 1800); };
@@ -676,7 +679,7 @@ function Scheduled({ templates, shortcuts, properties }) {
   // Only the saved row is replaced, so unsaved edits to the others survive.
   async function save(r) {
     const data = { name: r.name, templateId: r.templateId || null, body: r.templateId ? null : r.body, anchor: r.anchor,
-      offsetDays: r.offsetDays, sendTime: r.sendTime, propertyIds: r.propertyIds, active: r.active };
+      offsetDays: r.offsetDays, sendTime: r.sendTime, propertyIds: r.propertyIds, noProperties: !!r.noProperties, active: r.active };
     try {
       const { schedule } = r.id ? await api.updateMessageSchedule(r.id, data) : await api.createMessageSchedule(data);
       setRows((rs) => rs.map((x) => (keyOf(x) === keyOf(r) ? scheduleRow(schedule) : x)));
@@ -686,7 +689,7 @@ function Scheduled({ templates, shortcuts, properties }) {
   }
   function saveHiddenIdeas(names) {
     setHiddenIdeas(names);
-    try { localStorage.setItem(HIDDEN_IDEAS_KEY, JSON.stringify(names)); } catch { /* still hidden for this visit */ }
+    try { localStorage.setItem(hiddenIdeasKey(host.id), JSON.stringify(names)); } catch { /* still hidden for this visit */ }
   }
   async function remove(r, key) {
     if (r.id) {
@@ -777,11 +780,12 @@ function Scheduled({ templates, shortcuts, properties }) {
 
             <div className="sp-units">
               <span className="sp-units-label">Properties:</span>
-              <button type="button" className={`sp-unit${r.propertyIds.length === 0 ? ' on' : ''}`} onClick={() => edit(key, { propertyIds: [] })}>All</button>
+              <button type="button" className={`sp-unit${r.noProperties ? ' on' : ''}`} onClick={() => edit(key, { propertyIds: [], noProperties: true })}>None</button>
+              <button type="button" className={`sp-unit${!r.noProperties && r.propertyIds.length === 0 ? ' on' : ''}`} onClick={() => edit(key, { propertyIds: [], noProperties: false })}>All</button>
               {properties.map((p) => {
                 const on = r.propertyIds.includes(p.id);
                 return <button key={p.id} type="button" className={`sp-unit${on ? ' on' : ''}`}
-                  onClick={() => edit(key, { propertyIds: on ? r.propertyIds.filter((x) => x !== p.id) : [...r.propertyIds, p.id] })}>{p.name}</button>;
+                  onClick={() => edit(key, { noProperties: false, propertyIds: on ? r.propertyIds.filter((x) => x !== p.id) : [...r.propertyIds, p.id] })}>{p.name}</button>;
               })}
             </div>
 
@@ -801,7 +805,7 @@ function Scheduled({ templates, shortcuts, properties }) {
               <span className="muted small">{describe(r, properties)}{r.id ? ` · sent ${r.sentCount}×` : ' · nothing sends until you press Create'}</span>
               <span>
                 <button className="secondary" onClick={() => remove(r, key)}>{r.id ? 'Delete' : 'Discard'}</button>{' '}
-                <button disabled={!r.dirty} onClick={() => save(r)}>{r.id ? 'Save' : 'Create'}</button>
+                <button disabled={!r.dirty} onClick={() => save(r)}>{!r.id ? 'Create' : r.dirty ? 'Save' : 'Saved ✓'}</button>
               </span>
             </div>
           </section>

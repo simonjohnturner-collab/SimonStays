@@ -305,6 +305,10 @@ async function scheduleData(hostId, b, partial) {
     const mine = ids.length ? await prisma.property.findMany({ where: { hostId, id: { in: ids } }, select: { id: true } }) : [];
     data.propertyIds = mine.map((p) => p.id);
   }
+  if ('noProperties' in b) {
+    data.noProperties = !!b.noProperties;
+    if (data.noProperties) data.propertyIds = [];
+  }
   if (!partial || 'templateId' in b) {
     if (b.templateId) {
       const t = await prisma.messageTemplate.findFirst({ where: { id: b.templateId, hostId }, select: { id: true } });

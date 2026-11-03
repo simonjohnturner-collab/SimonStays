@@ -542,6 +542,7 @@ model MessageSchedule {
   offsetDays  Int              @default(0) // days relative to the anchor date; negative = before
   sendTime    String           @default("10:00") // HH:MM SAST (ignored for 'confirmed')
   propertyIds Json             @default("[]") // properties this applies to; empty = all
+  noProperties Boolean         @default(false) // tied to no property, so it never sends to a booking
   active      Boolean          @default(true)
   messages    Message[]
   createdAt   DateTime         @default(now())

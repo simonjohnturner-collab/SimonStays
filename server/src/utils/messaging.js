@@ -174,6 +174,7 @@ function dueAt(s, b) {
 }
 
 function appliesTo(s, b) {
+  if (s.noProperties) return false;
   const ids = Array.isArray(s.propertyIds) ? s.propertyIds : [];
   return !ids.length || (b.unit && ids.includes(b.unit.propertyId));
 }
