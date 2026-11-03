@@ -255,7 +255,7 @@ router.get('/messages/:bookingId', async (req, res) => {
       id: b.id, ref: b.ref || null, host: names[hostOfBooking(b)] || '—', guestName: b.guestName || null,
       property: b.unit?.property?.name || null, unit: b.unit?.name || null, checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
     },
-    messages: b.messages.map((m) => ({ id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt, automatic: !!m.scheduleId })),
+    messages: b.messages.map((m) => ({ id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt, unsent: !!m.unsentAt, automatic: !!m.scheduleId })),
   });
 });
 

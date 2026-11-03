@@ -37,7 +37,7 @@ async function accountOf(req, res) {
 // booker paid is theirs, so invoices, refunds and proof of payment stay with them.
 const seenByFriends = (m) => !m.bookerOnly && !m.offerId;
 const msgOut = (m, b, acct) => ({
-  id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt,
+  id: m.id, sender: m.sender, body: m.unsentAt ? '' : m.body, unsent: !!m.unsentAt, createdAt: m.createdAt, readAt: m.readAt,
   authorName: m.authorName || null, mine: m.sender === 'guest' && (m.authorId ? m.authorId === acct.id : isBooker(b, acct)),
   offer: m.offer ? offerOut(m.offer, b) : null,
 });
@@ -78,7 +78,7 @@ router.get('/', async (req, res, next) => {
       canRequest: booker && b.status === 'confirmed' && INVOICEABLE_SOURCES.includes(b.source),
       refundDueCents: booker ? b.refundDueCents : null, refundedAt: booker ? b.refundedAt : null,
       messages: seen.map((m) => msgOut(m, b, acct)),
-      unread: seen.filter((m) => m.sender === 'host' && !m.readAt).length,
+      unread: seen.filter((m) => m.sender === 'host' && !m.readAt && !m.unsentAt).length,
       };
     });
     const lastAt = (t) => (t.messages.length ? new Date(t.messages[t.messages.length - 1].createdAt).getTime() : 0);
@@ -91,7 +91,7 @@ router.get('/', async (req, res, next) => {
 router.get('/unread', async (req, res, next) => {
   try {
     const acct = await accountOf(req, res); if (!acct) return;
-    const count = await prisma.message.count({ where: { sender: 'host', readAt: null, OR: [{ booking: ownTrips(acct) }, { bookerOnly: false, offerId: null, booking: onTrip(acct) }] } });
+    const count = await prisma.message.count({ where: { sender: 'host', readAt: null, unsentAt: null, OR: [{ booking: ownTrips(acct) }, { bookerOnly: false, offerId: null, booking: onTrip(acct) }] } });
     res.json({ count });
   } catch (e) { next(e); }
 });

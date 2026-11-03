@@ -15,7 +15,7 @@ const ROWS = [
   { key: 'nAdd', label: 'Nightly rate (per night)', type: 'money' },
   { key: 'weekendNight', label: 'Weekend rate (Fri/Sat) — optional', type: 'money' },
   { key: 'cleaning', label: 'Unit clean', type: 'money' },
-  { key: 'instayClean', label: 'Instay clean', type: 'money' },
+  { key: 'instayClean', label: 'Instay clean (blank or 0 charges the unit clean)', type: 'money' },
   { section: 'Discounts, deposit & fees' },
   { key: 'weekly', label: 'Weekly discount % (7 nights)', type: 'pctcalc', calc: cWeekly },
   { key: 'monthly', label: 'Monthly discount % (~30.25 nights)', type: 'pctcalc', calc: cMonthly },

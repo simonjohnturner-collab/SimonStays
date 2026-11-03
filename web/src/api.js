@@ -178,6 +178,7 @@ export const api = {
   messageThreads: () => req('GET', '/messages/threads'),
   messageRecipients: (q = '') => req('GET', `/messages/recipients${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   bookingMessages: (bookingId) => req('GET', `/messages/booking/${bookingId}`),
+  unsendMessage: (bookingId, messageId) => req('POST', `/messages/booking/${bookingId}/messages/${messageId}/unsend`),
   sendMessage: (bookingId, body, scheduleId) => req('POST', `/messages/booking/${bookingId}`, { body, scheduleId: scheduleId || undefined }),
   createTripInvite: (bookingId) => req('POST', `/messages/booking/${bookingId}/invite`),
   removeTraveller: (bookingId, accountId) => req('DELETE', `/messages/booking/${bookingId}/travellers/${accountId}`),

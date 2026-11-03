@@ -100,7 +100,7 @@ router.get('/threads', async (req, res, next) => {
     });
     const threads = bookings.map((b) => ({
       booking: bookingSummary(b),
-      last: b.messages[0] ? { body: b.messages[0].body, sender: b.messages[0].sender, createdAt: b.messages[0].createdAt } : null,
+      last: b.messages[0] ? { body: b.messages[0].unsentAt ? 'Message unsent' : b.messages[0].body, sender: b.messages[0].sender, createdAt: b.messages[0].createdAt } : null,
       unread: b._count.messages,
     })).sort((a, b) => new Date(b.last.createdAt) - new Date(a.last.createdAt));
     res.json({ threads });
@@ -162,7 +162,7 @@ router.get('/booking/:bookingId', async (req, res, next) => {
       travellers: await tripGuestsOf(b.id),
       messages: messages.map((m) => ({
         id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt, authorName: m.authorName || null, scheduleId: m.scheduleId || null,
-        emailedAt: m.emailedAt, scheduleName: m.schedule ? m.schedule.name : (m.scheduleId ? 'Scheduled message' : null),
+        emailedAt: m.emailedAt, unsentAt: m.unsentAt, scheduleName: m.schedule ? m.schedule.name : (m.scheduleId ? 'Scheduled message' : null),
         offer: m.offer ? offers.offerOut(m.offer, b) : null,
         attachments: m.attachments,
       })),
@@ -264,6 +264,19 @@ router.post('/booking/:bookingId/close', async (req, res, next) => {
     const b = await loadOwnedBooking(req, res); if (!b) return;
     if (b.status !== 'enquiry') return res.status(400).json({ error: 'not_enquiry', message: 'Only an enquiry can be closed here.' });
     await prisma.booking.update({ where: { id: b.id }, data: { status: 'cancelled' } });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// POST /messages/booking/:bookingId/messages/:messageId/unsend — take back a message
+// the host sent. The row stays, so a scheduled message doesn't send itself again.
+router.post('/booking/:bookingId/messages/:messageId/unsend', async (req, res, next) => {
+  try {
+    const b = await loadOwnedBooking(req, res); if (!b) return;
+    const m = await prisma.message.findFirst({ where: { id: req.params.messageId, bookingId: b.id, sender: 'host' }, select: { id: true, offerId: true, unsentAt: true } });
+    if (!m) return res.status(404).json({ error: 'not_found' });
+    if (m.offerId) return res.status(400).json({ error: 'has_invoice', message: 'This message carries an invoice, so it can’t be unsent.' });
+    if (!m.unsentAt) await prisma.message.update({ where: { id: m.id }, data: { unsentAt: new Date() } });
     res.json({ ok: true });
   } catch (e) { next(e); }
 });

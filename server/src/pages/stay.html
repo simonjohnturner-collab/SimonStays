@@ -199,6 +199,9 @@
   .bub.host{ align-self:flex-start; background:#fff; border:1px solid var(--line); border-bottom-left-radius:4px; }
   .bub.guest{ align-self:flex-end; background:#dff0e6; border-bottom-right-radius:4px; }
   .bub .when{ display:block; font-size:11px; color:var(--muted); margin-top:3px; }
+  .bub .unsent{ color:var(--muted); font-style:italic; }
+  .bub .ticks{ margin-left:4px; font-weight:700; letter-spacing:-2px; }
+  .bub .ticks.read{ color:#1f8fe5; }
   .reply{ display:flex; gap:8px; margin-top:10px; align-items:flex-end; }
   .reply textarea{ flex:1; font:inherit; font-size:16px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; min-height:46px; max-height:160px; resize:vertical; }
   .reply button{ flex-shrink:0; padding:12px 16px; }
@@ -1164,7 +1167,7 @@
         var last=t.messages[t.messages.length-1];
         return '<button class="th-item" data-id="'+esc(t.bookingId)+'"><div class="th-top"><span>'+place(t)+'</span>'+(t.unread?'<span class="badge pending">'+t.unread+' new</span>':'')+'</div>'+
           '<div class="trip-sub">📅 '+(t.dayUse?esc(fmtShort(t.checkIn))+' · day use':esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut)))+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div>'+
-          '<div class="th-snip">'+(last?((last.sender==='guest'&&last.mine?'You: ':'')+esc(last.body)):'No messages yet — tap to message your host')+'</div></button>';
+          '<div class="th-snip">'+(last?(last.unsent?'Message removed':(last.sender==='guest'&&last.mine?'You: ':'')+esc(last.body)):'No messages yet — tap to message your host')+'</div></button>';
       }).join('');
       body.querySelectorAll('.th-item').forEach(function(b){ b.onclick=function(){ thread(b.getAttribute('data-id')); }; });
       clearInterval(INBOX_POLL);
@@ -1175,7 +1178,7 @@
       body.innerHTML=(threads.length>1?'<button class="th-back">← All messages</button>':'')+
         '<div class="th-head"><div><div class="trip-nm">'+esc(t.guestName||'')+(t.status==='enquiry'?' <span class="badge pending">Enquiry</span>':t.status==='cancelled'?' <span class="badge cancelled">Cancelled</span>':'')+'</div><div class="trip-sub">'+place(t)+'</div><div class="trip-sub">📅 '+(t.dayUse?esc(fmtShort(t.checkIn))+' · day use':esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut))+' · '+t.nights+' night'+(t.nights===1?'':'s'))+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div></div>'+(t.amountCents!=null?'<div class="th-amt">'+rand(t.amountCents)+'</div>':'')+'</div>'+
         '<div class="th-people" id="thPeople"></div>'+
-        '<div class="bubbles">'+(t.messages.length?t.messages.map(function(m){ return '<div class="bub '+(m.sender==='guest'?'guest':'host')+'">'+linkify(esc(m.body))+(m.offer?invoiceCard(m.offer):'')+'<span class="when">'+(m.sender==='guest'?(m.mine?'You':esc(m.authorName||t.guestName||'Guest'))+' · ':'Host · ')+esc(fmtWhen(m.createdAt))+'</span></div>'; }).join(''):'<p class="note" style="text-align:center">No messages yet. Write to your host below.</p>')+'</div>'+
+        '<div class="bubbles">'+(t.messages.length?t.messages.map(function(m){ return '<div class="bub '+(m.sender==='guest'?'guest':'host')+'">'+(m.unsent?'<span class="unsent">This message was removed by your host.</span>':linkify(esc(m.body)))+(m.offer?invoiceCard(m.offer):'')+'<span class="when">'+(m.sender==='guest'?(m.mine?'You':esc(m.authorName||t.guestName||'Guest'))+' · ':'Host · ')+esc(fmtWhen(m.createdAt))+(m.mine?'<span class="ticks'+(m.readAt?' read':'')+'" title="'+(m.readAt?'Read by your host':'Delivered to your host')+'">✓✓</span>':'')+'</span></div>'; }).join(''):'<p class="note" style="text-align:center">No messages yet. Write to your host below.</p>')+'</div>'+
         (t.refundDueCents>0?'<div class="note" style="margin-top:10px">'+(t.refundedAt?'✅ Your refund of '+rand(t.refundDueCents)+' has been paid.':'Refund due to you: <b>'+rand(t.refundDueCents)+'</b>. Your host will pay it back and let you know.')+'</div>':'')+
         (t.canRequest?'<div class="th-actions"><button class="th-act" data-act="dates">Change dates</button><button class="th-act" data-act="late">Late checkout</button><button class="th-act" data-act="clean">Extra clean</button><button class="th-act danger" data-act="cancel">Cancel booking</button></div><div id="actBox"></div>':'')+
         (t.status==='pending'?'<div class="note" style="margin-top:10px">Paying by EFT? <a href="/proof/'+encodeURIComponent(t.bookingId)+'" target="_blank" rel="noopener"><b>📎 Send your proof of payment</b></a></div>':'')+
@@ -1288,11 +1291,12 @@
       clearInterval(INBOX_POLL);
       INBOX_POLL=setInterval(async function(){
         if(!overlay.isConnected || !body.querySelector('.bubbles')){ clearInterval(INBOX_POLL); return; }
-        var before=t.messages.length;
+        var seenAs=function(x){ return x.messages.map(function(m){ return m.id+(m.unsent?'u':'')+(m.readAt?'r':''); }).join(); };
+        var before=seenAs(t);
         try{ if(!(await load())) return; }catch(e){ return; }
         var now=threads.find(function(x){ return x.bookingId===id; });
-        // Redraw only when something arrived, and never over a half-typed reply.
-        if(now && now.messages.length!==before && !(body.querySelector('#replyTxt').value||'').trim()) thread(id);
+        // Redraw only when something changed, and never over a half-typed reply.
+        if(now && seenAs(now)!==before && !(body.querySelector('#replyTxt').value||'').trim()) thread(id);
       }, 15000);
     }
     if(focusId && threads.some(function(x){ return x.bookingId===focusId; })) thread(focusId);

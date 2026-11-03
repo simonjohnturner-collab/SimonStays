@@ -223,7 +223,7 @@ function ChangeComposer({ bookingId, booking, change, onSent, onCancel }) {
 
   return (
     <div className="msg-composer">
-      <div className="msg-composer-head"><b>Change this booking</b><span className="muted small">{fmtDay(booking.checkIn)} → {fmtDay(booking.checkOut)}</span></div>
+      <div className="msg-composer-head"><b>Amend booking</b><span className="muted small">{fmtDay(booking.checkIn)} → {fmtDay(booking.checkOut)}</span></div>
       <div className="msg-invoice-actions">
         <button type="button" className="secondary small" disabled={hasDates} onClick={() => add({ kind: 'change', checkIn: booking.checkIn, checkOut: booking.checkOut })}>＋ Change dates</button>
         <button type="button" className="secondary small" onClick={() => add({ kind: 'charge', description: 'Late checkout', applies: 'lateCheckOut', amount: cents(change.lateCents) })}>＋ Late checkout</button>
@@ -348,6 +348,18 @@ function TripPeople({ bookingId, travellers, onChanged }) {
   );
 }
 
+// WhatsApp-style status on a message the host sent. "Delivered" is as far as we
+// can see: the mail server accepted the guest's email copy.
+const TICKS = {
+  sent: { marks: '✓', label: 'Sent. The guest sees it when they sign in.' },
+  delivered: { marks: '✓✓', label: 'Delivered: emailed to the guest.' },
+  read: { marks: '✓✓', label: 'Read by the guest.' },
+};
+function Ticks({ message: m }) {
+  const state = m.readAt ? 'read' : m.emailedAt ? 'delivered' : 'sent';
+  return <span className={`msg-ticks ${state}`} title={TICKS[state].label} role="img" aria-label={TICKS[state].label}>{TICKS[state].marks}</span>;
+}
+
 // ---------------- Inbox ----------------
 
 function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadChange, onManageSaved }) {
@@ -419,6 +431,12 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
     finally { setBusy(false); }
   }
 
+  async function unsend(m) {
+    const already = [m.readAt && 'The guest has already read it.', m.emailedAt && 'They were also emailed a copy, and that can’t be taken back.'].filter(Boolean).join(' ');
+    if (!window.confirm(`Unsend this message? The guest will see that a message was removed.${already ? ` ${already}` : ''}`)) return;
+    try { await api.unsendMessage(activeId, m.id); await refreshThread('Message unsent.'); }
+    catch (e) { setNote((e.data && e.data.message) || e.message); }
+  }
   async function invoiceSent(emailed) {
     setInvoicing(false);
     setNote(emailed ? 'Invoice sent, and emailed to the guest.' : 'Invoice sent. (No email copy: the guest will see it when they sign in.)');
@@ -495,15 +513,20 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
             <div className="msg-bubbles">
               {thread.messages.length === 0 && <p className="muted small center">No messages yet.</p>}
               {thread.messages.map((m) => (
-                <div key={m.id} className={`msg-bubble ${m.sender}`}>
+                <div key={m.id} className={`msg-bubble ${m.sender}${m.unsentAt ? ' unsent' : ''}`}>
                   {m.scheduleName && <div className="msg-auto">⏰ {m.scheduleName}</div>}
                   {m.sender === 'guest' && m.authorName && (thread.travellers || []).length > 0 && <div className="msg-auto">{m.authorName}</div>}
+                  {m.unsentAt && <div className="msg-auto">You unsent this. The guest can’t see it.</div>}
                   <div className="msg-body">{m.body}</div>
                   {(m.attachments || []).map((a) => (
                     <div key={a.id}><button type="button" className="linklike" onClick={() => openMessageAttachment(a.id).catch(() => window.alert('Could not open that file.'))}>📎 Open {a.filename}</button></div>
                   ))}
                   {m.offer && <InvoiceCard offer={m.offer} onMarkPaid={markChangePaid} />}
-                  <div className="msg-meta">{fmtWhen(m.createdAt)}{m.sender === 'host' ? (m.readAt ? ' · Read' : m.emailedAt ? ' · Emailed' : '') : ''}</div>
+                  <div className="msg-meta">
+                    {m.sender === 'host' && !m.offer && !m.unsentAt && <button type="button" className="msg-link msg-unsend" onClick={() => unsend(m)}>Unsend</button>}
+                    {fmtWhen(m.createdAt)}
+                    {m.sender === 'host' && !m.unsentAt && <Ticks message={m} />}
+                  </div>
                 </div>
               ))}
               <div ref={endRef} />
@@ -524,7 +547,7 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
               )}
               {(!thread.change.blocked || !thread.cancel.blocked) && (
                 <div className="msg-invoice-actions">
-                  {!thread.change.blocked && <button className="secondary" onClick={() => setChanging(true)}>✏️ Change or add to this booking</button>}
+                  {!thread.change.blocked && <button className="secondary" onClick={() => setChanging(true)}>✏️ Amend booking</button>}
                   {!thread.cancel.blocked && <button className="secondary" onClick={() => setCancelling(true)}>Cancel booking</button>}
                 </div>
               )}

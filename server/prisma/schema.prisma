@@ -624,6 +624,7 @@ model Message {
   offer      PriceOffer?      @relation(fields: [offerId], references: [id], onDelete: SetNull)
   emailedAt  DateTime? // when the guest was emailed a copy
   readAt     DateTime? // when the other side read it
+  unsentAt   DateTime? // the host took it back, so the guest no longer sees its text
   createdAt  DateTime         @default(now())
   attachments MessageAttachment[]
 
