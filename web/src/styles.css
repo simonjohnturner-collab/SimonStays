@@ -922,6 +922,37 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .msg-lbl { font-size:12px; color:var(--muted); font-weight:600; min-width:60px; }
 .msg-field { display:flex; flex-direction:column; gap:2px; flex:1 1 170px; margin:0; font-size:12px; color:var(--muted); font-weight:600; }
 .msg-field select, .msg-field input { width:100%; margin:0; color:var(--ink); font-weight:400; }
+.msg-tabs.sub.jr-switch { max-width:1100px; width:100%; margin:10px auto 0; padding:0 16px; }
+.jr { max-width:760px; width:100%; margin:0 auto; padding:14px 16px 50px; }
+.jr-tools { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; margin-bottom:16px; }
+.jr-tools .msg-field { flex:0 1 280px; }
+.jr-line { list-style:none; margin:0; padding:0; }
+.jr-stage { position:relative; padding:0 0 18px 42px; }
+.jr-stage::before { content:''; position:absolute; left:15px; top:0; bottom:0; width:2px; background:var(--line); }
+.jr-stage:first-child::before { top:15px; }
+.jr-stage:last-child::before { bottom:auto; height:15px; }
+.jr-marker { position:absolute; left:10px; top:6px; width:12px; height:12px; border-radius:50%; background:#fff; border:2px solid #b8c0c8; }
+.jr-stage.milestone .jr-marker { left:0; top:0; width:32px; height:32px; display:grid; place-items:center; font-size:15px; background:#eef6f0; border-color:var(--green); }
+.jr-stage h3 { margin:0 0 8px; font-size:13px; line-height:24px; color:var(--muted); font-weight:600; }
+.jr-stage.milestone h3 { font-size:15px; line-height:32px; color:var(--ink); font-weight:700; margin-bottom:6px; }
+.jr-note { margin:-4px 0 8px; }
+.jr-gap { margin:0 0 8px; }
+.jr-card { display:block; width:100%; text-align:left; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:9px 12px; margin-bottom:8px; }
+button.jr-card:hover { background:#f3f6f4; border-color:var(--green); }
+.jr-card.system { background:#f7f8fa; }
+.jr-card.off { opacity:.55; }
+.jr-when { font-size:12px; font-weight:600; color:var(--green-d); margin-bottom:2px; }
+.jr-card.system .jr-when { color:var(--muted); }
+.jr-text { font-size:13px; color:#4b5563; margin-top:3px; white-space:pre-wrap; word-break:break-word; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+.jr-text.full { display:block; }
+.jr-token { background:#eef6f0; color:var(--green-d); border-radius:4px; padding:0 3px; font-weight:600; }
+.jr-props { font-size:12px; color:var(--muted); margin-top:4px; }
+.jr-events { background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin:6px 0 12px; }
+.jr-events h3 { margin:0; font-size:15px; }
+.jr-events p { margin:2px 0 8px; }
+.jr-event { display:grid; grid-template-columns:minmax(0,220px) minmax(0,1fr); gap:10px; padding:6px 0; border-top:1px solid var(--line); font-size:13px; }
+.jr-event span { color:#4b5563; }
+@media (max-width:520px) { .jr-event { grid-template-columns:1fr; gap:1px; } }
 .doc-folder-name { flex:1; min-width:140px; }
 .doc-upload { background:var(--green); color:#fff; border-radius:7px; padding:6px 12px; font-size:13px; cursor:pointer; margin:0; }
 .doc-upload.busy { opacity:.55; cursor:default; }

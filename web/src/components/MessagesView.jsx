@@ -661,6 +661,115 @@ function describe(s, properties) {
   return `${when} · ${props}`;
 }
 
+// What the system sends by itself, only when something happens on a booking.
+const EVENT_MESSAGES = [
+  ['You send an invoice', 'The invoice and a link to pay it by card'],
+  ['You change a booking', 'What changed and, if there’s more to pay, a link to pay it'],
+  ['A change is paid', 'Confirmation that the booking is updated'],
+  ['A booking is cancelled', '“This booking has been cancelled”, with any refund due'],
+  ['You record a refund', '“Your refund has been paid”'],
+  ['You answer an Ask Simon question', 'Your answer to what they asked'],
+  ['They forget their password', 'A link to reset it'],
+];
+
+// A message's text with its shortcuts picked out, so they're easy to check.
+function WithShortcuts({ text }) {
+  return String(text || '').split(/(\[[^[\]\n]+\]|\{\w+\})/).map((part, i) => (i % 2 ? <span key={i} className="jr-token">{part}</span> : part));
+}
+
+// The order messages reach a guest, around the moments that matter on a stay.
+function journeyStages(rows) {
+  const byDays = (a, b) => a.offsetDays - b.offsetDays;
+  const inStay = rows.filter((r) => r.anchor !== 'confirmed');
+  const ofCheckIn = inStay.filter((r) => r.anchor === 'check_in');
+  const ofCheckOut = inStay.filter((r) => r.anchor === 'check_out');
+  const byTime = (a, b) => a.sendTime.localeCompare(b.sendTime);
+  return [
+    { id: 'confirmed', milestone: 'Booking confirmed', icon: '✅', rows: rows.filter((r) => r.anchor === 'confirmed').sort((a, b) => (a.offsetMinutes || 0) - (b.offsetMinutes || 0)) },
+    { id: 'before', title: 'Before check-in', rows: ofCheckIn.filter((r) => r.offsetDays < 0).sort(byDays) },
+    { id: 'checkin', milestone: 'Check-in day', icon: '🔑', rows: ofCheckIn.filter((r) => r.offsetDays === 0).sort(byTime) },
+    { id: 'during', title: 'During the stay', note: 'Counted from check-in, then back from check-out, so the order can shift on a short stay.',
+      rows: [...ofCheckIn.filter((r) => r.offsetDays > 0).sort(byDays), ...ofCheckOut.filter((r) => r.offsetDays < 0).sort(byDays)] },
+    { id: 'checkout', milestone: 'Check-out day', icon: '🧳', rows: ofCheckOut.filter((r) => r.offsetDays === 0).sort(byTime) },
+    { id: 'after', title: 'After check-out', rows: ofCheckOut.filter((r) => r.offsetDays > 0).sort(byDays) },
+  ];
+}
+
+function journeyWhen(r) {
+  if (r.anchor === 'confirmed') return delayLabel(r.offsetMinutes);
+  const what = r.anchor === 'check_out' ? 'check-out' : 'check-in';
+  return r.offsetDays ? `${dayLabel(r.offsetDays, what)} ${what}, ${r.sendTime}` : r.sendTime;
+}
+
+// Every saved scheduled message in the order a guest receives them, for checking
+// that the whole conversation flows. Clicking one opens it for editing.
+function GuestJourney({ rows, templates, properties, onOpen }) {
+  const [propertyId, setPropertyId] = useState('');
+  const [full, setFull] = useState(false);
+  const textOf = (r) => (r.templateId ? (templates.find((t) => t.id === r.templateId) || {}).body : r.body);
+  const reaches = (r) => !r.noProperties && (!r.propertyIds.length || r.propertyIds.includes(propertyId));
+  const saved = rows.filter((r) => r.id && (!propertyId || reaches(r)));
+  const stages = journeyStages(saved);
+  const live = (r) => r.active && !r.noProperties;
+  const noConfirmation = !stages[0].rows.some(live);
+  const nameOf = (id) => (properties.find((p) => p.id === id) || {}).name;
+
+  return (
+    <div className="jr">
+      <div className="jr-tools">
+        <label className="msg-field">Show the journey for
+          <select aria-label="Show the journey for" value={propertyId} onChange={(e) => setPropertyId(e.target.value)}>
+            <option value="">All properties</option>
+            {properties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </label>
+        <label className="chk"><input type="checkbox" checked={full} onChange={(e) => setFull(e.target.checked)} /> Show full messages</label>
+      </div>
+
+      <ol className="jr-line">
+        <li className="jr-stage milestone">
+          <div className="jr-marker">📝</div>
+          <h3>Guest books on SimonStays</h3>
+          <div className="jr-card system">
+            <div className="jr-when">As they book, before paying · sent automatically</div>
+            <b>Booking invoice email</b>
+            <div className="jr-text">The stay, the price and the cancellation policy, marked “awaiting payment”.</div>
+          </div>
+        </li>
+        {stages.map((s) => {
+          if (!s.milestone && !s.rows.length) return null;
+          return (
+            <li key={s.id} className={`jr-stage${s.milestone ? ' milestone' : ''}`}>
+              <div className="jr-marker">{s.icon || ''}</div>
+              <h3>{s.milestone || s.title}</h3>
+              {s.note && <div className="muted small jr-note">{s.note}</div>}
+              {s.id === 'confirmed' && noConfirmation && (
+                <div className="msg-warn jr-gap">Nothing tells the guest their payment went through. Their last email still says “awaiting payment”, so add a message here.</div>
+              )}
+              {s.milestone && !s.rows.length && !(s.id === 'confirmed' && noConfirmation) && <div className="muted small jr-note">Nothing sent.</div>}
+              {s.rows.map((r) => (
+                <button key={r.id} type="button" className={`jr-card${live(r) ? '' : ' off'}`} onClick={() => onOpen(r.id)}>
+                  <div className="jr-when">{journeyWhen(r)}{!r.active ? ' · switched off' : r.noProperties ? ' · no properties, won’t send' : ''}</div>
+                  <b>{r.name}</b>
+                  <div className={`jr-text${full ? ' full' : ''}`}><WithShortcuts text={textOf(r)} /></div>
+                  {!propertyId && r.propertyIds.length > 0 && <div className="jr-props">Only {r.propertyIds.map(nameOf).filter(Boolean).join(', ')}</div>}
+                </button>
+              ))}
+            </li>
+          );
+        })}
+      </ol>
+
+      <section className="jr-events">
+        <h3>Only when something happens</h3>
+        <p className="muted small">These go out by themselves when needed, whatever you schedule above.</p>
+        {EVENT_MESSAGES.map(([when, what]) => <div key={when} className="jr-event"><b>{when}</b><span>{what}</span></div>)}
+      </section>
+      <p className="muted small">Each message appears in the guest’s SimonStays inbox and is emailed to them. Guests with no email or SimonStays account, such as most Airbnb bookings, get none of these. If someone books late, messages more than a day past their send time are skipped.</p>
+    </div>
+  );
+}
+
 const scheduleRow = (s) => ({ ...s, templateId: s.templateId || '', body: s.body || '' });
 
 // The ideas this host has dismissed, remembered per host in this browser.
@@ -672,6 +781,7 @@ function readHiddenIdeas(hostId) {
 function Scheduled({ templates, shortcuts, properties }) {
   const [rows, setRows] = useState(null);
   const [activeKey, setActiveKey] = useState(null);
+  const [view, setView] = useState('messages');
   const [msg, setMsg] = useState('');
   const { host } = useAuth();
   const [hiddenIdeas, setHiddenIdeas] = useState(() => readHiddenIdeas(host.id));
@@ -737,6 +847,11 @@ function Scheduled({ templates, shortcuts, properties }) {
         Automatic messages go to every confirmed booking that matches — once per booking — and are emailed to the guest too.
         Only bookings with a guest email or SimonStays account receive them. {msg && <b>{msg}</b>}
       </p>
+      <div className="msg-tabs sub jr-switch">
+        <button className={view === 'messages' ? 'on' : ''} onClick={() => setView('messages')}>✏️ Edit messages</button>
+        <button className={view === 'journey' ? 'on' : ''} onClick={() => setView('journey')}>🗺 Guest journey</button>
+      </div>
+      {view === 'journey' ? <GuestJourney rows={rows} templates={templates} properties={properties} onOpen={(id) => { setActiveKey(id); setView('messages'); }} /> : (
       <div className={`msg-sched-layout${r ? ' has-active' : ''}`}>
         <aside className="msg-list">
           <button className="wide" onClick={() => startDraft({})}>➕ New scheduled message</button>
@@ -826,6 +941,7 @@ function Scheduled({ templates, shortcuts, properties }) {
           onPick={r && !r.templateId ? (token) => insertInto(bodyEl.current, r.body, token, (body) => edit(key, { body })) : null}
           note={!r ? 'Open a message to add these to it. Each one fills in for the booking when sent.' : r.templateId ? 'Press Edit this message to add shortcuts to it.' : null} />
       </div>
+      )}
     </>
   );
 }
