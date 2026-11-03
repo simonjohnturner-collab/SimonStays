@@ -93,8 +93,9 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
   const discountCents = Math.round(accommodation * discountPercent / 100);
 
   // Cleaning is charged explicitly as its own line — the checkout clean plus any
-  // mid-stay cleans. It's a flat fee (not length-discounted).
-  const cleaningCents = (rc.cleaningCents || 0) * Math.max(1, cleans);
+  // mid-stay cleans, at the instay rate if one is set. It's a flat fee (not length-discounted).
+  const unitCleanCents = rc.cleaningCents || 0;
+  const cleaningCents = unitCleanCents + (rc.instayCleanCents || unitCleanCents) * (Math.max(1, cleans) - 1);
   const earlyCents = earlyCheckIn ? (rc.earlyCheckInCents || 0) : 0;
   const lateCents = lateCheckOut ? (rc.lateCheckOutCents || 0) : 0;
   const mattressCents = mattress ? (rc.mattressCents || 0) : 0;

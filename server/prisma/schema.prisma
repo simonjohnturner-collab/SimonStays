@@ -270,7 +270,8 @@ model PricingGroup {
   // fees
   earlyCheckInCents Int @default(0)
   lateCheckOutCents Int @default(0)
-  cleaningCents     Int @default(0) // per clean
+  cleaningCents     Int @default(0) // unit clean: the checkout clean
+  instayCleanCents  Int @default(0) // a mid-stay clean; 0 = charged at the unit clean rate
   mattressCents     Int @default(0)
   // --- dormant (superseded by `flexes`), kept to avoid data loss on migrate ---
   weekendFlexPercent Float @default(0)

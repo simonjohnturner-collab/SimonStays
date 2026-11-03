@@ -40,7 +40,8 @@ const SHORTCUTS = [
   { key: 'documentsLink', label: 'Documents Link', hint: 'Link to this property’s shared documents' },
   { key: 'earlyCheckInFee', label: 'Early Check In Fee', hint: 'From the unit’s pricing' },
   { key: 'lateCheckOutFee', label: 'Late Check Out Fee', hint: 'From the unit’s pricing' },
-  { key: 'cleaningFee', label: 'Cleaning Fee', hint: 'Per clean, from the unit’s pricing' },
+  { key: 'cleaningFee', label: 'Cleaning Fee', hint: 'Unit clean, from the unit’s pricing' },
+  { key: 'instayCleanFee', label: 'Instay Clean Fee', hint: 'Instay clean, from the unit’s pricing' },
   { key: 'extraMattressFee', label: 'Extra Mattress Fee', hint: 'From the unit’s pricing' },
   { key: 'breakageDeposit', label: 'Breakage Deposit', hint: 'Refundable, from the unit’s pricing' },
 ];
@@ -87,6 +88,7 @@ function valuesFor(b) {
     earlyCheckInFee: fee(g.earlyCheckInCents),
     lateCheckOutFee: fee(g.lateCheckOutCents),
     cleaningFee: fee(g.cleaningCents),
+    instayCleanFee: fee(g.instayCleanCents || g.cleaningCents),
     extraMattressFee: fee(g.mattressCents),
     breakageDeposit: fee(g.breakageDepositCents),
   };

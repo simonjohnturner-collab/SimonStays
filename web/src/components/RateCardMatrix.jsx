@@ -14,7 +14,8 @@ const ROWS = [
   { section: 'Nightly rate' },
   { key: 'nAdd', label: 'Nightly rate (per night)', type: 'money' },
   { key: 'weekendNight', label: 'Weekend rate (Fri/Sat) — optional', type: 'money' },
-  { key: 'cleaning', label: 'Cleaning per clean (separate line)', type: 'money' },
+  { key: 'cleaning', label: 'Unit clean', type: 'money' },
+  { key: 'instayClean', label: 'Instay clean', type: 'money' },
   { section: 'Discounts, deposit & fees' },
   { key: 'weekly', label: 'Weekly discount % (7 nights)', type: 'pctcalc', calc: cWeekly },
   { key: 'monthly', label: 'Monthly discount % (~30.25 nights)', type: 'pctcalc', calc: cMonthly },
@@ -37,7 +38,7 @@ function toValues(g) {
   return {
     nAdd: r(g.additionalNightCents), weekendNight: r(g.weekendNightCents),
     weekly: g.weeklyDiscountPercent || '', monthly: g.monthlyDiscountPercent || '',
-    breakage: r(g.breakageDepositCents), cleaning: r(g.cleaningCents), early: r(g.earlyCheckInCents), late: r(g.lateCheckOutCents), mattress: r(g.mattressCents),
+    breakage: r(g.breakageDepositCents), cleaning: r(g.cleaningCents), instayClean: r(g.instayCleanCents), early: r(g.earlyCheckInCents), late: r(g.lateCheckOutCents), mattress: r(g.mattressCents),
     f1pct: f(0, 'percent'), f1s: f(0, 'start'), f1e: f(0, 'end'),
     f2pct: f(1, 'percent'), f2s: f(1, 'start'), f2e: f(1, 'end'),
     f3pct: f(2, 'percent'), f3s: f(2, 'start'), f3e: f(2, 'end'),
@@ -55,7 +56,7 @@ function toPayload(name, v) {
     weekendNightCents: v.weekendNight === '' || v.weekendNight == null ? null : randToCents(v.weekendNight),
     firstNightCents: cFirst(v), // computed: nightly + one clean (bundled)
     weeklyDiscountPercent: num(v.weekly), monthlyDiscountPercent: num(v.monthly),
-    breakageDepositCents: randToCents(v.breakage), cleaningCents: randToCents(v.cleaning),
+    breakageDepositCents: randToCents(v.breakage), cleaningCents: randToCents(v.cleaning), instayCleanCents: randToCents(v.instayClean),
     earlyCheckInCents: randToCents(v.early), lateCheckOutCents: randToCents(v.late), mattressCents: randToCents(v.mattress),
     flexes,
   };
