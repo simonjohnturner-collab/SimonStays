@@ -204,6 +204,16 @@
   .reply button{ flex-shrink:0; padding:12px 16px; }
   .th-head{ display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:10px; }
   .th-amt{ text-align:right; white-space:nowrap; font-weight:700; }
+  .th-actions{ display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .th-act{ background:#eef1f4; color:var(--ink); padding:7px 11px; font-size:13px; }
+  .th-act:hover{ background:#e2e6ea; }
+  .th-act.danger{ color:#c0392b; }
+  .inv-row span:last-child{ white-space:nowrap; }
+  .danger-btn{ background:#c0392b; }
+  .act-box{ margin-top:8px; padding:10px 12px; background:#fff; border:1px solid var(--line); border-radius:10px; font-size:14px; }
+  .act-row{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; align-items:flex-end; }
+  .act-row label{ flex:1; min-width:130px; font-size:13px; }
+  .act-row input{ display:block; width:100%; font:inherit; font-size:16px; padding:8px; border:1px solid var(--line); border-radius:8px; }
   .inv-card{ margin-top:8px; padding:10px 12px; background:#fff; border:1px solid var(--line); border-radius:10px; white-space:normal; }
   .inv-row{ display:flex; justify-content:space-between; gap:12px; font-size:14px; padding:2px 0; }
   .inv-row.tot{ font-weight:700; border-top:1px solid var(--line); margin-top:4px; padding-top:6px; }
@@ -1098,7 +1108,8 @@
   function invoiceCard(o){
     var state={ paid:'✅ Paid', replaced:'Replaced by a newer invoice', expired:'This invoice has expired. Message your host for a new one.', closed:'This invoice is closed.' };
     var safeLink=/^https?:\/\//i.test(o.link||'');
-    return '<div class="inv-card"><b>Invoice</b>'+(o.lines||[]).map(function(l){ return '<div class="inv-row"><span>'+esc(l.description)+'</span><span>'+randSigned(l.amountCents)+'</span></div>'; }).join('')+
+    if(o.kind==='change'&&o.totalCents<=0) state.paid='✅ Applied to your booking';
+    return '<div class="inv-card"><b>'+(o.kind==='change'?'Change to your booking':'Invoice')+'</b>'+(o.lines||[]).map(function(l){ return '<div class="inv-row"><span>'+esc(l.description)+'</span><span>'+randSigned(l.amountCents)+'</span></div>'; }).join('')+
       '<div class="inv-row tot"><span>Total</span><span>'+rand(o.totalCents)+'</span></div>'+
       (o.state==='open'&&safeLink?'<a class="inv-pay" href="'+esc(o.link)+'">View invoice &amp; pay</a>':'<div class="inv-state">'+esc(state[o.state]||'')+'</div>')+'</div>';
   }
@@ -1138,11 +1149,71 @@
       var t=threads.find(function(x){ return x.bookingId===id; });
       if(!t){ list(); return; }
       body.innerHTML=(threads.length>1?'<button class="th-back">← All messages</button>':'')+
-        '<div class="th-head"><div><div class="trip-nm">'+esc(t.guestName||'')+(t.status==='enquiry'?' <span class="badge pending">Enquiry</span>':'')+'</div><div class="trip-sub">'+place(t)+'</div><div class="trip-sub">📅 '+(t.dayUse?esc(fmtShort(t.checkIn))+' · day use':esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut))+' · '+t.nights+' night'+(t.nights===1?'':'s'))+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div></div>'+(t.amountCents!=null?'<div class="th-amt">'+rand(t.amountCents)+'</div>':'')+'</div>'+
+        '<div class="th-head"><div><div class="trip-nm">'+esc(t.guestName||'')+(t.status==='enquiry'?' <span class="badge pending">Enquiry</span>':t.status==='cancelled'?' <span class="badge cancelled">Cancelled</span>':'')+'</div><div class="trip-sub">'+place(t)+'</div><div class="trip-sub">📅 '+(t.dayUse?esc(fmtShort(t.checkIn))+' · day use':esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut))+' · '+t.nights+' night'+(t.nights===1?'':'s'))+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div></div>'+(t.amountCents!=null?'<div class="th-amt">'+rand(t.amountCents)+'</div>':'')+'</div>'+
         '<div class="bubbles">'+(t.messages.length?t.messages.map(function(m){ return '<div class="bub '+(m.sender==='guest'?'guest':'host')+'">'+esc(m.body)+(m.offer?invoiceCard(m.offer):'')+'<span class="when">'+(m.sender==='guest'?'You · ':'Host · ')+esc(fmtWhen(m.createdAt))+'</span></div>'; }).join(''):'<p class="note" style="text-align:center">No messages yet. Write to your host below.</p>')+'</div>'+
+        (t.refundDueCents>0?'<div class="note" style="margin-top:10px">'+(t.refundedAt?'✅ Your refund of '+rand(t.refundDueCents)+' has been paid.':'Refund due to you: <b>'+rand(t.refundDueCents)+'</b>. Your host will pay it back and let you know.')+'</div>':'')+
+        (t.canRequest?'<div class="th-actions"><button class="th-act" data-act="dates">Change dates</button><button class="th-act" data-act="late">Late checkout</button><button class="th-act" data-act="clean">Extra clean</button><button class="th-act danger" data-act="cancel">Cancel booking</button></div><div id="actBox"></div>':'')+
         '<div class="reply"><textarea id="replyTxt" rows="2" placeholder="Write a message…"></textarea><button id="replyBtn">Send</button></div><div id="rmsg"></div>';
       var bub=body.querySelector('.bubbles'); bub.scrollTop=bub.scrollHeight;
       var back=body.querySelector('.th-back'); if(back) back.onclick=function(){ list(); };
+      async function request(text){
+        var r=await fetch(API+'/public/account/messages/'+encodeURIComponent(id),{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({body:text,request:true})});
+        if(!r.ok) throw new Error();
+        await load(); thread(id);
+      }
+      function actForm(html,go){
+        var box=body.querySelector('#actBox');
+        box.innerHTML='<div class="act-box">'+html+'<div id="actErr"></div><div class="act-row"><button class="th-act" id="actNo">Never mind</button><button id="actGo">Send to host</button></div></div>';
+        box.querySelector('#actNo').onclick=function(){ box.innerHTML=''; };
+        box.querySelector('#actGo').onclick=async function(){
+          var text=go(box); if(!text) return;
+          this.disabled=true;
+          try{ await request(text); }catch(e){ this.disabled=false; box.querySelector('#actErr').innerHTML='<div class="msg err">Could not send. Please try again.</div>'; }
+        };
+      }
+      var ACTS={
+        dates:function(){
+          actForm('<b>Which dates would you like?</b><div class="act-row"><label>Check-in<input type="date" id="actIn" value="'+esc(t.checkIn)+'"></label><label>Check-out<input type="date" id="actOut" value="'+esc(t.checkOut)+'"></label></div><p class="note">Your host will check availability and send any invoice here. Your booking stays as it is until then.</p>',function(box){
+            var a=box.querySelector('#actIn').value, b=box.querySelector('#actOut').value;
+            if(!a||!b||b<=a){ box.querySelector('#actErr').innerHTML='<div class="msg err">Please choose a check-out after your check-in.</div>'; return ''; }
+            return 'I would like to change my dates to '+a+' → '+b+', please.';
+          });
+        },
+        late:function(){
+          actForm('<b>Ask for a late checkout?</b><p class="note">Your host will reply here, with an invoice if there is a charge.</p>',function(){ return 'I would like a late checkout on '+t.checkOut+', please.'; });
+        },
+        clean:function(){
+          actForm('<b>When would you like the extra clean?</b><div class="act-row"><label>Date<input type="date" id="actDay" value=""></label></div><p class="note">Your host will reply here, with an invoice if there is a charge.</p>',function(box){
+            var d=box.querySelector('#actDay').value;
+            if(!d){ box.querySelector('#actErr').innerHTML='<div class="msg err">Please choose a date.</div>'; return ''; }
+            return 'I would like an extra clean on '+d+', please.';
+          });
+        },
+        cancel:async function(){
+          var box=body.querySelector('#actBox');
+          box.innerHTML='<div class="act-box note">One moment…</div>';
+          try{
+            var r=await fetch(API+'/public/account/messages/'+encodeURIComponent(id)+'/cancel',{headers:authHeaders()});
+            if(!r.ok) throw new Error();
+            var q=await r.json();
+            if(q.blocked){ box.innerHTML='<div class="act-box note">'+(q.blocked==='started'?'Your stay has already started, so please message your host below to cancel.':'This booking can’t be cancelled here. Please message your host below.')+'</div>'; return; }
+            box.innerHTML='<div class="act-box"><b>Cancel '+esc(q.places.join(', '))+'?</b><p class="note">'+esc(q.reason)+'</p>'+
+              (q.paidCents?'<div class="inv-row"><span>You have paid</span><span>'+rand(q.paidCents)+'</span></div>'+(q.depositCents?'<div class="inv-row"><span>Includes refundable deposit</span><span>'+rand(q.depositCents)+'</span></div>':'')+(q.refundCents!=null?'<div class="inv-row tot"><span>Your refund</span><span>'+rand(q.refundCents)+'</span></div>':''):'')+
+              '<p class="note">Your dates are released straight away. This can’t be undone.</p><div id="actErr"></div><div class="act-row"><button class="th-act" id="actNo">Keep my booking</button><button class="danger-btn" id="actGo">Yes, cancel</button></div></div>';
+            box.querySelector('#actNo').onclick=function(){ box.innerHTML=''; };
+            box.querySelector('#actGo').onclick=async function(){
+              this.disabled=true;
+              try{
+                var c=await fetch(API+'/public/account/messages/'+encodeURIComponent(id)+'/cancel',{method:'POST',headers:authHeaders()});
+                var d=await c.json().catch(function(){ return {}; });
+                if(!c.ok) throw new Error(d.message||'Could not cancel. Please try again.');
+                await load(); thread(id);
+              }catch(e){ this.disabled=false; box.querySelector('#actErr').innerHTML='<div class="msg err">'+esc(e.message)+'</div>'; }
+            };
+          }catch(e){ box.innerHTML='<div class="act-box msg err">Could not load the cancellation details. Please try again.</div>'; }
+        }
+      };
+      body.querySelectorAll('.th-act[data-act]').forEach(function(b){ b.onclick=function(){ ACTS[b.getAttribute('data-act')](); }; });
       body.querySelector('#replyBtn').onclick=async function(){
         var ta=body.querySelector('#replyTxt'), txt=(ta.value||'').trim(), btn=this;
         if(!txt) return;

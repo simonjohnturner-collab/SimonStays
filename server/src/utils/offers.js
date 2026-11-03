@@ -166,6 +166,12 @@ function invoiceBlock(b) {
 
 // The offer's state as both sides should see it right now.
 function offerState(offer, booking, now = new Date()) {
+  // A change invoice is for a booking that's already confirmed and paid.
+  if (offer.kind === 'change') {
+    if (offer.status === 'paid' || offer.status === 'replaced') return offer.status;
+    if (booking && booking.status === 'cancelled') return 'closed';
+    return new Date(offer.expiresAt) <= now ? 'expired' : 'open';
+  }
   if (offer.status === 'paid' || (booking && booking.paid)) return 'paid';
   if (offer.status === 'replaced') return 'replaced';
   if (booking && ['cancelled', 'confirmed'].includes(booking.status)) return 'closed';
@@ -180,9 +186,17 @@ function offerLink(offer) {
 
 function offerOut(offer, booking) {
   return {
-    id: offer.id, lines: offer.lines, totalCents: offer.totalCents, depositCents: offer.depositCents || 0,
+    id: offer.id, kind: offer.kind || 'booking', lines: offer.lines, totalCents: offer.totalCents, depositCents: offer.depositCents || 0,
     expiresAt: offer.expiresAt, state: offerState(offer, booking), link: offerLink(offer),
   };
+}
+
+// What a conversation costs: its paid invoice, else its latest, plus any paid changes.
+function conversationCents(sent) {
+  const invoices = sent.filter((o) => o.kind !== 'change');
+  const base = invoices.find((o) => o.status === 'paid') || invoices[invoices.length - 1];
+  if (!base) return null;
+  return sent.filter((o) => o.kind === 'change' && o.status === 'paid').reduce((n, o) => n + o.totalCents, base.totalCents);
 }
 
 // Create the invoice, replace any earlier one, and message it to the guest.
@@ -225,4 +239,4 @@ async function sendOffer(booking, { lines: rawLines, note }) {
   return { offer, message: sent.message };
 }
 
-module.exports = { OFFER_HOURS, cleanLines, staysOf, blockOut, splitOf, firstClash, saveExtraStays, standardQuote, draftFor, invoiceBlock, offerState, offerLink, offerOut, sendOffer };
+module.exports = { OFFER_HOURS, MAX_LINE_CENTS, INVOICEABLE_SOURCES, fmtDay, nightsBetween, validDay, conversationCents, cleanLines, staysOf, blockOut, splitOf, firstClash, saveExtraStays, standardQuote, draftFor, invoiceBlock, offerState, offerLink, offerOut, sendOffer };

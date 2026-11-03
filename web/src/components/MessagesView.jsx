@@ -58,15 +58,18 @@ const OFFER_STATE = {
 };
 
 // An invoice inside a message (the guest sees the same lines on the shopfront).
-function InvoiceCard({ offer }) {
+function InvoiceCard({ offer, onMarkPaid }) {
+  const isChange = offer.kind === 'change';
+  const applied = isChange && offer.totalCents <= 0;
   return (
     <div className="msg-invoice">
-      <div className="msg-invoice-title"><b>Invoice</b><span className={`msg-invoice-state ${offer.state}`}>{OFFER_STATE[offer.state] || offer.state}</span></div>
+      <div className="msg-invoice-title"><b>{isChange ? 'Booking change' : 'Invoice'}</b><span className={`msg-invoice-state ${offer.state}`}>{applied ? 'Applied' : OFFER_STATE[offer.state] || offer.state}</span></div>
       {offer.lines.map((l, i) => (
         <div key={i} className="msg-invoice-row"><span>{l.description}</span><span>{fmtR(l.amountCents)}</span></div>
       ))}
       <div className="msg-invoice-row total"><span>Total</span><span>{fmtR(offer.totalCents)}</span></div>
       {offer.state === 'open' && <a className="small" href={offer.link} target="_blank" rel="noreferrer">Open the guest’s payment page ↗</a>}
+      {isChange && offer.state === 'open' && onMarkPaid && <div><button type="button" className="secondary small" onClick={() => onMarkPaid(offer)}>Mark as paid (EFT received)</button></div>}
     </div>
   );
 }
@@ -190,6 +193,118 @@ function InvoiceComposer({ bookingId, properties, invoice, standardCents, onSent
   );
 }
 
+// Invoice a change to a confirmed booking. Nothing changes until it's paid; with
+// nothing to pay it applies straight away, and a minus total becomes a refund due.
+function ChangeComposer({ bookingId, booking, change, onSent, onCancel }) {
+  const nextKey = useRef(0);
+  const cents = (c) => (c ? (c / 100).toFixed(2) : '');
+  const [lines, setLines] = useState([]);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const add = (line) => setLines((ls) => [...ls, { key: nextKey.current++, amount: '', ...line }]);
+  const edit = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const remove = (key) => setLines((ls) => ls.filter((l) => l.key !== key));
+  const hasDates = lines.some((l) => l.kind === 'change');
+  const totalCents = lines.reduce((n, l) => n + randToCents(l.amount), 0);
+  const ready = lines.length > 0 && lines.every((l) => (l.kind === 'change' ? l.checkIn && l.checkOut && l.checkOut > l.checkIn : !!(l.description || '').trim()));
+
+  async function send() {
+    if (totalCents <= 0 && !window.confirm(totalCents < 0 ? `Apply this change now? ${fmtR(-totalCents)} will show as a refund due to the guest.` : 'Apply this change now, at no charge?')) return;
+    setBusy(true); setErr('');
+    try {
+      const r = await api.sendChange(bookingId, lines.map((l) => (l.kind === 'change'
+        ? { kind: 'change', checkIn: l.checkIn, checkOut: l.checkOut, amountCents: randToCents(l.amount) }
+        : { kind: 'charge', description: l.description, amountCents: randToCents(l.amount), applies: l.applies || null, cleanDate: l.cleanDate || null })), note);
+      onSent(r);
+    } catch (e) { setErr((e.data && e.data.message) || e.message); setBusy(false); }
+  }
+
+  return (
+    <div className="msg-composer">
+      <div className="msg-composer-head"><b>Change this booking</b><span className="muted small">{fmtDay(booking.checkIn)} → {fmtDay(booking.checkOut)}</span></div>
+      <div className="msg-invoice-actions">
+        <button type="button" className="secondary small" disabled={hasDates} onClick={() => add({ kind: 'change', checkIn: booking.checkIn, checkOut: booking.checkOut })}>＋ Change dates</button>
+        <button type="button" className="secondary small" onClick={() => add({ kind: 'charge', description: 'Late checkout', applies: 'lateCheckOut', amount: cents(change.lateCents) })}>＋ Late checkout</button>
+        <button type="button" className="secondary small" onClick={() => add({ kind: 'charge', description: 'Early check-in', applies: 'earlyCheckIn', amount: cents(change.earlyCents) })}>＋ Early check-in</button>
+        <button type="button" className="secondary small" onClick={() => add({ kind: 'charge', description: 'Extra clean', applies: 'clean', cleanDate: '', amount: cents(change.cleanCents) })}>＋ Extra clean</button>
+        <button type="button" className="secondary small" onClick={() => add({ kind: 'charge', description: '' })}>＋ Other item</button>
+      </div>
+      {lines.map((l) => (
+        <div key={l.key} className="msg-composer-line">
+          {l.kind === 'change' ? (
+            <>
+              <input type="date" aria-label="New check-in" value={l.checkIn} onChange={(e) => edit(l.key, { checkIn: e.target.value })} />
+              <input type="date" aria-label="New check-out" min={l.checkIn || undefined} value={l.checkOut} onChange={(e) => edit(l.key, { checkOut: e.target.value })} />
+            </>
+          ) : (
+            <>
+              <input value={l.description} aria-label="Description" placeholder="Description" onChange={(e) => edit(l.key, { description: e.target.value })} />
+              {l.applies === 'clean' && <input type="date" aria-label="Date of the clean" value={l.cleanDate} onChange={(e) => edit(l.key, { cleanDate: e.target.value })} />}
+            </>
+          )}
+          <input className="amt" value={l.amount} aria-label="Amount in rand" inputMode="decimal" placeholder="0.00" onChange={(e) => edit(l.key, { amount: e.target.value })} />
+          <button type="button" className="mini" aria-label={`Remove ${l.description || 'new dates'}`} onClick={() => remove(l.key)}>✕</button>
+        </div>
+      ))}
+      <div className="muted small">Type what the change costs. For a shorter stay, use a minus amount to refund the guest, for example -600.</div>
+      <div className="msg-invoice-row total"><span>{totalCents < 0 ? 'Refund due' : 'Guest pays'}</span><span>{fmtR(Math.abs(totalCents))}</span></div>
+      <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note to the guest (optional)" />
+      {err && <div className="msg-warn">{err}</div>}
+      <div className="msg-send-row">
+        <span className="muted small">{totalCents > 0 ? `The guest has ${change.validHours} hours to pay. The booking and calendar update once they do.` : 'This updates the booking and calendar straight away.'}</span>
+        <button className="secondary" onClick={onCancel} disabled={busy}>Cancel</button>
+        <button onClick={send} disabled={busy || !ready}>{busy ? 'Sending…' : totalCents > 0 ? `Send ${fmtR(totalCents)} invoice` : 'Apply change now'}</button>
+      </div>
+    </div>
+  );
+}
+
+// Cancel from the host's side: shows what the policy allows, and the host can change it.
+function CancelPanel({ bookingId, cancel, onDone, onClose }) {
+  const [refund, setRefund] = useState(cancel.refundCents != null ? (cancel.refundCents / 100).toFixed(2) : '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  async function go() {
+    setBusy(true); setErr('');
+    try { await api.cancelBooking(bookingId, randToCents(refund)); onDone(); }
+    catch (e) { setErr((e.data && e.data.message) || e.message); setBusy(false); }
+  }
+  return (
+    <div className="msg-composer">
+      <div className="msg-composer-head"><b>Cancel this booking</b><span className="muted small">{cancel.places.join(', ')}</span></div>
+      <div className="small">{cancel.reason}</div>
+      <div className="muted small">Paid so far {fmtR(cancel.paidCents)}{cancel.depositCents ? `, including a ${fmtR(cancel.depositCents)} deposit that goes back in full` : ''}.</div>
+      <div className="msg-composer-line"><span className="small">Refund to the guest</span><input className="amt" aria-label="Refund in rand" inputMode="decimal" placeholder="0.00" value={refund} onChange={(e) => setRefund(e.target.value)} /></div>
+      {err && <div className="msg-warn">{err}</div>}
+      <div className="msg-send-row">
+        <span className="muted small">The dates are freed straight away and the guest is told.</span>
+        <button className="secondary" onClick={onClose} disabled={busy}>Keep booking</button>
+        <button onClick={go} disabled={busy}>{busy ? 'Cancelling…' : 'Cancel booking'}</button>
+      </div>
+    </div>
+  );
+}
+
+// A refund still to pay: Paygate does these in its own portal, then the host records it here.
+function RefundBanner({ bookingId, booking, onDone }) {
+  const [amount, setAmount] = useState(booking.refundDueCents != null ? (booking.refundDueCents / 100).toFixed(2) : '');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function done() {
+    setBusy(true); setErr('');
+    try { await api.markRefunded(bookingId, randToCents(amount)); onDone(); }
+    catch (e) { setErr((e.data && e.data.message) || e.message); setBusy(false); }
+  }
+  return (
+    <div className="msg-warn">
+      <b>{booking.refundDueCents != null ? `Refund due: ${fmtR(booking.refundDueCents)}` : 'Decide the refund for this cancelled booking.'}</b> Pay it in the Paygate portal or by EFT, then record it here.
+      <div className="msg-composer-line"><input className="amt" aria-label="Refund paid in rand" inputMode="decimal" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} /><button type="button" className="secondary small" disabled={busy} onClick={done}>Mark refund paid</button></div>
+      {err && <div>{err}</div>}
+    </div>
+  );
+}
+
 // ---------------- Inbox ----------------
 
 function Inbox({ templates, properties, initialBookingId, onUnreadChange }) {
@@ -201,6 +316,8 @@ function Inbox({ templates, properties, initialBookingId, onUnreadChange }) {
   const [note, setNote] = useState('');
   const [picking, setPicking] = useState(false);
   const [invoicing, setInvoicing] = useState(false);
+  const [changing, setChanging] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [q, setQ] = useState('');
   const [recipients, setRecipients] = useState([]);
   const endRef = useRef(null);
@@ -245,6 +362,16 @@ function Inbox({ templates, properties, initialBookingId, onUnreadChange }) {
     setNote(emailed ? 'Invoice sent, and emailed to the guest.' : 'Invoice sent. (No email copy: the guest will see it when they sign in.)');
     await Promise.all([loadThread(activeId), loadThreads()]);
   }
+  async function refreshThread(message) {
+    setChanging(false); setCancelling(false);
+    if (message) setNote(message);
+    await Promise.all([loadThread(activeId), loadThreads()]);
+  }
+  async function markChangePaid(offer) {
+    if (!window.confirm(`Mark ${fmtR(offer.totalCents)} as received? This updates the booking and calendar.`)) return;
+    try { await api.markChangePaid(activeId, offer.id); await refreshThread('Marked as paid. The booking is updated.'); }
+    catch (e) { setNote((e.data && e.data.message) || e.message); }
+  }
   async function closeEnquiry() {
     if (!window.confirm('Close this enquiry? The guest won’t be able to pay any invoice on it.')) return;
     try { await api.closeEnquiry(activeId); await Promise.all([loadThread(activeId), loadThreads()]); }
@@ -272,7 +399,7 @@ function Inbox({ templates, properties, initialBookingId, onUnreadChange }) {
           <p className="muted small">No conversations yet. Start one with ＋ New message, or set up ⏰ Scheduled messages.</p>
         ) : threads.map((t) => (
           <button key={t.booking.id} className={`msg-item${t.booking.id === activeId ? ' on' : ''}`} onClick={() => setActiveId(t.booking.id)}>
-            <span className="msg-item-top"><b>{t.booking.guestName || 'Guest'}</b>{t.booking.status === 'enquiry' && <span className="msg-enquiry-tag">Enquiry</span>}{t.unread > 0 && <span className="msg-dot">{t.unread}</span>}</span>
+            <span className="msg-item-top"><b>{t.booking.guestName || 'Guest'}</b>{t.booking.status === 'enquiry' && <span className="msg-enquiry-tag">Enquiry</span>}{t.booking.status === 'cancelled' && <span className="msg-enquiry-tag">Cancelled</span>}{t.unread > 0 && <span className="msg-dot">{t.unread}</span>}</span>
             <span className="muted small">{placeOf(t.booking)} · {fmtDay(t.booking.checkIn)} → {fmtDay(t.booking.checkOut)}</span>
             <span className="msg-snippet small">{t.last.sender === 'host' ? 'You: ' : ''}{t.last.body}</span>
           </button>
@@ -286,33 +413,39 @@ function Inbox({ templates, properties, initialBookingId, onUnreadChange }) {
               <button className="secondary msg-back" onClick={() => setActiveId(null)}>←</button>
               <div className="msg-summary">
                 <div>
-                  <b>{b.guestName || 'Guest'}</b>{b.status === 'enquiry' && <span className="msg-enquiry-tag">Enquiry</span>}{b.ref ? <span className="muted small"> · {b.ref}</span> : null}
+                  <b>{b.guestName || 'Guest'}</b>{b.status === 'enquiry' && <span className="msg-enquiry-tag">Enquiry</span>}{b.status === 'cancelled' && <span className="msg-enquiry-tag">Cancelled</span>}{b.ref ? <span className="muted small"> · {b.ref}</span> : null}
                   <div className="muted small">{placeOf(b)}{b.guestEmail ? ` · ${b.guestEmail}` : ''}</div>
                   <div className="small">{b.dayUse ? `${fmtDay(b.checkIn)} · day use` : <>{fmtDay(b.checkIn)} → {fmtDay(b.checkOut)} · {b.nights} night{b.nights === 1 ? '' : 's'}</>}</div>
                 </div>
                 <div className="msg-summary-price">
                   <b>{b.amountCents != null ? fmtR(b.amountCents) : thread.standardCents != null ? fmtR(thread.standardCents) : 'No price yet'}</b>
                   {thread.standardCents != null && b.amountCents != null && b.amountCents !== thread.standardCents && <div className="muted small">Standard {fmtR(thread.standardCents)}</div>}
-                  {b.paid ? <div className="small msg-paid">Paid</div> : b.paidCents > 0 ? <div className="muted small">{fmtR(b.paidCents)} paid</div> : null}
+                  {b.status === 'cancelled' ? <div className="muted small">{b.refundedAt ? `Refunded ${fmtR(b.refundDueCents || 0)}` : 'Cancelled'}</div> : b.paid ? <div className="small msg-paid">Paid</div> : b.paidCents > 0 ? <div className="muted small">{fmtR(b.paidCents)} paid</div> : null}
                 </div>
               </div>
             </div>
             {!b.reachable && (
               <div className="msg-warn">This booking has no guest email or SimonStays account, so nobody will see these messages. Add the guest’s email on the booking first.</div>
             )}
+            {b.status === 'cancelled' && !b.refundedAt && (b.refundDueCents > 0 || (b.refundDueCents == null && thread.cancel.paidCents > 0)) && <RefundBanner key={b.id} bookingId={activeId} booking={b} onDone={() => refreshThread('Refund recorded, and the guest has been told.')} />}
+            {b.status !== 'cancelled' && !b.refundedAt && b.refundDueCents > 0 && <RefundBanner key={b.id} bookingId={activeId} booking={b} onDone={() => refreshThread('Refund recorded, and the guest has been told.')} />}
             <div className="msg-bubbles">
               {thread.messages.length === 0 && <p className="muted small center">No messages yet.</p>}
               {thread.messages.map((m) => (
                 <div key={m.id} className={`msg-bubble ${m.sender}`}>
                   {m.scheduleName && <div className="msg-auto">⏰ {m.scheduleName}</div>}
                   <div className="msg-body">{m.body}</div>
-                  {m.offer && <InvoiceCard offer={m.offer} />}
+                  {m.offer && <InvoiceCard offer={m.offer} onMarkPaid={markChangePaid} />}
                   <div className="msg-meta">{fmtWhen(m.createdAt)}{m.sender === 'host' ? (m.readAt ? ' · Read' : m.emailedAt ? ' · Emailed' : '') : ''}</div>
                 </div>
               ))}
               <div ref={endRef} />
             </div>
-            {invoicing && thread.invoice && !thread.invoice.blocked ? (
+            {changing && !thread.change.blocked ? (
+              <ChangeComposer bookingId={activeId} booking={b} change={thread.change} onSent={(r) => refreshThread(r.applied ? 'The booking is updated, and the guest has been told.' : 'Change invoice sent. The booking updates once it is paid.')} onCancel={() => setChanging(false)} />
+            ) : cancelling && !thread.cancel.blocked ? (
+              <CancelPanel bookingId={activeId} cancel={thread.cancel} onDone={() => refreshThread('Booking cancelled, and the guest has been told.')} onClose={() => setCancelling(false)} />
+            ) : invoicing && thread.invoice && !thread.invoice.blocked ? (
               <InvoiceComposer bookingId={activeId} properties={properties} invoice={thread.invoice} standardCents={thread.standardCents} onSent={invoiceSent} onCancel={() => setInvoicing(false)} />
             ) : (
             <div className="msg-compose">
@@ -320,6 +453,12 @@ function Inbox({ templates, properties, initialBookingId, onUnreadChange }) {
                 <div className="msg-invoice-actions">
                   <button className="secondary" onClick={() => setInvoicing(true)}>🧾 Send an invoice</button>
                   {b.status === 'enquiry' && <button className="secondary" onClick={closeEnquiry}>Close enquiry</button>}
+                </div>
+              )}
+              {(!thread.change.blocked || !thread.cancel.blocked) && (
+                <div className="msg-invoice-actions">
+                  {!thread.change.blocked && <button className="secondary" onClick={() => setChanging(true)}>✏️ Change or add to this booking</button>}
+                  {!thread.cancel.blocked && <button className="secondary" onClick={() => setCancelling(true)}>Cancel booking</button>}
                 </div>
               )}
               {templates.length > 0 && (

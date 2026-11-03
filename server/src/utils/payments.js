@@ -77,6 +77,7 @@ async function reconcile(payment, { query = paygate.query } = {}) {
 
 // Money has been received for `payment` — update the booking.
 async function applyPaid(payment, txId) {
+  if (payment.kind === 'change') return require('./changes').applyPaidChange(payment, txId);
   const { checkAvailability } = require('./sync');
   const { onBookingConfirmed } = require('./bookingConfirmed');
   let booking = await prisma.booking.findUnique({ where: { id: payment.bookingId }, include: { unit: { include: { property: true } } } });
@@ -159,7 +160,7 @@ async function applyOfferTerms(offer, booking) {
 // Local testing only: settle an invoice with no gateway configured. The route
 // refuses this on Render, so it can never confirm a real stay without payment.
 async function completeSimulatedOffer(offer, booking) {
-  const payment = await prisma.payment.create({ data: { bookingId: booking.id, kind: 'booking', amountCents: offer.totalCents, provider: 'simulate', status: 'COMPLETE', offerId: offer.id } });
+  const payment = await prisma.payment.create({ data: { bookingId: booking.id, kind: offer.kind === 'change' ? 'change' : 'booking', amountCents: offer.totalCents, provider: 'simulate', status: 'COMPLETE', offerId: offer.id } });
   return applyPaid(payment, null);
 }
 

@@ -489,6 +489,10 @@ model Booking {
   // Guards the host's WhatsApp alert against double-sends and anchors the
   // "when a booking is confirmed" scheduled messages. Null on pre-existing rows.
   confirmedAt  DateTime?
+  cancelledAt  DateTime?
+  cancelledBy  String? // guest | host
+  refundDueCents Int? // owed back to the guest (policy, or a cheaper change); the host pays it
+  refundedAt   DateTime?
   sourceOfferId String? // set on the extra unit bookings an invoice with several stays creates
   dayUse       Boolean @default(false) // used within checkIn's date; checkOut is stored as the next day so that date blocks like one night
   messages     Message[]
@@ -575,8 +579,10 @@ model PriceOffer {
   bookingId    String
   booking      Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   token        String    @unique
+  kind         String    @default("booking") // booking | change (to a confirmed booking)
+  // kind 'change': {checkIn,checkOut,nights,amountCents,description}, new dates for this booking
   // kind 'stay': {unitId,propertyName,unitName,checkIn,checkOut,nights,nightlyCents,amountCents,description}
-  // kind 'charge': {description,amountCents,deposit}; negative amounts are discounts
+  // kind 'charge': {description,amountCents,deposit,applies,cleanDate}; negative amounts are discounts
   lines        Json
   totalCents   Int
   depositCents Int       @default(0) // the refundable part of the total
@@ -642,7 +648,7 @@ model Payment {
   bookingId   String
   booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   provider    String   @default("payfast")
-  kind        String   @default("booking") // 'booking' (first payment) | 'balance' (rest of a 50/50 split)
+  kind        String   @default("booking") // 'booking' (first payment) | 'balance' (rest of a 50/50 split) | 'change'
   amountCents Int
   status      String   @default("pending") // pending | COMPLETE | FAILED | CANCELLED (PayFast's payment_status)
   providerRef String?  @unique // pf_payment_id

@@ -487,7 +487,7 @@ router.get('/offers/:token', async (req, res, next) => {
     const b = o.booking, p = b.unit.property;
     res.set('Cache-Control', 'no-store').json({
       stays: staysOf(o).map((s) => ({ propertyName: s.propertyName, unitName: s.unitName, checkIn: s.checkIn, checkOut: s.checkOut, nights: s.nights, dayUse: !!s.dayUse })),
-      state: offerState(o, b), lines: o.lines, totalCents: o.totalCents, depositCents: o.depositCents || 0, expiresAt: o.expiresAt,
+      state: offerState(o, b), kind: o.kind || 'booking', lines: o.lines, totalCents: o.totalCents, depositCents: o.depositCents || 0, expiresAt: o.expiresAt,
       ref: b.ref || null, guestName: b.guestName || null, status: b.status,
       property: p.name, unit: b.unit.name, address: p.address || null,
       checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
@@ -509,11 +509,17 @@ router.post('/offers/:token/pay', async (req, res, next) => {
     const b = o.booking, state = offerState(o, b);
     if (state !== 'open') return res.status(409).json({ error: `offer_${state}`, state, message: 'This invoice can no longer be paid. Please message your host.' });
     if (!(req.body || {}).acceptedTerms) return res.status(400).json({ error: 'terms_required', message: 'Please accept the cancellation policy and the Terms & Conditions.' });
-    const stays = staysOf(o).length ? staysOf(o) : [{ unitId: b.unitId, checkIn: iso(b.checkIn), checkOut: iso(b.checkOut) }];
+    const isChange = o.kind === 'change';
+    const newDates = isChange ? o.lines.find((l) => l.kind === 'change') : null;
+    const stays = isChange
+      ? (newDates ? [{ unitId: b.unitId, checkIn: newDates.checkIn, checkOut: newDates.checkOut }] : [])
+      : (staysOf(o).length ? staysOf(o) : [{ unitId: b.unitId, checkIn: iso(b.checkIn), checkOut: iso(b.checkOut) }]);
     if (await firstClash(stays, b.id)) return res.status(409).json({ error: 'dates_unavailable', message: 'Sorry, those dates have since been booked, so no payment was taken. Please message your host.' });
-    await prisma.booking.update({ where: { id: b.id }, data: { termsAcceptedAt: new Date() } });
+    if (!isChange) await prisma.booking.update({ where: { id: b.id }, data: { termsAcceptedAt: new Date() } });
 
     if ((req.body || {}).method === 'eft') {
+      // The booking stands as it is; the host marks the change paid when the money arrives.
+      if (isChange) return res.json({ mode: 'eft', ref: b.ref || null, eft: await eftFor(b.unit.property.hostId) });
       // Now a real hold on the board, waiting for the host to confirm the money.
       const share = splitOf(o).primaryCents;
       const held = await prisma.booking.update({
@@ -528,7 +534,7 @@ router.post('/offers/:token/pay', async (req, res, next) => {
       await payments.completeSimulatedOffer(o, b);
       return res.json({ mode: 'simulate' });
     }
-    res.json(await payments.createCheckout(b, o.totalCents, { base: siteBase(req), offerId: o.id }));
+    res.json(await payments.createCheckout(b, o.totalCents, { base: siteBase(req), offerId: o.id, kind: isChange ? 'change' : 'booking' }));
   } catch (e) { next(e); }
 });
 

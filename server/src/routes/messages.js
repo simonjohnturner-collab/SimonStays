@@ -6,6 +6,7 @@ const prisma = require('../lib/prisma');
 const { authHost } = require('../middleware/auth');
 const messaging = require('../utils/messaging');
 const offers = require('../utils/offers');
+const changes = require('../utils/changes');
 const { shownCheckOut, shownNights } = require('../utils/ical');
 
 const router = express.Router();
@@ -24,6 +25,7 @@ function bookingSummary(b) {
     nights: shownNights(b), dayUse: !!b.dayUse,
     amountCents: b.quotedCents != null ? b.quotedCents : (b.totalCents != null ? b.totalCents : null),
     paidCents: b.amountPaidCents || 0, paid: !!b.paid,
+    refundDueCents: b.refundDueCents, refundedAt: b.refundedAt, cancelledBy: b.cancelledBy || null,
     // Can the guest actually read messages (an email to copy to, or a shopfront account)?
     reachable: !!(b.guestEmail || b.guestAccountId),
   };
@@ -122,10 +124,12 @@ router.get('/booking/:bookingId', async (req, res, next) => {
     await prisma.message.updateMany({ where: { bookingId: b.id, sender: 'guest', readAt: null }, data: { readAt: new Date() } });
     const standard = await offers.standardQuote(b).catch(() => null);
     const sent = messages.filter((m) => m.offer).map((m) => m.offer);
-    const latest = sent[sent.length - 1] || null;
-    const headline = sent.find((o) => o.status === 'paid') || latest; // what this conversation costs
+    const invoices = sent.filter((o) => o.kind !== 'change');
+    const latest = invoices[invoices.length - 1] || null;
+    const invoiced = offers.conversationCents(sent);
+    const rc = b.unit && b.unit.pricingGroup;
     res.json({
-      booking: { ...bookingSummary(b), amountCents: headline ? headline.totalCents : bookingSummary(b).amountCents },
+      booking: { ...bookingSummary(b), amountCents: invoiced != null ? invoiced : bookingSummary(b).amountCents },
       // The pricing sheet only compares fairly with an invoice for this one unit.
       standardCents: standard && !b.dayUse && !(latest && offers.staysOf(latest).length > 1) ? standard.totalCents : null,
       invoice: {
@@ -133,6 +137,12 @@ router.get('/booking/:bookingId', async (req, res, next) => {
         draftLines: offers.draftFor(latest, standard, b),
         validHours: offers.OFFER_HOURS,
       },
+      change: {
+        blocked: changes.changeBlock(b),
+        validHours: offers.OFFER_HOURS,
+        lateCents: rc ? rc.lateCheckOutCents || 0 : 0, earlyCents: rc ? rc.earlyCheckInCents || 0 : 0, cleanCents: rc ? rc.cleaningCents || 0 : 0,
+      },
+      cancel: await changes.cancelQuote(b, 'host'),
       messages: messages.map((m) => ({
         id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt,
         emailedAt: m.emailedAt, scheduleName: m.schedule ? m.schedule.name : (m.scheduleId ? 'Scheduled message' : null),
@@ -161,6 +171,47 @@ router.post('/booking/:bookingId/invoice', async (req, res, next) => {
     const r = await offers.sendOffer(b, req.body || {});
     if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
     res.status(201).json({ offer: offers.offerOut(r.offer, b), emailed: !!r.message.emailedAt });
+  } catch (e) { next(e); }
+});
+
+// POST /messages/booking/:bookingId/change { lines, note } — invoice a change to a confirmed booking.
+router.post('/booking/:bookingId/change', async (req, res, next) => {
+  try {
+    const b = await loadOwnedBooking(req, res); if (!b) return;
+    const r = await changes.sendChange(b, req.body || {});
+    if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
+    res.status(201).json({ offer: offers.offerOut(r.offer, b), applied: r.applied, emailed: !!r.message.emailedAt });
+  } catch (e) { next(e); }
+});
+
+// POST /messages/booking/:bookingId/offers/:offerId/mark-paid — an EFT arrived for a change invoice.
+router.post('/booking/:bookingId/offers/:offerId/mark-paid', async (req, res, next) => {
+  try {
+    const b = await loadOwnedBooking(req, res); if (!b) return;
+    const r = await changes.markChangePaid(b, req.params.offerId);
+    if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// POST /messages/booking/:bookingId/cancel { refundCents } — cancel; the refund defaults to the policy's.
+router.post('/booking/:bookingId/cancel', async (req, res, next) => {
+  try {
+    const b = await loadOwnedBooking(req, res); if (!b) return;
+    const raw = (req.body || {}).refundCents;
+    const r = await changes.cancelBooking(b, { by: 'host', refundCents: raw == null ? null : Number(raw) });
+    if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
+    res.json({ ok: true, refundCents: r.refundCents });
+  } catch (e) { next(e); }
+});
+
+// POST /messages/booking/:bookingId/refund { refundCents } — the host has paid the refund back.
+router.post('/booking/:bookingId/refund', async (req, res, next) => {
+  try {
+    const b = await loadOwnedBooking(req, res); if (!b) return;
+    const r = await changes.markRefunded(b, Number((req.body || {}).refundCents));
+    if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 

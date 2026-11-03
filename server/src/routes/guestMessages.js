@@ -9,13 +9,13 @@ const { dateOnly, shownCheckOut, shownNights } = require('../utils/ical');
 const { quote } = require('../utils/pricing');
 const { overridesFor } = require('../utils/nightPrices');
 const { alertHost } = require('../utils/payments');
-const { offerOut } = require('../utils/offers');
+const { offerOut, conversationCents, INVOICEABLE_SOURCES } = require('../utils/offers');
+const changes = require('../utils/changes');
 
-// What this conversation costs: the paid invoice, else the latest, else the booking.
+// What this conversation costs: its invoices, else the booking.
 function amountOf(b) {
-  const sent = b.messages.filter((m) => m.offer).map((m) => m.offer);
-  const o = sent.find((x) => x.status === 'paid') || sent[sent.length - 1];
-  if (o) return o.totalCents;
+  const invoiced = conversationCents(b.messages.filter((m) => m.offer).map((m) => m.offer));
+  if (invoiced != null) return invoiced;
   return b.quotedCents != null ? b.quotedCents : (b.totalCents != null ? b.totalCents : null);
 }
 
@@ -58,6 +58,8 @@ router.get('/', async (req, res, next) => {
       checkIn: iso(b.checkIn), checkOut: iso(shownCheckOut(b)),
       nights: shownNights(b), dayUse: !!b.dayUse,
       amountCents: amountOf(b),
+      canRequest: b.status === 'confirmed' && INVOICEABLE_SOURCES.includes(b.source),
+      refundDueCents: b.refundDueCents, refundedAt: b.refundedAt,
       messages: b.messages.map((m) => msgOut(m, b)),
       unread: b.messages.filter((m) => m.sender === 'host' && !m.readAt).length,
     }));
@@ -139,6 +141,26 @@ router.post('/:bookingId/read', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /public/account/messages/:bookingId/cancel — what cancelling would refund.
+router.get('/:bookingId/cancel', async (req, res, next) => {
+  try {
+    const acct = await accountOf(req, res); if (!acct) return;
+    const b = await ownedBooking(req, res, acct); if (!b) return;
+    res.json(await changes.cancelQuote(b, 'guest'));
+  } catch (e) { next(e); }
+});
+
+// POST /public/account/messages/:bookingId/cancel — the guest cancels; the refund follows the policy.
+router.post('/:bookingId/cancel', async (req, res, next) => {
+  try {
+    const acct = await accountOf(req, res); if (!acct) return;
+    const b = await ownedBooking(req, res, acct); if (!b) return;
+    const r = await changes.cancelBooking(b, { by: 'guest' });
+    if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
+    res.json({ ok: true, refundCents: r.refundCents });
+  } catch (e) { next(e); }
+});
+
 // POST /public/account/messages/:bookingId { body } — the guest replies.
 router.post('/:bookingId', async (req, res, next) => {
   try {
@@ -148,7 +170,7 @@ router.post('/:bookingId', async (req, res, next) => {
     if (!body) return res.status(400).json({ error: 'empty', message: 'Type a message first.' });
     const hostId = b.hostId || (b.unit && b.unit.property.hostId);
     const m = await prisma.message.create({ data: { hostId, bookingId: b.id, sender: 'guest', body } });
-    if (b.status === 'enquiry') alertHost(b, `💬 Enquiry reply from ${b.guestName || 'guest'}${b.ref ? ` (${b.ref})` : ''}\n\n${body.slice(0, 300)}`);
+    if (b.status === 'enquiry' || (req.body || {}).request) alertHost(b, `💬 ${b.status === 'enquiry' ? 'Enquiry reply' : 'Booking request'} from ${b.guestName || 'guest'}${b.ref ? ` (${b.ref})` : ''}\n\n${body.slice(0, 300)}`);
     res.status(201).json({ message: msgOut(m, b) });
   } catch (e) { next(e); }
 });

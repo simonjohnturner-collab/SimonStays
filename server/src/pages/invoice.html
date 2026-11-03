@@ -57,7 +57,9 @@
       '<div class="row tot"><span>Total</span><span>'+rand(d.totalCents)+'</span></div>'+
       (d.depositCents?'<div class="muted" style="margin-top:6px">Includes a refundable deposit of '+rand(d.depositCents)+', returned after checkout subject to no damage.</div>':'')+'</div>';
   }
-  function eftBox(ref,eft){
+  function eftBox(ref,eft,isChange){
+    if(isChange&&eft) return '<div class="card"><b>Pay by EFT or deposit</b><div class="muted" style="margin:4px 0 8px">Your booking updates once your payment is received.</div>'+
+      [eft.accountName&&('Account name: '+esc(eft.accountName)),eft.bankName&&('Bank: '+esc(eft.bankName)),eft.accountNumber&&('Account no.: '+esc(eft.accountNumber)),eft.branch&&('Branch: '+esc(eft.branch)),ref&&('<b>Reference: '+esc(ref)+'</b>')].filter(Boolean).map(function(x){ return '<div>'+x+'</div>'; }).join('')+'</div>';
     if(!eft) return '<div class="card"><p>Your dates aren’t held until payment is received. Please message your host for the bank details and quote reference <b>'+esc(ref||'')+'</b>.</p></div>';
     return '<div class="card"><b>Pay by EFT or deposit</b><div class="muted" style="margin:4px 0 8px">Your booking is confirmed once your payment is received. Your dates aren’t held until then.</div>'+
       [eft.accountName&&('Account name: '+esc(eft.accountName)),eft.bankName&&('Bank: '+esc(eft.bankName)),eft.accountNumber&&('Account no.: '+esc(eft.accountNumber)),eft.branch&&('Branch: '+esc(eft.branch)),ref&&('<b>Reference: '+esc(ref)+'</b>')].filter(Boolean).join('<br>')+'</div>';
@@ -67,6 +69,7 @@
     return '<div class="card info">'+esc(notes[d.state]||'This invoice can no longer be paid.')+'</div>';
   }
   function paidNote(d){
+    if(d.kind==='change') return '<div class="card"><div class="ok">✅ Payment received. Your booking has been updated.</div><p class="muted" style="margin-bottom:0">See it under <a href="/">My trips</a> on SimonStays.</p></div>';
     if(d.status==='confirmed') return '<div class="card"><div class="ok">✅ Payment received. You’re booked!</div><p class="muted" style="margin-bottom:0">Find this stay under <a href="/">My trips</a> on SimonStays.</p></div>';
     return '<div class="card info">Payment received, but your booking still needs your host’s attention. They will contact you shortly.</div>';
   }
@@ -98,7 +101,7 @@
         Object.keys(p.fields).forEach(function(k){ var i=document.createElement('input'); i.type='hidden'; i.name=k; i.value=p.fields[k]; f.appendChild(i); });
         document.body.appendChild(f); f.submit(); return;
       }
-      if(p.mode==='eft'){ app.innerHTML=summary(d)+eftBox(p.ref,p.eft); return; }
+      if(p.mode==='eft'){ app.innerHTML=summary(d)+eftBox(p.ref,p.eft,d.kind==='change'); return; }
       load();
     }catch(e){ btn.disabled=false; btn.textContent=label; err.innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
   }
