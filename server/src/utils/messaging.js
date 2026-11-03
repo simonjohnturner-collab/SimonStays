@@ -38,6 +38,11 @@ const SHORTCUTS = [
   { key: 'parking', label: 'Parking', hint: 'Parking notes' },
   { key: 'hostName', label: 'Host Name', hint: 'Your name' },
   { key: 'documentsLink', label: 'Documents Link', hint: 'Link to this property’s shared documents' },
+  { key: 'earlyCheckInFee', label: 'Early Check In Fee', hint: 'From the unit’s pricing' },
+  { key: 'lateCheckOutFee', label: 'Late Check Out Fee', hint: 'From the unit’s pricing' },
+  { key: 'cleaningFee', label: 'Cleaning Fee', hint: 'Per clean, from the unit’s pricing' },
+  { key: 'extraMattressFee', label: 'Extra Mattress Fee', hint: 'From the unit’s pricing' },
+  { key: 'breakageDeposit', label: 'Breakage Deposit', hint: 'Refundable, from the unit’s pricing' },
 ];
 const PLACEHOLDERS = SHORTCUTS.map((s) => s.key);
 
@@ -45,7 +50,7 @@ const shortcutId = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
 const SHORTCUT_KEYS = new Map(SHORTCUTS.map((s) => [shortcutId(s.key), s.key]));
 
 // Booking include that carries everything the placeholders need.
-const BOOKING_INCLUDE = { unit: { include: { property: { include: { host: { select: { name: true } } } } } } };
+const BOOKING_INCLUDE = { unit: { include: { pricingGroup: true, property: { include: { host: { select: { name: true } } } } } } };
 
 const { shownCheckOut, shownNights } = require('./ical');
 const iso = (d) => new Date(d).toISOString().slice(0, 10);
@@ -58,6 +63,9 @@ function firstName(name) { return String(name || '').trim().split(/\s+/)[0] || '
 function valuesFor(b) {
   const u = b.unit || {};
   const p = u.property || {};
+  const g = u.pricingGroup || {};
+  // A fee of 0 means none is set on the rate card, not that it's free.
+  const fee = (cents) => (cents ? fmtRand(cents) : '');
   return {
     guestName: b.guestName || '',
     firstName: firstName(b.guestName),
@@ -76,6 +84,11 @@ function valuesFor(b) {
     parking: u.parkingNotes || p.parkingNotes || '',
     hostName: (p.host && p.host.name) || 'SimonStays',
     documentsLink: p.id ? folderLink(p.id) : '',
+    earlyCheckInFee: fee(g.earlyCheckInCents),
+    lateCheckOutFee: fee(g.lateCheckOutCents),
+    cleaningFee: fee(g.cleaningCents),
+    extraMattressFee: fee(g.mattressCents),
+    breakageDeposit: fee(g.breakageDepositCents),
   };
 }
 
