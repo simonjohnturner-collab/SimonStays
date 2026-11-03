@@ -647,10 +647,17 @@ function describe(s, properties) {
 
 const scheduleRow = (s) => ({ ...s, templateId: s.templateId || '', body: s.body || '' });
 
+// The ideas this host has dismissed, remembered in this browser.
+const HIDDEN_IDEAS_KEY = 'staysync_hidden_ideas';
+function readHiddenIdeas() {
+  try { return JSON.parse(localStorage.getItem(HIDDEN_IDEAS_KEY)) || []; } catch { return []; }
+}
+
 function Scheduled({ templates, shortcuts, properties }) {
   const [rows, setRows] = useState(null);
   const [activeKey, setActiveKey] = useState(null);
   const [msg, setMsg] = useState('');
+  const [hiddenIdeas, setHiddenIdeas] = useState(readHiddenIdeas);
   const bodyEl = useRef(null);
   const nextDraft = useRef(0);
   const flash = (t) => { setMsg(t); setTimeout(() => setMsg(''), 1800); };
@@ -677,13 +684,20 @@ function Scheduled({ templates, shortcuts, properties }) {
       flash('Saved.');
     } catch (e) { setMsg((e.data && e.data.message) || e.message); }
   }
+  function saveHiddenIdeas(names) {
+    setHiddenIdeas(names);
+    try { localStorage.setItem(HIDDEN_IDEAS_KEY, JSON.stringify(names)); } catch { /* still hidden for this visit */ }
+  }
   async function remove(r, key) {
     if (r.id) {
-      if (!window.confirm(`Delete the scheduled message “${r.name}”?`)) return;
-      try { await api.deleteMessageSchedule(r.id); } catch (e) { setMsg(e.message); return; }
-    }
+      if (!window.confirm(`Delete the scheduled message “${r.name}”? It stops sending. Messages already sent stay in the guest’s conversation.`)) return;
+      try { await api.deleteMessageSchedule(r.id); } catch (e) { setMsg((e.data && e.data.message) || e.message); return; }
+    } else if ((r.name || r.body) && !window.confirm(`Discard the draft “${r.name || 'Untitled message'}”?`)) return;
     setRows((rs) => rs.filter((x) => keyOf(x) !== key));
-    setActiveKey(null);
+    setActiveKey((k) => (k === key ? null : k));
+    // Otherwise a deleted message comes straight back as an idea.
+    const idea = SUGGESTED.find((s) => s.name.toLowerCase() === r.name.trim().toLowerCase());
+    if (idea && !hiddenIdeas.includes(idea.name)) saveHiddenIdeas([...hiddenIdeas, idea.name]);
   }
 
   if (!rows) return <div className="gb-wrap"><p className="muted small">{msg || 'Loading…'}</p></div>;
@@ -694,7 +708,7 @@ function Scheduled({ templates, shortcuts, properties }) {
   const n = r ? Math.abs(r.offsetDays) : 0;
   const setOffset = (d, num) => edit(key, { offsetDays: d === 'on' ? 0 : (d === 'before' ? -1 : 1) * Math.max(1, num || 1) });
   const taken = new Set(rows.map((x) => x.name.trim().toLowerCase()));
-  const ideas = SUGGESTED.filter((s) => !taken.has(s.name.toLowerCase()));
+  const ideas = SUGGESTED.filter((s) => !taken.has(s.name.toLowerCase()) && !hiddenIdeas.includes(s.name));
 
   return (
     <>
@@ -707,19 +721,26 @@ function Scheduled({ templates, shortcuts, properties }) {
           <button className="wide" onClick={() => startDraft({})}>➕ New scheduled message</button>
           {rows.length === 0 && <p className="muted small">None set up yet.</p>}
           {rows.map((x) => (
-            <button key={keyOf(x)} className={`msg-item${keyOf(x) === activeKey ? ' on' : ''}`} onClick={() => setActiveKey(keyOf(x))}>
-              <b>{x.name || 'Untitled message'}</b>
-              <span className="muted small">{describe(x, properties)}</span>
-              <span className={`msg-item-state${!x.id || x.dirty ? ' draft' : x.active ? '' : ' off'}`}>{!x.id ? 'Draft, not created yet' : x.dirty ? 'Unsaved changes' : x.active ? `Active · sent ${x.sentCount}×` : `Off · sent ${x.sentCount}×`}</span>
-            </button>
+            <div key={keyOf(x)} className="msg-item-wrap">
+              <button className={`msg-item${keyOf(x) === activeKey ? ' on' : ''}`} onClick={() => setActiveKey(keyOf(x))}>
+                <b>{x.name || 'Untitled message'}</b>
+                <span className="muted small">{describe(x, properties)}</span>
+                <span className={`msg-item-state${!x.id || x.dirty ? ' draft' : x.active ? '' : ' off'}`}>{!x.id ? 'Draft, not created yet' : x.dirty ? 'Unsaved changes' : x.active ? `Active · sent ${x.sentCount}×` : `Off · sent ${x.sentCount}×`}</span>
+              </button>
+              <button type="button" className="msg-item-del" title={x.id ? 'Delete' : 'Discard'} aria-label={`${x.id ? 'Delete' : 'Discard'} ${x.name || 'Untitled message'}`} onClick={() => remove(x, keyOf(x))}>🗑</button>
+            </div>
           ))}
           {ideas.length > 0 && <div className="msg-sched-head">Ideas to start from</div>}
           {ideas.map((s) => (
-            <button key={s.name} className="msg-item" onClick={() => startDraft(s)}>
-              <b>＋ {s.name}</b>
-              <span className="muted small">{describe({ ...BLANK, ...s }, properties)}</span>
-            </button>
+            <div key={s.name} className="msg-item-wrap">
+              <button className="msg-item" onClick={() => startDraft(s)}>
+                <b>＋ {s.name}</b>
+                <span className="muted small">{describe({ ...BLANK, ...s }, properties)}</span>
+              </button>
+              <button type="button" className="msg-item-del" title="Remove this idea" aria-label={`Remove the idea ${s.name}`} onClick={() => saveHiddenIdeas([...hiddenIdeas, s.name])}>✕</button>
+            </div>
           ))}
+          {hiddenIdeas.length > 0 && <button type="button" className="msg-link small" onClick={() => saveHiddenIdeas([])}>Show removed ideas</button>}
         </aside>
 
         {!r ? <p className="muted msg-sched-empty">Pick a scheduled message, or start a new one.</p> : (

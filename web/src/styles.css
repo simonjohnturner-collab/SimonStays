@@ -935,6 +935,10 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .msg-sched-layout .sp-card { margin-bottom:0; }
 .msg-sched-head { margin:10px 0 2px; font-size:12px; font-weight:600; color:var(--muted); }
 .msg-sched-empty { padding:40px 16px; text-align:center; }
+.msg-item-wrap { position:relative; display:flex; flex-direction:column; flex-shrink:0; }
+.msg-item-wrap .msg-item b { padding-right:24px; }
+button.msg-item-del { position:absolute; top:5px; right:5px; padding:2px 6px; font-size:13px; background:transparent; color:var(--muted); }
+button.msg-item-del:hover { background:#fdecea; color:var(--red); }
 .msg-item-state { font-size:11px; font-weight:600; color:var(--green-d); }
 .msg-item-state.off { color:var(--muted); }
 .msg-item-state.draft { color:#8a5a00; }
