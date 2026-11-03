@@ -8,6 +8,8 @@ function authHost(req, res, next) {
   if (!token) return res.status(401).json({ error: 'missing_token' });
   try {
     const payload = verify(token);
+    // Guests sign in with the same key: their tokens carry no hostId and must stop here.
+    if (!payload.hostId) return res.status(401).json({ error: 'invalid_token' });
     req.hostId = payload.hostId;
     next();
   } catch (e) {
