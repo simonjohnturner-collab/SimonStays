@@ -95,7 +95,8 @@ async function cancelBooking(b, { by, refundCents = null, now = new Date() }) {
   const hostId = b.hostId || b.unit?.property?.hostId;
   if (by === 'guest') await prisma.message.create({ data: { hostId, bookingId: b.id, sender: 'guest', body: `I have cancelled this booking: ${q.places.join(', ')}.` } });
   const money = !q.paidCents ? '' : refund == null ? ' Your host will confirm your refund.' : refund > 0 ? ` A refund of ${rand(refund)} is due in line with the cancellation policy. Your host will pay it back and let you know.` : ' Under the cancellation policy, no refund is due.';
-  await messaging.sendHostMessage(b.id, `This booking has been cancelled: ${q.places.join(', ')}.${money}`);
+  await messaging.sendHostMessage(b.id, `This booking has been cancelled: ${q.places.join(', ')}.`);
+  if (money) await messaging.sendHostMessage(b.id, money.trim(), { bookerOnly: true });
   alertHost(b, `❌ Booking cancelled by ${by === 'guest' ? 'the guest' : 'you'}: ${q.places.join(', ')}\n👤 ${b.guestName || 'Guest'}${b.ref ? ` · ${b.ref}` : ''}\n${refund == null ? 'Refund: for you to decide' : `Refund due: ${rand(refund)}`}`);
   return { ok: true, refundCents: refund, places: q.places };
 }
@@ -108,7 +109,7 @@ async function markRefunded(b, refundCents, now = new Date()) {
   if (b.status !== 'cancelled' && !b.refundDueCents) return { error: 'no_refund', status: 400, message: 'No refund is due on this booking.' };
   if (b.refundedAt) return { error: 'already_refunded', status: 409, message: 'This refund is already marked as paid.' };
   await prisma.booking.update({ where: { id: b.id }, data: { refundDueCents: refundCents, refundedAt: now } });
-  if (refundCents > 0) await messaging.sendHostMessage(b.id, `Your refund of ${rand(refundCents)} has been paid.`);
+  if (refundCents > 0) await messaging.sendHostMessage(b.id, `Your refund of ${rand(refundCents)} has been paid.`, { bookerOnly: true });
   return { ok: true };
 }
 
@@ -213,7 +214,8 @@ async function applyChange(offer, b, receivedCents) {
 
   const what = lines.map((l) => l.description).join(', ');
   const refund = offer.totalCents < 0 ? ` A refund of ${rand(-offer.totalCents)} is due. Your host will pay it back and let you know.` : '';
-  await messaging.sendHostMessage(b.id, clash ? 'Payment received, thanks. Those dates have since been taken, so your host will contact you to sort this out.' : `Your booking has been updated: ${what}.${refund}`);
+  await messaging.sendHostMessage(b.id, clash ? 'Payment received, thanks. Those dates have since been taken, so your host will contact you to sort this out.' : `Your booking has been updated: ${what}.`);
+  if (refund && !clash) await messaging.sendHostMessage(b.id, refund.trim(), { bookerOnly: true });
   alertHost(b, clash
     ? `⚠ Change PAID but dates taken: ${placeOf(b)}\n👤 ${b.guestName || 'Guest'}${b.ref ? ` · ${b.ref}` : ''}\nRefund or move them.`
     : `✏️ Booking changed: ${placeOf(b)}\n👤 ${b.guestName || 'Guest'}${b.ref ? ` · ${b.ref}` : ''}\n${what}${receivedCents ? `\n${rand(receivedCents)} received` : ''}`);

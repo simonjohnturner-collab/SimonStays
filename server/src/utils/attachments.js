@@ -34,7 +34,7 @@ async function addProof(booking, { filename, data }) {
   const name = cleanName(filename);
   const message = await prisma.message.create({
     data: {
-      hostId, bookingId: booking.id, sender: 'guest',
+      hostId, bookingId: booking.id, sender: 'guest', bookerOnly: true,
       body: `📎 Proof of payment${booking.ref ? ` for ${booking.ref}` : ''}: ${name}`,
       attachments: { create: { data: buf, contentType, filename: name } },
     },

@@ -224,6 +224,11 @@
   .trip-pay{ margin-top:10px; }
   @media(max-width:640px){ .gallery{ grid-template-columns:1fr 1fr; } .gallery .g0{ grid-column:span 2; } .trip{ flex-direction:column; } .trip-thumb{ width:100%; height:170px; } }
   .bub a{ color:inherit; text-decoration:underline; word-break:break-all; }
+  .th-people{ margin:8px 0; }
+  .th-who{ font-size:13px; margin-bottom:6px; }
+  .th-x{ background:none; color:var(--muted); padding:0 2px; font-size:12px; text-decoration:underline; }
+  .th-x:hover{ background:none; color:var(--red); }
+  #inviteLink{ margin:6px 0; font-size:13px; }
 </style>
 </head>
 <body>
@@ -1140,7 +1145,7 @@
         var last=t.messages[t.messages.length-1];
         return '<button class="th-item" data-id="'+esc(t.bookingId)+'"><div class="th-top"><span>'+place(t)+'</span>'+(t.unread?'<span class="badge pending">'+t.unread+' new</span>':'')+'</div>'+
           '<div class="trip-sub">📅 '+(t.dayUse?esc(fmtShort(t.checkIn))+' · day use':esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut)))+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div>'+
-          '<div class="th-snip">'+(last?((last.sender==='guest'?'You: ':'')+esc(last.body)):'No messages yet — tap to message your host')+'</div></button>';
+          '<div class="th-snip">'+(last?((last.sender==='guest'&&last.mine?'You: ':'')+esc(last.body)):'No messages yet — tap to message your host')+'</div></button>';
       }).join('');
       body.querySelectorAll('.th-item').forEach(function(b){ b.onclick=function(){ thread(b.getAttribute('data-id')); }; });
       clearInterval(INBOX_POLL);
@@ -1150,12 +1155,45 @@
       if(!t){ list(); return; }
       body.innerHTML=(threads.length>1?'<button class="th-back">← All messages</button>':'')+
         '<div class="th-head"><div><div class="trip-nm">'+esc(t.guestName||'')+(t.status==='enquiry'?' <span class="badge pending">Enquiry</span>':t.status==='cancelled'?' <span class="badge cancelled">Cancelled</span>':'')+'</div><div class="trip-sub">'+place(t)+'</div><div class="trip-sub">📅 '+(t.dayUse?esc(fmtShort(t.checkIn))+' · day use':esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut))+' · '+t.nights+' night'+(t.nights===1?'':'s'))+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div></div>'+(t.amountCents!=null?'<div class="th-amt">'+rand(t.amountCents)+'</div>':'')+'</div>'+
-        '<div class="bubbles">'+(t.messages.length?t.messages.map(function(m){ return '<div class="bub '+(m.sender==='guest'?'guest':'host')+'">'+linkify(esc(m.body))+(m.offer?invoiceCard(m.offer):'')+'<span class="when">'+(m.sender==='guest'?'You · ':'Host · ')+esc(fmtWhen(m.createdAt))+'</span></div>'; }).join(''):'<p class="note" style="text-align:center">No messages yet. Write to your host below.</p>')+'</div>'+
+        '<div class="th-people" id="thPeople"></div>'+
+        '<div class="bubbles">'+(t.messages.length?t.messages.map(function(m){ return '<div class="bub '+(m.sender==='guest'?'guest':'host')+'">'+linkify(esc(m.body))+(m.offer?invoiceCard(m.offer):'')+'<span class="when">'+(m.sender==='guest'?(m.mine?'You':esc(m.authorName||t.guestName||'Guest'))+' · ':'Host · ')+esc(fmtWhen(m.createdAt))+'</span></div>'; }).join(''):'<p class="note" style="text-align:center">No messages yet. Write to your host below.</p>')+'</div>'+
         (t.refundDueCents>0?'<div class="note" style="margin-top:10px">'+(t.refundedAt?'✅ Your refund of '+rand(t.refundDueCents)+' has been paid.':'Refund due to you: <b>'+rand(t.refundDueCents)+'</b>. Your host will pay it back and let you know.')+'</div>':'')+
         (t.canRequest?'<div class="th-actions"><button class="th-act" data-act="dates">Change dates</button><button class="th-act" data-act="late">Late checkout</button><button class="th-act" data-act="clean">Extra clean</button><button class="th-act danger" data-act="cancel">Cancel booking</button></div><div id="actBox"></div>':'')+
         (t.status==='pending'?'<div class="note" style="margin-top:10px">Paying by EFT? <a href="/proof/'+encodeURIComponent(t.bookingId)+'" target="_blank" rel="noopener"><b>📎 Send your proof of payment</b></a></div>':'')+
         '<div class="reply"><textarea id="replyTxt" rows="2" placeholder="Write a message…"></textarea><button id="replyBtn">Send</button></div><div id="rmsg"></div>';
       var bub=body.querySelector('.bubbles'); bub.scrollTop=bub.scrollHeight;
+      drawPeople();
+      // Who else is on this trip, and (for the booker) inviting a friend.
+      function drawPeople(link){
+        var box=body.querySelector('#thPeople'), who=t.people||[];
+        box.innerHTML=(t.isBooker?'':'<div class="note">'+esc(t.guestName||'The booker')+' shared this trip with you. You can see the trip details and messages here.</div>')+
+          (who.length?'<div class="th-who">👥 On this trip: <b>'+esc(t.guestName||'Booker')+'</b>'+who.map(function(p){ return ', '+esc(p.me?'you':p.name)+(t.isBooker||p.me?' <button class="th-x" data-id="'+esc(p.id)+'">'+(p.me?'Leave trip':'Remove')+'</button>':''); }).join('')+'</div>':'')+
+          (t.isBooker&&t.status!=='cancelled'?'<button class="th-act" id="inviteBtn">👥 Invite a friend to this trip</button>':'')+
+          (link?'<div class="act-box"><b>Send this link to your friend</b><input id="inviteLink" readonly value="'+esc(link)+'"><div class="act-row"><button class="th-act" id="inviteCopy">Copy link</button></div><p class="note">It works once and lasts 14 days. They sign in or create an account, then see this trip, its door code and these messages. They don’t see what you paid, and can’t change or cancel the booking.</p></div>':'')+
+          '<div id="peopleErr"></div>';
+        var inv=box.querySelector('#inviteBtn');
+        if(inv) inv.onclick=async function(){
+          this.disabled=true;
+          try{
+            var r=await fetch(API+'/public/account/messages/'+encodeURIComponent(id)+'/invite',{method:'POST',headers:authHeaders()});
+            var d=await r.json();
+            if(!r.ok) throw new Error(d.message||'Could not make a link. Please try again.');
+            drawPeople(d.link);
+          }catch(e){ this.disabled=false; box.querySelector('#peopleErr').innerHTML='<div class="msg err">'+esc(e.message)+'</div>'; }
+        };
+        var copy=box.querySelector('#inviteCopy');
+        if(copy) copy.onclick=function(){
+          var field=box.querySelector('#inviteLink'), btn=this;
+          field.select();
+          (navigator.clipboard?navigator.clipboard.writeText(field.value):Promise.reject()).then(function(){ btn.textContent='Copied ✓'; }).catch(function(){ btn.textContent='Select and copy the link above'; });
+        };
+        box.querySelectorAll('.th-x').forEach(function(x){ x.onclick=async function(){
+          var pid=this.getAttribute('data-id'), self=pid===(who.find(function(p){ return p.me; })||{}).id;
+          if(!window.confirm(self?'Leave this trip? You won’t see it or its messages any more.':'Remove them from this trip?')) return;
+          await fetch(API+'/public/account/messages/'+encodeURIComponent(id)+'/people/'+encodeURIComponent(pid),{method:'DELETE',headers:authHeaders()});
+          await load(); if(self){ list(); } else { thread(id); }
+        }; });
+      }
       var back=body.querySelector('.th-back'); if(back) back.onclick=function(){ list(); };
       async function request(text){
         var r=await fetch(API+'/public/account/messages/'+encodeURIComponent(id),{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({body:text,request:true})});
@@ -1261,6 +1299,7 @@
       '<div class="trip-thumb" style="'+cover+'"></div>'+
       '<div class="trip-body">'+
         '<div class="trip-nm">'+esc(t.propertyName||'Stay')+(t.unitName?(' · Unit '+esc(t.unitName)):'')+' <span class="badge '+t.status+'">'+esc(t.status)+'</span></div>'+
+        (t.shared?'<div class="trip-sub">👥 Shared with you by '+esc(t.guestName||'the booker')+'</div>':'')+
         '<div class="trip-sub">'+(t.address?('📍 '+esc(t.address)):'')+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div>'+
         '<div class="trip-row"><span>📅 '+esc(t.checkIn)+(t.dayUse?'':' → '+esc(t.checkOut))+'</span><span>'+(t.dayUse?'Day use':t.nights+' night'+(t.nights===1?'':'s'))+'</span></div>'+
         '<div class="trip-sub">'+(t.dayUse?'Times as agreed with your host':'Check-in from '+esc(t.checkInTime)+' · checkout by '+esc(t.checkOutTime))+'</div>'+
@@ -1276,6 +1315,25 @@
   loadSession(); renderAcct(); refreshAccount();
   refreshUnread(); setInterval(refreshUnread, 60000);
   if(/[?&]messages\b/.test(location.search)) openInbox();
+  // A friend arriving from a trip invite: sign in, join, then straight to the trip.
+  (function(){
+    var token=new URLSearchParams(location.search).get('invite'); if(!token) return;
+    var note='Sign in or create an account to see the trip you’ve been invited to.';
+    async function join(){
+      try{
+        var r=await fetch(API+'/public/account/messages/invites/accept',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({token:token})});
+        if(r.status===401){ clearSession(); AFTER_AUTH=join; openAuth('register', null, note); return; }
+        var d=await r.json();
+        if(!r.ok) throw new Error(d.message||'Could not open this invite.');
+        history.replaceState(null,'','/');
+        openInbox(d.bookingId);
+      }catch(e){
+        $('#detail').innerHTML='<div class="overlay"><div class="sheet" style="max-width:440px"><div class="sheet-head"><h2>Trip invite</h2></div><div class="sheet-body"><div class="msg err">'+esc(e.message)+'</div></div></div></div>';
+        $('#detail').firstChild.onclick=function(ev){ if(ev.target===this) $('#detail').innerHTML=''; };
+      }
+    }
+    if(GTOKEN) join(); else { AFTER_AUTH=join; openAuth('register', null, note); }
+  })();
   // A stay linked from another page, such as a documents folder.
   (function(){ var q=new URLSearchParams(location.search), p=q.get('property'); if(p) openUnit({ propertyId:p, unitId:q.get('unit') }); })();
   (function(){ var t=new URLSearchParams(location.search).get('reset');

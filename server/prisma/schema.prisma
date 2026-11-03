@@ -117,6 +117,35 @@ model GuestAccount {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   bookings     Booking[]
+  sharedTrips  TripGuest[]
+}
+
+// A friend the booker or host has added to a trip: they see it and its messages.
+model TripGuest {
+  id             String       @id @default(uuid())
+  bookingId      String
+  booking        Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  guestAccountId String
+  account        GuestAccount @relation(fields: [guestAccountId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([bookingId, guestAccountId])
+  @@index([guestAccountId])
+}
+
+// A single-use link that adds whoever signs in with it to a trip (see utils/tripInvites.js).
+model TripInvite {
+  id              String    @id @default(uuid())
+  bookingId       String
+  booking         Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  tokenHash       String    @unique
+  createdBy       String // guest | host
+  expiresAt       DateTime
+  usedAt          DateTime?
+  usedByAccountId String?
+  createdAt       DateTime  @default(now())
+
+  @@index([bookingId])
 }
 
 // The host's own "invoice from" details + bank info (one per host, editable).
@@ -498,6 +527,8 @@ model Booking {
   sourceOfferId String? // set on the extra unit bookings an invoice with several stays creates
   dayUse       Boolean @default(false) // used within checkIn's date; checkOut is stored as the next day so that date blocks like one night
   messages     Message[]
+  tripGuests   TripGuest[]
+  tripInvites  TripInvite[]
   payments     Payment[]
   offers       PriceOffer[]
   createdAt    DateTime      @default(now())
@@ -579,6 +610,9 @@ model Message {
   bookingId  String
   booking    Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   sender     String // 'host' | 'guest'
+  authorId   String? // the guest account that wrote it; a trip can have several
+  authorName String?
+  bookerOnly Boolean          @default(false) // about money, so friends on the trip don't get it
   body       String
   scheduleId String? // set when an automatic message sent it (one per booking per schedule)
   schedule   MessageSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)

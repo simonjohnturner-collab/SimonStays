@@ -8,6 +8,7 @@ const messaging = require('../utils/messaging');
 const offers = require('../utils/offers');
 const changes = require('../utils/changes');
 const { shownCheckOut, shownNights } = require('../utils/ical');
+const { createInvite, tripGuestsOf } = require('../utils/tripInvites');
 
 const router = express.Router();
 router.use(authHost);
@@ -20,7 +21,7 @@ function bookingSummary(b) {
   return {
     id: b.id, status: b.status, source: b.source, ref: b.ref || null,
     guestName: b.guestName || null, guestEmail: b.guestEmail || (b.guestAccount && b.guestAccount.email) || null,
-    propertyName: b.unit?.property?.name || null, unitName: b.unit?.name || null,
+    propertyId: b.unit?.propertyId || null, propertyName: b.unit?.property?.name || null, unitName: b.unit?.name || null,
     checkIn: iso(b.checkIn), checkOut: iso(shownCheckOut(b)),
     nights: shownNights(b), dayUse: !!b.dayUse,
     amountCents: b.quotedCents != null ? b.quotedCents : (b.totalCents != null ? b.totalCents : null),
@@ -158,8 +159,9 @@ router.get('/booking/:bookingId', async (req, res, next) => {
         lateCents: rc ? rc.lateCheckOutCents || 0 : 0, earlyCents: rc ? rc.earlyCheckInCents || 0 : 0, cleanCents: rc ? rc.cleaningCents || 0 : 0,
       },
       cancel: await changes.cancelQuote(b, 'host'),
+      travellers: await tripGuestsOf(b.id),
       messages: messages.map((m) => ({
-        id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt,
+        id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt, authorName: m.authorName || null, scheduleId: m.scheduleId || null,
         emailedAt: m.emailedAt, scheduleName: m.schedule ? m.schedule.name : (m.scheduleId ? 'Scheduled message' : null),
         offer: m.offer ? offers.offerOut(m.offer, b) : null,
         attachments: m.attachments,
@@ -168,15 +170,40 @@ router.get('/booking/:bookingId', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /messages/booking/:bookingId { body } — send a message to the guest now.
+// POST /messages/booking/:bookingId { body, scheduleId } — send a message to the
+// guest now. With a scheduled message's id it counts as that message having gone,
+// so the job won't send it again; if it already has, this is just an extra copy.
 router.post('/booking/:bookingId', async (req, res, next) => {
   try {
     const b = await loadOwnedBooking(req, res); if (!b) return;
     const body = String((req.body || {}).body || '').trim();
     if (!body) return res.status(400).json({ error: 'empty', message: 'Type a message first.' });
-    const r = await messaging.sendHostMessage(b.id, body);
+    let scheduleId = null;
+    if ((req.body || {}).scheduleId) {
+      const s = await prisma.messageSchedule.findFirst({ where: { id: String(req.body.scheduleId), hostId: req.hostId }, select: { id: true } });
+      if (s && !(await prisma.message.findFirst({ where: { scheduleId: s.id, bookingId: b.id }, select: { id: true } }))) scheduleId = s.id;
+    }
+    const r = await messaging.sendHostMessage(b.id, body, { scheduleId });
     if (!r.ok) return res.status(400).json({ error: r.reason || 'send_failed' });
     res.status(201).json({ message: r.message, emailed: !!r.message.emailedAt });
+  } catch (e) { next(e); }
+});
+
+// POST /messages/booking/:bookingId/invite — a link that adds a friend to this trip.
+router.post('/booking/:bookingId/invite', async (req, res, next) => {
+  try {
+    const b = await loadOwnedBooking(req, res); if (!b) return;
+    if (b.status === 'cancelled') return res.status(400).json({ error: 'cancelled', message: 'This booking has been cancelled.' });
+    res.status(201).json(await createInvite(b.id, 'host'));
+  } catch (e) { next(e); }
+});
+
+// DELETE /messages/booking/:bookingId/travellers/:accountId — take a friend off this trip.
+router.delete('/booking/:bookingId/travellers/:accountId', async (req, res, next) => {
+  try {
+    const b = await loadOwnedBooking(req, res); if (!b) return;
+    await prisma.tripGuest.deleteMany({ where: { bookingId: b.id, guestAccountId: req.params.accountId } });
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 

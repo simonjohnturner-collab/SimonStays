@@ -143,7 +143,8 @@ router.patch('/me', authGuest, async (req, res, next) => {
 });
 
 // Turn a booking (with unit + property) into a guest-facing trip object.
-function tripOf(b) {
+function tripOf(b, acct) {
+  const shared = !(b.guestAccountId === acct.id || (b.guestEmail || '').toLowerCase() === acct.email.toLowerCase());
   const u = b.unit || null;
   const p = (u && u.property) || null;
   const nights = shownNights(b);
@@ -152,6 +153,7 @@ function tripOf(b) {
     id: b.id,
     ref: b.ref || null,
     status: b.status, // 'confirmed' | 'pending' | 'cancelled'
+    shared, // on this trip as the booker's friend: no prices, no paying or cancelling
     paymentStatus: b.paymentStatus || null,
     propertyName: p ? p.name : null,
     unitName: u ? u.name : null,
@@ -163,11 +165,11 @@ function tripOf(b) {
     checkOutTime: (u && u.checkOutTime) || (p && p.checkOutTime) || '10:00',
     nights,
     guestName: b.guestName || null,
-    totalCents: b.totalCents != null ? b.totalCents : null,
-    depositCents: b.depositCents != null ? b.depositCents : null,
-    amountOwingCents: b.amountOwingCents != null ? b.amountOwingCents : null,
+    totalCents: !shared && b.totalCents != null ? b.totalCents : null,
+    depositCents: !shared && b.depositCents != null ? b.depositCents : null,
+    amountOwingCents: !shared && b.amountOwingCents != null ? b.amountOwingCents : null,
     // A website booking with a balance left can be paid online from "My trips".
-    canPayBalance: confirmed && b.source === 'website' && b.amountOwingCents > 0 && payments.isOnline(),
+    canPayBalance: !shared && confirmed && b.source === 'website' && b.amountOwingCents > 0 && payments.isOnline(),
     cancellationPolicy: (p && p.cancellationPolicy) || DEFAULT_CANCELLATION_POLICY,
     coverPhotoId: (u && u.photos && u.photos[0] && u.photos[0].id) || (p && p.photos && p.photos[0] && p.photos[0].id) || null,
     // Practical arrival info the guest is entitled to — only once confirmed.
@@ -190,6 +192,7 @@ router.get('/trips', authGuest, async (req, res, next) => {
         OR: [
           { guestAccountId: acct.id },
           { guestEmail: { equals: acct.email, mode: 'insensitive' } },
+          { tripGuests: { some: { guestAccountId: acct.id } } },
         ],
       },
       include: {
@@ -206,7 +209,7 @@ router.get('/trips', authGuest, async (req, res, next) => {
     const today = iso(new Date());
     const upcoming = [], previous = [];
     for (const b of bookings) {
-      const t = tripOf(b);
+      const t = tripOf(b, acct);
       // Upcoming = not cancelled and the stay hasn't ended yet.
       if (b.status !== 'cancelled' && iso(b.checkOut) >= today) upcoming.push(t);
       else previous.push(t);

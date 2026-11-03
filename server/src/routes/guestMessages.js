@@ -12,6 +12,7 @@ const { alertHost } = require('../utils/payments');
 const { offerOut, conversationCents, INVOICEABLE_SOURCES } = require('../utils/offers');
 const changes = require('../utils/changes');
 const { nextRef } = require('../utils/bookingRef');
+const { createInvite, acceptInvite } = require('../utils/tripInvites');
 
 // What this conversation costs: its invoices, else the booking.
 function amountOf(b) {
@@ -31,8 +32,18 @@ async function accountOf(req, res) {
   return acct;
 }
 const mine = (acct) => ({ OR: [{ guestAccountId: acct.id }, { guestEmail: { equals: acct.email, mode: 'insensitive' } }] });
+// Trips this guest can see: their own, and any shared with them.
+const onTrip = (acct) => ({ OR: [...mine(acct).OR, { tripGuests: { some: { guestAccountId: acct.id } } }] });
+const isBooker = (b, acct) => b.guestAccountId === acct.id || (b.guestEmail || '').toLowerCase() === acct.email.toLowerCase();
 
-const msgOut = (m, b) => ({ id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt, offer: m.offer ? offerOut(m.offer, b) : null });
+// A friend on the trip reads the conversation but nothing about money: what the
+// booker paid is theirs, so invoices, refunds and proof of payment stay with them.
+const seenByFriends = (m) => !m.bookerOnly && !m.offerId;
+const msgOut = (m, b, acct) => ({
+  id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt,
+  authorName: m.authorName || null, mine: m.sender === 'guest' && (m.authorId ? m.authorId === acct.id : isBooker(b, acct)),
+  offer: m.offer ? offerOut(m.offer, b) : null,
+});
 const MAX_OPEN_ENQUIRIES = 10;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -45,25 +56,34 @@ router.get('/', async (req, res, next) => {
     const bookings = await prisma.booking.findMany({
       where: {
         unitId: { not: null },
-        AND: [mine(acct), { OR: [
+        AND: [onTrip(acct), { OR: [
           { messages: { some: {} } },
           { status: { in: ['confirmed', 'pending'] }, checkOut: { gte: today } },
         ] }],
       },
-      include: { unit: { include: { property: true } }, messages: { orderBy: { createdAt: 'asc' }, include: { offer: true } } },
+      include: {
+        unit: { include: { property: true } }, messages: { orderBy: { createdAt: 'asc' }, include: { offer: true } },
+        tripGuests: { orderBy: { createdAt: 'asc' }, select: { account: { select: { id: true, name: true, email: true } } } },
+      },
     });
-    const threads = bookings.map((b) => ({
-      bookingId: b.id, ref: b.ref || null, status: b.status,
+    const threads = bookings.map((b) => {
+      const booker = isBooker(b, acct);
+      const seen = booker ? b.messages : b.messages.filter(seenByFriends);
+      return {
+      bookingId: b.id, ref: b.ref || null, status: b.status, isBooker: booker,
+      // Friends' email addresses are only for the booker, who invited them.
+      people: b.tripGuests.map(({ account: a }) => ({ id: a.id, name: a.name || (booker ? a.email : 'Guest'), me: a.id === acct.id })),
       propertyName: b.unit?.property?.name || null, unitName: b.unit?.name || null,
       guestName: b.guestName || acct.name || null,
       checkIn: iso(b.checkIn), checkOut: iso(shownCheckOut(b)),
       nights: shownNights(b), dayUse: !!b.dayUse,
-      amountCents: amountOf(b),
-      canRequest: b.status === 'confirmed' && INVOICEABLE_SOURCES.includes(b.source),
-      refundDueCents: b.refundDueCents, refundedAt: b.refundedAt,
-      messages: b.messages.map((m) => msgOut(m, b)),
-      unread: b.messages.filter((m) => m.sender === 'host' && !m.readAt).length,
-    }));
+      amountCents: booker ? amountOf(b) : null,
+      canRequest: booker && b.status === 'confirmed' && INVOICEABLE_SOURCES.includes(b.source),
+      refundDueCents: booker ? b.refundDueCents : null, refundedAt: booker ? b.refundedAt : null,
+      messages: seen.map((m) => msgOut(m, b, acct)),
+      unread: seen.filter((m) => m.sender === 'host' && !m.readAt).length,
+      };
+    });
     const lastAt = (t) => (t.messages.length ? new Date(t.messages[t.messages.length - 1].createdAt).getTime() : 0);
     threads.sort((a, b) => lastAt(b) - lastAt(a) || (a.checkIn < b.checkIn ? -1 : 1));
     res.json({ threads, unread: threads.reduce((n, t) => n + t.unread, 0) });
@@ -74,8 +94,18 @@ router.get('/', async (req, res, next) => {
 router.get('/unread', async (req, res, next) => {
   try {
     const acct = await accountOf(req, res); if (!acct) return;
-    const count = await prisma.message.count({ where: { sender: 'host', readAt: null, booking: mine(acct) } });
+    const count = await prisma.message.count({ where: { sender: 'host', readAt: null, OR: [{ booking: mine(acct) }, { bookerOnly: false, offerId: null, booking: onTrip(acct) }] } });
     res.json({ count });
+  } catch (e) { next(e); }
+});
+
+// POST /public/account/messages/invites/accept { token } — join a trip from an invite link.
+router.post('/invites/accept', async (req, res, next) => {
+  try {
+    const acct = await accountOf(req, res); if (!acct) return;
+    const r = await acceptInvite((req.body || {}).token, acct);
+    if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
+    res.json({ bookingId: r.bookingId });
   } catch (e) { next(e); }
 });
 
@@ -125,8 +155,8 @@ router.post('/enquiry', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-async function ownedBooking(req, res, acct) {
-  const b = await prisma.booking.findFirst({ where: { id: req.params.bookingId, ...mine(acct) }, include: { unit: { include: { property: true } } } });
+async function ownedBooking(req, res, acct, { bookerOnly = false } = {}) {
+  const b = await prisma.booking.findFirst({ where: { id: req.params.bookingId, ...(bookerOnly ? mine(acct) : onTrip(acct)) }, include: { unit: { include: { property: true } } } });
   if (!b) res.status(404).json({ error: 'not_found' });
   return b;
 }
@@ -136,7 +166,7 @@ router.post('/:bookingId/read', async (req, res, next) => {
   try {
     const acct = await accountOf(req, res); if (!acct) return;
     const b = await ownedBooking(req, res, acct); if (!b) return;
-    await prisma.message.updateMany({ where: { bookingId: b.id, sender: 'host', readAt: null }, data: { readAt: new Date() } });
+    await prisma.message.updateMany({ where: { bookingId: b.id, sender: 'host', readAt: null, ...(isBooker(b, acct) ? {} : { bookerOnly: false, offerId: null }) }, data: { readAt: new Date() } });
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -145,7 +175,7 @@ router.post('/:bookingId/read', async (req, res, next) => {
 router.get('/:bookingId/cancel', async (req, res, next) => {
   try {
     const acct = await accountOf(req, res); if (!acct) return;
-    const b = await ownedBooking(req, res, acct); if (!b) return;
+    const b = await ownedBooking(req, res, acct, { bookerOnly: true }); if (!b) return;
     res.json(await changes.cancelQuote(b, 'guest'));
   } catch (e) { next(e); }
 });
@@ -154,10 +184,32 @@ router.get('/:bookingId/cancel', async (req, res, next) => {
 router.post('/:bookingId/cancel', async (req, res, next) => {
   try {
     const acct = await accountOf(req, res); if (!acct) return;
-    const b = await ownedBooking(req, res, acct); if (!b) return;
+    const b = await ownedBooking(req, res, acct, { bookerOnly: true }); if (!b) return;
     const r = await changes.cancelBooking(b, { by: 'guest' });
     if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
     res.json({ ok: true, refundCents: r.refundCents });
+  } catch (e) { next(e); }
+});
+
+// POST /public/account/messages/:bookingId/invite — the booker makes a link for a friend.
+router.post('/:bookingId/invite', async (req, res, next) => {
+  try {
+    const acct = await accountOf(req, res); if (!acct) return;
+    const b = await ownedBooking(req, res, acct, { bookerOnly: true }); if (!b) return;
+    if (b.status === 'cancelled') return res.status(400).json({ error: 'cancelled', message: 'This booking has been cancelled.' });
+    res.status(201).json(await createInvite(b.id, 'guest'));
+  } catch (e) { next(e); }
+});
+
+// DELETE /public/account/messages/:bookingId/people/:accountId — the booker removes
+// a friend, or a friend takes themselves off the trip.
+router.delete('/:bookingId/people/:accountId', async (req, res, next) => {
+  try {
+    const acct = await accountOf(req, res); if (!acct) return;
+    const b = await ownedBooking(req, res, acct); if (!b) return;
+    if (!isBooker(b, acct) && req.params.accountId !== acct.id) return res.status(403).json({ error: 'forbidden' });
+    await prisma.tripGuest.deleteMany({ where: { bookingId: b.id, guestAccountId: req.params.accountId } });
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 
@@ -169,9 +221,9 @@ router.post('/:bookingId', async (req, res, next) => {
     const body = String((req.body || {}).body || '').trim().slice(0, 4000);
     if (!body) return res.status(400).json({ error: 'empty', message: 'Type a message first.' });
     const hostId = b.hostId || (b.unit && b.unit.property.hostId);
-    const m = await prisma.message.create({ data: { hostId, bookingId: b.id, sender: 'guest', body } });
+    const m = await prisma.message.create({ data: { hostId, bookingId: b.id, sender: 'guest', authorId: acct.id, authorName: acct.name || acct.email, body } });
     if (b.status === 'enquiry' || (req.body || {}).request) alertHost(b, `💬 ${b.status === 'enquiry' ? 'Enquiry reply' : 'Booking request'} from ${b.guestName || 'guest'}${b.ref ? ` (${b.ref})` : ''}\n\n${body.slice(0, 300)}`);
-    res.status(201).json({ message: msgOut(m, b) });
+    res.status(201).json({ message: msgOut(m, b, acct) });
   } catch (e) { next(e); }
 });
 

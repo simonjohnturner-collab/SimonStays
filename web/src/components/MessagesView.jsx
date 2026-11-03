@@ -306,6 +306,48 @@ function RefundBanner({ bookingId, booking, onDone }) {
   );
 }
 
+// Friends on this trip, and a link to add one. They see the trip and these messages,
+// but not prices or invoices, and they can't change or cancel it.
+function TripPeople({ bookingId, travellers, onChanged }) {
+  const [link, setLink] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  async function invite() {
+    setBusy(true); setNote('');
+    try { const r = await api.createTripInvite(bookingId); setLink(r.link); }
+    catch (e) { setNote((e.data && e.data.message) || e.message); }
+    setBusy(false);
+  }
+  function copy() {
+    (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject())
+      .then(() => setNote('Link copied.'))
+      .catch(() => setNote('Select the link above and copy it.'));
+  }
+  async function remove(p) {
+    if (!window.confirm(`Take ${p.name || p.email} off this trip? They won’t see it or its messages any more.`)) return;
+    try { await api.removeTraveller(bookingId, p.id); onChanged(); }
+    catch (e) { setNote((e.data && e.data.message) || e.message); }
+  }
+  return (
+    <div className="trip-people">
+      {travellers.length > 0 && (
+        <span className="small">👥 Also on this trip:{' '}
+          {travellers.map((p) => <span key={p.id} className="trip-person">{p.name || p.email} <button type="button" className="msg-link small" onClick={() => remove(p)}>Remove</button></span>)}
+        </span>
+      )}
+      <button type="button" className="secondary small" disabled={busy} onClick={invite}>👥 Invite a friend</button>
+      {link && (
+        <div className="trip-invite">
+          <input readOnly aria-label="Invite link" value={link} onFocus={(e) => e.target.select()} />
+          <button type="button" className="secondary small" onClick={copy}>Copy link</button>
+          <div className="muted small">Send it to the friend. It works once and lasts 14 days. They see the trip, its door code and these messages, but no prices, and they can’t change or cancel it.</div>
+        </div>
+      )}
+      {note && <div className="muted small">{note}</div>}
+    </div>
+  );
+}
+
 // ---------------- Inbox ----------------
 
 function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadChange, onManageSaved }) {
@@ -317,6 +359,8 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
   const [note, setNote] = useState('');
   const [picking, setPicking] = useState(false);
   const [tool, setTool] = useState(null); // the open composer helper: 'saved', 'shortcuts' or null
+  const [schedules, setSchedules] = useState([]);
+  const [pickedSchedule, setPickedSchedule] = useState(null); // the scheduled message this draft came from
   const draftEl = useRef(null);
   const [invoicing, setInvoicing] = useState(false);
   const [changing, setChanging] = useState(false);
@@ -334,7 +378,7 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
     return () => clearInterval(t);
     // eslint-disable-next-line
   }, [activeId]);
-  useEffect(() => { setThread(null); setDraft(''); setNote(''); setInvoicing(false); setTool(null); if (activeId) loadThread(activeId); /* eslint-disable-next-line */ }, [activeId]);
+  useEffect(() => { setThread(null); setDraft(''); setNote(''); setInvoicing(false); setTool(null); setPickedSchedule(null); if (activeId) loadThread(activeId); /* eslint-disable-next-line */ }, [activeId]);
   useEffect(() => { endRef.current && endRef.current.scrollIntoView({ block: 'end' }); }, [thread]);
   useEffect(() => {
     if (!picking) return;
@@ -342,6 +386,19 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
     return () => clearTimeout(t);
   }, [picking, q]);
 
+  useEffect(() => {
+    if (tool === 'saved') api.listMessageSchedules().then((r) => setSchedules(r.schedules)).catch(() => {});
+  }, [tool]);
+  // Fill the draft from a scheduled message. Sending it counts as that message
+  // having gone, so a guest who booked before it was set up gets it just once.
+  async function insertScheduled(s) {
+    const text = s.templateId ? (templates.find((t) => t.id === s.templateId) || {}).body : s.body;
+    if (!text || !activeId) return;
+    setTool(null);
+    setPickedSchedule(s.id);
+    try { const r = await api.renderMessage(activeId, text); setDraft(r.body); }
+    catch { setDraft(text); }
+  }
   async function insertTemplate(id) {
     const t = templates.find((x) => x.id === id);
     if (!t || !activeId) return;
@@ -353,8 +410,9 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
     if (!draft.trim() || !activeId) return;
     setBusy(true); setNote('');
     try {
-      const r = await api.sendMessage(activeId, draft);
+      const r = await api.sendMessage(activeId, draft, pickedSchedule);
       setDraft('');
+      setPickedSchedule(null);
       setNote(r.emailed ? 'Sent — and emailed to the guest.' : 'Sent. (No email copy — the guest will see it when they sign in.)');
       await Promise.all([loadThread(activeId), loadThreads()]);
     } catch (e) { setNote((e.data && e.data.message) || e.message); }
@@ -428,6 +486,7 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
                 </div>
               </div>
             </div>
+            <TripPeople key={b.id} bookingId={activeId} travellers={thread.travellers || []} onChanged={() => loadThread(activeId)} />
             {!b.reachable && (
               <div className="msg-warn">This booking has no guest email or SimonStays account, so nobody will see these messages. Add the guest’s email on the booking first.</div>
             )}
@@ -438,6 +497,7 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
               {thread.messages.map((m) => (
                 <div key={m.id} className={`msg-bubble ${m.sender}`}>
                   {m.scheduleName && <div className="msg-auto">⏰ {m.scheduleName}</div>}
+                  {m.sender === 'guest' && m.authorName && (thread.travellers || []).length > 0 && <div className="msg-auto">{m.authorName}</div>}
                   <div className="msg-body">{m.body}</div>
                   {(m.attachments || []).map((a) => (
                     <div key={a.id}><button type="button" className="linklike" onClick={() => openMessageAttachment(a.id).catch(() => window.alert('Could not open that file.'))}>📎 Open {a.filename}</button></div>
@@ -469,11 +529,12 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
                 </div>
               )}
               <div className="msg-compose-tools">
-                <button type="button" className="secondary small" aria-expanded={tool === 'saved'} onClick={() => setTool(tool === 'saved' ? null : 'saved')}>📝 Use a saved message</button>
+                <button type="button" className="secondary small" aria-expanded={tool === 'saved'} onClick={() => setTool(tool === 'saved' ? null : 'saved')}>📝 Use a saved or scheduled message</button>
                 <button type="button" className="secondary small" aria-expanded={tool === 'shortcuts'} onClick={() => setTool(tool === 'shortcuts' ? null : 'shortcuts')}>[ ] Shortcuts</button>
               </div>
               {tool === 'saved' && (
                 <div className="msg-picker">
+                  <div className="msg-sched-head">Saved messages</div>
                   {templates.length === 0 && <span className="muted small">No saved messages yet.</span>}
                   {templates.map((t) => (
                     <button key={t.id} type="button" className="msg-item" onClick={() => insertTemplate(t.id)}>
@@ -482,10 +543,21 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
                     </button>
                   ))}
                   <button type="button" className="msg-link small" onClick={onManageSaved}>{templates.length === 0 ? 'Create a saved message' : 'Manage saved messages'}</button>
+                  <div className="msg-sched-head">Scheduled messages</div>
+                  {schedules.filter((s) => !s.propertyIds.length || s.propertyIds.includes(b.propertyId)).map((s) => {
+                    const sent = thread.messages.some((m) => m.scheduleId === s.id);
+                    return (
+                      <button key={s.id} type="button" className="msg-item" onClick={() => insertScheduled(s)}>
+                        <b>{s.name}</b>
+                        <span className="msg-snippet small">{s.templateId ? (templates.find((t) => t.id === s.templateId) || {}).body : s.body}</span>
+                        <span className={`msg-item-state${sent ? ' off' : ''}`}>{sent ? 'Already sent to this guest' : 'Not sent to this guest yet'}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
               {tool === 'shortcuts' && <ShortcutChips shortcuts={shortcuts} onPick={(token) => insertInto(draftEl.current, draft, token, setDraft)} />}
-              <textarea ref={draftEl} rows={4} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Write to the guest…" />
+              <textarea ref={draftEl} rows={4} value={draft} onChange={(e) => { setDraft(e.target.value); if (!e.target.value.trim()) setPickedSchedule(null); }} placeholder="Write to the guest…" />
               <ShortcutWarning text={draft} shortcuts={shortcuts} />
               <div className="msg-send-row">
                 <span className="muted small">{note}</span>

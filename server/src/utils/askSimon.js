@@ -156,7 +156,7 @@ async function guestBookingAt(guestAccountId, propertyId) {
   return prisma.booking.findFirst({
     where: {
       unit: { propertyId }, status: { in: ['confirmed', 'pending'] }, checkOut: { gte: today },
-      OR: [{ guestAccountId: acct.id }, { guestEmail: { equals: acct.email, mode: 'insensitive' } }],
+      OR: [{ guestAccountId: acct.id }, { guestEmail: { equals: acct.email, mode: 'insensitive' } }, { tripGuests: { some: { guestAccountId: acct.id } } }],
     },
     orderBy: { checkIn: 'asc' }, select: { id: true },
   });

@@ -97,9 +97,17 @@ const escHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<':
 // A message as email HTML, with any web links clickable.
 const bodyHtml = (s) => escHtml(s).replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)]/g, (url) => `<a href="${url}" style="color:#1a7a3a">${url}</a>`);
 
-// Email the guest a copy so they see it even if they never sign in. Best-effort.
-async function emailGuest(booking, body, offer = null) {
-  const to = booking.guestEmail || (booking.guestAccount && booking.guestAccount.email);
+// Email a copy to the guest and any friends on the trip. Anything about money only
+// goes to the guest who booked. Answers whether the guest who booked got theirs.
+async function emailGuest(booking, body, offer = null, bookerOnly = false) {
+  if (!offer && !bookerOnly) {
+    const friends = await prisma.tripGuest.findMany({ where: { bookingId: booking.id }, select: { account: { select: { email: true } } } });
+    await Promise.all(friends.map((f) => emailOne(f.account.email, booking, body))).catch(() => {});
+  }
+  return emailOne(booking.guestEmail || (booking.guestAccount && booking.guestAccount.email), booking, body, offer);
+}
+
+async function emailOne(to, booking, body, offer = null) {
   if (!to) return false;
   const place = [booking.unit?.property?.name, booking.unit?.name && `Unit ${booking.unit.name}`].filter(Boolean).join(' · ') || 'your stay';
   const link = inboxUrl();
@@ -141,7 +149,7 @@ function hostIdOf(b) { return b.hostId || (b.unit && b.unit.property ? b.unit.pr
 // Send a host → guest message on a booking. `body` is rendered here, so it may
 // still contain placeholders. With `scheduleId`, a repeat for the same booking
 // is refused by the unique constraint and returns { duplicate: true }.
-async function sendHostMessage(bookingOrId, body, { scheduleId = null, offer = null } = {}) {
+async function sendHostMessage(bookingOrId, body, { scheduleId = null, offer = null, bookerOnly = false } = {}) {
   const b = typeof bookingOrId === 'string' || !bookingOrId.unit
     ? await prisma.booking.findUnique({ where: { id: bookingOrId.id || bookingOrId }, include: { ...BOOKING_INCLUDE, guestAccount: { select: { email: true } } } })
     : bookingOrId;
@@ -150,14 +158,14 @@ async function sendHostMessage(bookingOrId, body, { scheduleId = null, offer = n
   if (!text) return { ok: false, reason: 'empty' };
   let message;
   try {
-    message = await prisma.message.create({ data: { hostId: hostIdOf(b), bookingId: b.id, sender: 'host', body: text, scheduleId, offerId: offer ? offer.id : null } });
+    message = await prisma.message.create({ data: { hostId: hostIdOf(b), bookingId: b.id, sender: 'host', body: text, scheduleId, offerId: offer ? offer.id : null, bookerOnly: bookerOnly || !!offer } });
   } catch (e) {
     if (e.code === 'P2002') return { ok: false, duplicate: true };
     throw e;
   }
   // The message is saved, so a slow mail server mustn't hold up the host's screen:
   // wait briefly, and let a slower email finish on its own.
-  const emailing = emailGuest(b, text, offer)
+  const emailing = emailGuest(b, text, offer, bookerOnly)
     .then((sent) => (sent ? prisma.message.update({ where: { id: message.id }, data: { emailedAt: new Date() } }) : null))
     .catch((e) => { console.error('[messaging] email failed', e.message); return null; });
   let timer;
