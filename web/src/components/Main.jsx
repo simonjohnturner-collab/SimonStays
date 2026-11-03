@@ -61,16 +61,16 @@ export default function Main() {
   const [adminOpen, setAdminOpen] = useState(false);
   const [market, setMarket] = useState(false);
   const [messages, setMessages] = useState(null); // { bookingId, tab } when open
-  const [unreadMessages, setUnreadMessages] = useState(0);
   const [teachCount, setTeachCount] = useState(0); // Ask Simon questions waiting for an answer
-  const loadUnread = useCallback(() => {
-    api.messageUnread().then((r) => setUnreadMessages(r.count)).catch(() => {});
+  const loadTeachCount = useCallback(() => {
     api.teachCount().then((r) => setTeachCount(r.count)).catch(() => {});
   }, []);
-  useEffect(() => { loadUnread(); const t = setInterval(loadUnread, 60000); return () => clearInterval(t); }, [loadUnread]);
+  useEffect(() => { loadTeachCount(); const t = setInterval(loadTeachCount, 60000); return () => clearInterval(t); }, [loadTeachCount]);
   const [formsInitialId, setFormsInitialId] = useState(null); // open Forms straight to this submission
   const [focus, setFocus] = useState(null); // { unitId, bookingId, key } — jump target
   function openFormsSubmission(id) { setFormsInitialId(id || null); setForms(true); }
+  // From the bell or a new-message toast, which can fire over any screen.
+  function openMessage(bookingId) { setAdminOpen(false); setMarket(false); setMessages({ bookingId: bookingId || null }); }
   const [msg, setMsg] = useState('');
   // When the server/database can't be reached we leave the board exactly as it
   // was and show a red "unable to sync" notice with the last good load time.
@@ -223,7 +223,7 @@ export default function Main() {
   // one-click way back to their own account while signed in as another host.
   const withChrome = (el) => (
     <>
-      <FormChime onOpen={openFormsSubmission} />
+      <FormChime onOpen={openFormsSubmission} onOpenMessage={openMessage} />
       {impersonating && (
         <div className="imp-banner">
           <span>👁 Viewing as <b>{host?.name || host?.email}</b> — you are signed in as this host.</span>
@@ -243,12 +243,13 @@ export default function Main() {
   if (messages) {
     return withChrome(
       <MessagesView
-        onClose={() => { setMessages(null); loadUnread(); }}
+        key={messages.bookingId || 'inbox'}
+        onClose={() => { setMessages(null); loadTeachCount(); }}
         properties={properties.map((p) => ({ id: p.id, name: p.name, units: p.units }))}
         initialBookingId={messages.bookingId}
         teachCount={teachCount}
         initialTab={messages.tab || 'inbox'}
-        onUnreadChange={loadUnread}
+        onUnreadChange={loadTeachCount}
       />
     );
   }
@@ -315,10 +316,7 @@ export default function Main() {
         <button className="ghost" onClick={() => setStart(addMonths(start, 1))}>month ›</button>
         <button className="ghost" onClick={syncAll} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync channels'}</button>
         <button className="ghost" onClick={() => setListings(true)}>🏠 Listings</button>
-        <button className="ghost msg-top-btn" onClick={() => setMessages({ bookingId: null })} title="Guest messages">
-          💬 Messages{unreadMessages > 0 && <span className="msg-dot">{unreadMessages}</span>}
-        </button>
-        <NotificationsBell onOpen={openFormsSubmission} />
+        <NotificationsBell onOpen={openFormsSubmission} onOpenMessage={openMessage} />
         <span className="host">{host.email}</span>
         <button className="ghost" onClick={logout}>Log out</button>
       </header>

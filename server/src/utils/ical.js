@@ -105,4 +105,9 @@ function dateFromIcal(d) {
   return new Date(Date.UTC(x.getFullYear(), x.getMonth(), x.getDate(), 12, 0, 0));
 }
 
-module.exports = { parseFeed, buildFeed, overlaps, dateOnly, dateFromIcal, isGenericTitle, extractResCode };
+// A day-use booking is stored as one night (checkOut = the next day), so availability,
+// the board and channel calendars all block its date. Show people its real dates.
+const shownCheckOut = (b) => (b.dayUse ? b.checkIn : b.checkOut);
+const shownNights = (b) => (b.dayUse ? 0 : Math.max(0, Math.round((new Date(b.checkOut) - new Date(b.checkIn)) / 864e5)));
+
+module.exports = { parseFeed, buildFeed, overlaps, dateOnly, dateFromIcal, isGenericTitle, extractResCode, shownCheckOut, shownNights };

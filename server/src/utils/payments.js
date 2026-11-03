@@ -140,7 +140,7 @@ async function applyPaid(payment, txId) {
 // The guest paid this invoice, so its terms stand even if a newer one was sent
 // while they were on the payment page: they owe what they were shown.
 async function applyOfferTerms(offer, booking) {
-  const { staysOf, splitOf } = require('./offers');
+  const { staysOf, blockOut, splitOf } = require('./offers');
   const { dateOnly } = require('./ical');
   const first = staysOf(offer)[0];
   const share = splitOf(offer).primaryCents;
@@ -148,7 +148,7 @@ async function applyOfferTerms(offer, booking) {
   return prisma.booking.update({
     where: { id: booking.id },
     data: {
-      ...(first ? { unitId: first.unitId, checkIn: dateOnly(first.checkIn), checkOut: dateOnly(first.checkOut) } : {}),
+      ...(first ? { unitId: first.unitId, checkIn: dateOnly(first.checkIn), checkOut: dateOnly(blockOut(first)), dayUse: !!first.dayUse } : {}),
       totalCents: share, quotedCents: share,
       depositCents: offer.depositCents || null, depositStatus: offer.depositCents ? 'held' : null,
     },

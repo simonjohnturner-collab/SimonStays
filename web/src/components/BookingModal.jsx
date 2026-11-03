@@ -170,6 +170,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
           <label>Check-in<input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} /></label>
           <label>Check-out<input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} /></label>
         </div>
+        {booking?.dayUse && <div className="muted small">Day use on {checkIn}. The check-out shown here is the next morning, so the date stays blocked and the clean falls then.</div>}
         {editing && !isFloating && booking.source === 'manual' && units.length > 0 && (
           <label>Move to a different unit <span className="muted small">(reassigns this booking &amp; blocks the new unit)</span>
             <select value={moveUnitId} onChange={(e) => setMoveUnitId(e.target.value)}>

@@ -15,6 +15,8 @@ const DAY_MS = 864e5;
 // How far back the job will still send a message whose time has passed (e.g.
 // the server was asleep). Older than this is skipped rather than sent late.
 const CATCH_UP_MS = 24 * 60 * 60 * 1000;
+// How long the host waits on an email before it carries on in the background.
+const EMAIL_WAIT_MS = 5000;
 
 const PLACEHOLDERS = [
   'guestName', 'firstName', 'property', 'unit', 'address', 'checkIn', 'checkOut',
@@ -25,6 +27,7 @@ const PLACEHOLDERS = [
 // Booking include that carries everything the placeholders need.
 const BOOKING_INCLUDE = { unit: { include: { property: { include: { host: { select: { name: true } } } } } } };
 
+const { shownCheckOut, shownNights } = require('./ical');
 const iso = (d) => new Date(d).toISOString().slice(0, 10);
 function fmtDay(d) {
   try { return new Date(d).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }); }
@@ -42,10 +45,10 @@ function valuesFor(b) {
     unit: u.name || '',
     address: p.address || '',
     checkIn: fmtDay(b.checkIn),
-    checkOut: fmtDay(b.checkOut),
+    checkOut: fmtDay(shownCheckOut(b)),
     checkInTime: u.checkInTime || p.checkInTime || '15:00',
     checkOutTime: u.checkOutTime || p.checkOutTime || '10:00',
-    nights: String(Math.max(0, Math.round((new Date(b.checkOut) - new Date(b.checkIn)) / DAY_MS))),
+    nights: String(shownNights(b)),
     ref: b.ref || '',
     wifiName: u.wifiName || '',
     wifiPassword: u.wifiPassword || '',
@@ -126,9 +129,15 @@ async function sendHostMessage(bookingOrId, body, { scheduleId = null, offer = n
     if (e.code === 'P2002') return { ok: false, duplicate: true };
     throw e;
   }
-  if (await emailGuest(b, text, offer)) {
-    message = await prisma.message.update({ where: { id: message.id }, data: { emailedAt: new Date() } });
-  }
+  // The message is saved, so a slow mail server mustn't hold up the host's screen:
+  // wait briefly, and let a slower email finish on its own.
+  const emailing = emailGuest(b, text, offer)
+    .then((sent) => (sent ? prisma.message.update({ where: { id: message.id }, data: { emailedAt: new Date() } }) : null))
+    .catch((e) => { console.error('[messaging] email failed', e.message); return null; });
+  let timer;
+  const emailed = await Promise.race([emailing, new Promise((resolve) => { timer = setTimeout(resolve, EMAIL_WAIT_MS, null); })]);
+  clearTimeout(timer);
+  if (emailed) message = emailed;
   return { ok: true, message };
 }
 
@@ -138,7 +147,7 @@ function scheduleBody(s) { return (s.template && s.template.body) || s.body || '
 // When a schedule is due for a booking (UTC Date), or null if it never is.
 function dueAt(s, b) {
   if (s.anchor === 'confirmed') return b.confirmedAt ? new Date(b.confirmedAt) : null;
-  const anchorDate = s.anchor === 'check_out' ? b.checkOut : b.checkIn;
+  const anchorDate = s.anchor === 'check_out' ? shownCheckOut(b) : b.checkIn;
   const [y, m, d] = iso(anchorDate).split('-').map(Number);
   const [hh, mm] = String(s.sendTime || '10:00').split(':').map(Number);
   return new Date(Date.UTC(y, m - 1, d + (s.offsetDays || 0), hh || 0, mm || 0) - SAST_MS);

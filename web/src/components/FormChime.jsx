@@ -5,13 +5,16 @@ const typeLabel = (t) => (t === 'damage' ? 'issue' : t === 'repair' ? 'repair' :
 const isMuted = () => { try { return localStorage.getItem('ss_forms_mute') === '1'; } catch { return false; } };
 
 // Always mounted (in every admin view via withChrome): polls for new form
-// submissions and, the instant one lands, plays a chime + pops a toast — no matter
-// which screen the host is on. The board's bell shows the list/badge separately.
-export default function FormChime({ onOpen }) {
+// submissions and guest messages and, the instant one lands, plays a chime + pops a
+// toast — no matter which screen the host is on. The board's bell shows the
+// list/badge separately.
+export default function FormChime({ onOpen, onOpenMessage }) {
   const [toast, setToast] = useState(null);
   const audioRef = useRef(null);
   const knownRef = useRef(new Set());
   const initRef = useRef(false);
+  const knownMsgRef = useRef(new Set());
+  const initMsgRef = useRef(false);
 
   function ensureAudio() {
     try {
@@ -62,6 +65,7 @@ export default function FormChime({ onOpen }) {
     list.forEach((s) => known.add(s.id));
     if (fresh.length) {
       chime();
+      window.dispatchEvent(new Event('ss:new-alert'));
       const s = fresh[0];
       setToast({
         id: fresh.length === 1 ? s.id : null, n: fresh.length, type: s.type,
@@ -70,17 +74,45 @@ export default function FormChime({ onOpen }) {
       });
     }
   }
-  async function load() { try { const r = await api.listFormSubmissions('?limit=20'); detect(r.submissions || []); } catch { /* offline */ } }
+  function detectMessages(threads) {
+    const known = knownMsgRef.current;
+    const fresh = threads.filter((t) => !known.has(t.latestId));
+    threads.forEach((t) => known.add(t.latestId));
+    if (!initMsgRef.current) { initMsgRef.current = true; return; }
+    if (fresh.length) {
+      chime();
+      window.dispatchEvent(new Event('ss:new-alert'));
+      const t = fresh[0];
+      setToast({
+        message: true, bookingId: fresh.length === 1 ? t.bookingId : null, n: fresh.length, enquiry: t.enquiry,
+        where: t.propertyName ? `${t.propertyName}${t.unitName ? ' · ' + t.unitName : ''}` : '',
+        name: t.guestName || 'a guest',
+      });
+    }
+  }
+  async function load() {
+    try { const r = await api.listFormSubmissions('?limit=20'); detect(r.submissions || []); } catch { /* offline */ }
+    try { const r = await api.messageUnread(); detectMessages(r.threads || []); } catch { /* offline */ }
+  }
   useEffect(() => { load(); const id = setInterval(load, 25000); return () => clearInterval(id); /* eslint-disable-next-line */ }, []);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 9000); return () => clearTimeout(t); }, [toast]);
 
   if (!toast) return null;
   return (
-    <div className="form-chime-toast" onClick={() => { onOpen(toast.id || null); setToast(null); }}>
+    <div className="form-chime-toast" onClick={() => { if (toast.message) onOpenMessage(toast.bookingId); else onOpen(toast.id || null); setToast(null); }}>
       <span className="fct-emoji">🔔</span>
       <span className="fct-body">
-        <b>{toast.n > 1 ? `${toast.n} new reports` : `New ${typeLabel(toast.type)} report`}</b>
-        <span className="fct-sub">{toast.where}{toast.name ? ` · ${toast.name}` : ''} — tap to open</span>
+        {toast.message ? (
+          <>
+            <b>{toast.n > 1 ? `${toast.n} new messages` : toast.enquiry ? 'New enquiry' : 'New message'}</b>
+            <span className="fct-sub">{toast.n > 1 ? '' : `From ${toast.name}${toast.where ? ` · ${toast.where}` : ''} — `}tap to open</span>
+          </>
+        ) : (
+          <>
+            <b>{toast.n > 1 ? `${toast.n} new reports` : `New ${typeLabel(toast.type)} report`}</b>
+            <span className="fct-sub">{toast.where}{toast.name ? ` · ${toast.name}` : ''} — tap to open</span>
+          </>
+        )}
       </span>
       <button className="fct-x" title="Dismiss" onClick={(e) => { e.stopPropagation(); setToast(null); }}>×</button>
     </div>

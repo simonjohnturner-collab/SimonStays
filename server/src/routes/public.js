@@ -486,7 +486,7 @@ router.get('/offers/:token', async (req, res, next) => {
     if (req.query.check) { await payments.reconcileBooking(o.bookingId); o = await loadOffer(req.params.token); }
     const b = o.booking, p = b.unit.property;
     res.set('Cache-Control', 'no-store').json({
-      stays: staysOf(o).map((s) => ({ propertyName: s.propertyName, unitName: s.unitName, checkIn: s.checkIn, checkOut: s.checkOut, nights: s.nights })),
+      stays: staysOf(o).map((s) => ({ propertyName: s.propertyName, unitName: s.unitName, checkIn: s.checkIn, checkOut: s.checkOut, nights: s.nights, dayUse: !!s.dayUse })),
       state: offerState(o, b), lines: o.lines, totalCents: o.totalCents, depositCents: o.depositCents || 0, expiresAt: o.expiresAt,
       ref: b.ref || null, guestName: b.guestName || null, status: b.status,
       property: p.name, unit: b.unit.name, address: p.address || null,
@@ -510,7 +510,6 @@ router.post('/offers/:token/pay', async (req, res, next) => {
     if (state !== 'open') return res.status(409).json({ error: `offer_${state}`, state, message: 'This invoice can no longer be paid. Please message your host.' });
     if (!(req.body || {}).acceptedTerms) return res.status(400).json({ error: 'terms_required', message: 'Please accept the cancellation policy and the Terms & Conditions.' });
     const stays = staysOf(o).length ? staysOf(o) : [{ unitId: b.unitId, checkIn: iso(b.checkIn), checkOut: iso(b.checkOut) }];
-    if (stays.some((s) => s.checkIn < iso(new Date()))) return res.status(409).json({ error: 'dates_passed', message: 'These dates have passed. Please message your host.' });
     if (await firstClash(stays, b.id)) return res.status(409).json({ error: 'dates_unavailable', message: 'Sorry, those dates have since been booked, so no payment was taken. Please message your host.' });
     await prisma.booking.update({ where: { id: b.id }, data: { termsAcceptedAt: new Date() } });
 

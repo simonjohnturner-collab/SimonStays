@@ -5,7 +5,7 @@ const express = require('express');
 const prisma = require('../lib/prisma');
 const { authGuest } = require('../middleware/auth');
 const { checkAvailability } = require('../utils/sync');
-const { dateOnly } = require('../utils/ical');
+const { dateOnly, shownCheckOut, shownNights } = require('../utils/ical');
 const { quote } = require('../utils/pricing');
 const { overridesFor } = require('../utils/nightPrices');
 const { alertHost } = require('../utils/payments');
@@ -55,8 +55,8 @@ router.get('/', async (req, res, next) => {
       bookingId: b.id, ref: b.ref || null, status: b.status,
       propertyName: b.unit?.property?.name || null, unitName: b.unit?.name || null,
       guestName: b.guestName || acct.name || null,
-      checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
-      nights: Math.max(0, Math.round((new Date(b.checkOut) - new Date(b.checkIn)) / 864e5)),
+      checkIn: iso(b.checkIn), checkOut: iso(shownCheckOut(b)),
+      nights: shownNights(b), dayUse: !!b.dayUse,
       amountCents: amountOf(b),
       messages: b.messages.map((m) => msgOut(m, b)),
       unread: b.messages.filter((m) => m.sender === 'host' && !m.readAt).length,

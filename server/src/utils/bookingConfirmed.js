@@ -25,7 +25,7 @@ const rand = (c) => 'R' + (c / 100).toLocaleString('en-ZA', { minimumFractionDig
 function hostAlert(b) {
   const place = [b.unit?.property?.name, b.unit?.name && `Unit ${b.unit.name}`].filter(Boolean).join(' · ') || 'a unit';
   const nights = Math.max(0, Math.round((new Date(b.checkOut) - new Date(b.checkIn)) / 864e5));
-  const dates = `${fmtDay(b.checkIn)} → ${fmtDay(b.checkOut)} (${nights} night${nights === 1 ? '' : 's'})`;
+  const dates = b.dayUse ? `${fmtDay(b.checkIn)} (day use)` : `${fmtDay(b.checkIn)} → ${fmtDay(b.checkOut)} (${nights} night${nights === 1 ? '' : 's'})`;
   const amount = b.totalCents != null ? b.totalCents : b.quotedCents;
   const source = [SOURCE_LABEL[b.source] || b.source, b.ref || b.resCode, amount != null ? rand(amount) : null].filter(Boolean).join(' · ');
   const guest = b.guestName || 'Guest';

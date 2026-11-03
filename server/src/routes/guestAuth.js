@@ -4,13 +4,16 @@
 // contact book — it is the customer's own login. No host token is ever accepted
 // here. (Future: guest <-> host messaging + self-service booking changes.)
 
+const crypto = require('crypto');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const prisma = require('../lib/prisma');
+const { shownCheckOut, shownNights } = require('../utils/ical');
 const { signGuest } = require('../lib/jwt');
 const { authGuest } = require('../middleware/auth');
 const { DEFAULT_CANCELLATION_POLICY } = require('../utils/policy');
 const payments = require('../utils/payments');
+const mailer = require('../utils/mailer');
 
 const router = express.Router();
 
@@ -52,6 +55,72 @@ router.post('/login', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+const RESET_MS = 60 * 60 * 1000; // a reset link works for an hour
+const RESET_RESEND_MS = 60 * 1000; // at most one email a minute per account
+const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
+
+function emailResetLink(acct, token) {
+  const base = (process.env.SHOPFRONT_URL || 'https://simonstays.co.za').trim().replace(/\/$/, '');
+  const link = `${base}/?reset=${encodeURIComponent(token)}`;
+  return mailer.sendMail({
+    to: acct.email,
+    subject: 'Reset your SimonStays password',
+    text: `Use this link to choose a new SimonStays password. It works for one hour:\n\n${link}\n\nIf you didn't ask for this, you can ignore this email and your password stays the same.`,
+    html: `<div style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.55;color:#1d2433">` +
+      `<p>Use this button to choose a new SimonStays password. It works for one hour.</p>` +
+      `<p><a href="${link}" style="display:inline-block;background:#1a7a3a;color:#fff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px">Choose a new password</a></p>` +
+      `<p style="color:#6b7280;font-size:13px">If you didn't ask for this, you can ignore this email and your password stays the same.</p></div>`,
+  });
+}
+
+// POST /public/account/forgot-password { email } — answers the same whether or not
+// the account exists, and doesn't wait for the email, so it can't reveal who has one.
+router.post('/forgot-password', async (req, res, next) => {
+  try {
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: 'email_required', message: 'Please enter your email.' });
+    const acct = await prisma.guestAccount.findUnique({ where: { email } });
+    const justSent = acct && acct.resetExpiresAt && acct.resetExpiresAt.getTime() - Date.now() > RESET_MS - RESET_RESEND_MS;
+    if (acct && !justSent) {
+      const token = crypto.randomBytes(32).toString('base64url');
+      await prisma.guestAccount.update({ where: { id: acct.id }, data: { resetTokenHash: hashToken(token), resetExpiresAt: new Date(Date.now() + RESET_MS) } });
+      emailResetLink(acct, token).catch(() => {});
+    }
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// POST /public/account/reset-password { token, password } — sets it and signs in.
+router.post('/reset-password', async (req, res, next) => {
+  try {
+    const { token, password } = req.body || {};
+    if (String(password || '').length < 8) return res.status(400).json({ error: 'password_too_short', message: 'Please use at least 8 characters.' });
+    const acct = token ? await prisma.guestAccount.findFirst({ where: { resetTokenHash: hashToken(token), resetExpiresAt: { gt: new Date() } } }) : null;
+    if (!acct) return res.status(400).json({ error: 'reset_link_invalid', message: 'This link has expired or was already used. Please ask for a new one.' });
+    const updated = await prisma.guestAccount.update({
+      where: { id: acct.id },
+      data: { passwordHash: await bcrypt.hash(password, 10), resetTokenHash: null, resetExpiresAt: null },
+    });
+    res.json({ token: signGuest(updated), account: publicAcct(updated) });
+  } catch (e) { next(e); }
+});
+
+// POST /public/account/change-password { currentPassword, newPassword }
+router.post('/change-password', authGuest, async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (String(newPassword || '').length < 8) return res.status(400).json({ error: 'password_too_short', message: 'Please use at least 8 characters.' });
+    const acct = await prisma.guestAccount.findUnique({ where: { id: req.guestId } });
+    if (!acct) return res.status(404).json({ error: 'not_found' });
+    if (!(await bcrypt.compare(String(currentPassword || ''), acct.passwordHash))) return res.status(400).json({ error: 'wrong_password', message: 'Your current password is incorrect.' });
+    await prisma.guestAccount.update({
+      where: { id: acct.id },
+      data: { passwordHash: await bcrypt.hash(newPassword, 10), resetTokenHash: null, resetExpiresAt: null },
+    });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
 // GET /public/account/me
 router.get('/me', authGuest, async (req, res, next) => {
   try {
@@ -77,7 +146,7 @@ router.patch('/me', authGuest, async (req, res, next) => {
 function tripOf(b) {
   const u = b.unit || null;
   const p = (u && u.property) || null;
-  const nights = Math.max(0, Math.round((new Date(b.checkOut) - new Date(b.checkIn)) / 864e5));
+  const nights = shownNights(b);
   const confirmed = b.status === 'confirmed';
   return {
     id: b.id,
@@ -88,7 +157,8 @@ function tripOf(b) {
     unitName: u ? u.name : null,
     address: p ? (p.address || null) : null,
     checkIn: iso(b.checkIn),
-    checkOut: iso(b.checkOut),
+    checkOut: iso(shownCheckOut(b)),
+    dayUse: !!b.dayUse,
     checkInTime: (u && u.checkInTime) || (p && p.checkInTime) || '15:00',
     checkOutTime: (u && u.checkOutTime) || (p && p.checkOutTime) || '10:00',
     nights,

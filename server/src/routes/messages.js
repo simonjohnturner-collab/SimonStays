@@ -6,6 +6,7 @@ const prisma = require('../lib/prisma');
 const { authHost } = require('../middleware/auth');
 const messaging = require('../utils/messaging');
 const offers = require('../utils/offers');
+const { shownCheckOut, shownNights } = require('../utils/ical');
 
 const router = express.Router();
 router.use(authHost);
@@ -19,8 +20,8 @@ function bookingSummary(b) {
     id: b.id, status: b.status, source: b.source, ref: b.ref || null,
     guestName: b.guestName || null, guestEmail: b.guestEmail || (b.guestAccount && b.guestAccount.email) || null,
     propertyName: b.unit?.property?.name || null, unitName: b.unit?.name || null,
-    checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
-    nights: Math.max(0, Math.round((new Date(b.checkOut) - new Date(b.checkIn)) / 864e5)),
+    checkIn: iso(b.checkIn), checkOut: iso(shownCheckOut(b)),
+    nights: shownNights(b), dayUse: !!b.dayUse,
     amountCents: b.quotedCents != null ? b.quotedCents : (b.totalCents != null ? b.totalCents : null),
     paidCents: b.amountPaidCents || 0, paid: !!b.paid,
     // Can the guest actually read messages (an email to copy to, or a shopfront account)?
@@ -38,11 +39,32 @@ async function loadOwnedBooking(req, res) {
 // GET /messages/meta — the placeholders a message body can use.
 router.get('/meta', (req, res) => res.json({ placeholders: messaging.PLACEHOLDERS }));
 
-// GET /messages/unread — guest replies the host hasn't opened yet (for the badge).
+// GET /messages/unread — guest messages the host hasn't opened yet, one entry per
+// conversation, newest first (for the bell).
 router.get('/unread', async (req, res, next) => {
   try {
-    const count = await prisma.message.count({ where: { hostId: req.hostId, sender: 'guest', readAt: null } });
-    res.json({ count });
+    const where = { hostId: req.hostId, sender: 'guest', readAt: null };
+    const [count, rows] = await Promise.all([
+      prisma.message.count({ where }),
+      prisma.message.findMany({
+        where, orderBy: { createdAt: 'desc' }, take: 100,
+        select: {
+          id: true, bookingId: true, body: true, createdAt: true,
+          booking: { select: { guestName: true, status: true, unit: { select: { name: true, property: { select: { name: true } } } } } },
+        },
+      }),
+    ]);
+    const threads = new Map();
+    for (const m of rows) {
+      const t = threads.get(m.bookingId);
+      if (t) { t.unread += 1; continue; }
+      threads.set(m.bookingId, {
+        bookingId: m.bookingId, latestId: m.id, unread: 1, body: m.body.slice(0, 120), createdAt: m.createdAt,
+        guestName: m.booking.guestName || null, enquiry: m.booking.status === 'enquiry',
+        propertyName: m.booking.unit?.property?.name || null, unitName: m.booking.unit?.name || null,
+      });
+    }
+    res.json({ count, threads: [...threads.values()] });
   } catch (e) { next(e); }
 });
 
@@ -105,7 +127,7 @@ router.get('/booking/:bookingId', async (req, res, next) => {
     res.json({
       booking: { ...bookingSummary(b), amountCents: headline ? headline.totalCents : bookingSummary(b).amountCents },
       // The pricing sheet only compares fairly with an invoice for this one unit.
-      standardCents: standard && !(latest && offers.staysOf(latest).length > 1) ? standard.totalCents : null,
+      standardCents: standard && !b.dayUse && !(latest && offers.staysOf(latest).length > 1) ? standard.totalCents : null,
       invoice: {
         blocked: offers.invoiceBlock(b),
         draftLines: offers.draftFor(latest, standard, b),

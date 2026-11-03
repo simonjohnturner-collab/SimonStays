@@ -193,6 +193,8 @@ router.patch('/bookings/:id', async (req, res) => {
   if ('status' in b) data.status = b.status;
   if ('checkIn' in b) data.checkIn = dateOnly(b.checkIn);
   if ('checkOut' in b) data.checkOut = dateOnly(b.checkOut);
+  // Stretched past its one stored night, a day-use booking becomes an ordinary stay.
+  if (booking.dayUse && Math.round(((data.checkOut || booking.checkOut) - (data.checkIn || booking.checkIn)) / 864e5) !== 1) data.dayUse = false;
   if ('cleans' in b) data.cleans = { deleteMany: {}, create: normalizeCleans(b.cleans) };
   if ('pricingGroupId' in b) data.pricingGroupId = await validGroup(req.hostId, b.pricingGroupId);
   // Allocate a floating booking to a unit (or unassign it back to floating).

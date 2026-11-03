@@ -892,10 +892,12 @@
           '</div>'+
           '<div id="amsg"></div>'+
           '<button id="aGo" class="cta-btn">'+(login?'Sign in':'Create account')+'</button>'+
+          (login?"<div class='auth-toggle'><a id='aForgot'>Forgot your password?</a></div>":'')+
           '<div class="auth-toggle">'+(login?"New here? <a id='aSwap'>Create an account</a>":"Already have an account? <a id='aSwap'>Sign in</a>")+'</div>'+
         '</div></div>';
       overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
       overlay.querySelector('#aSwap').onclick=function(){ mode=login?'register':'login'; draw(); };
+      if(login) overlay.querySelector('#aForgot').onclick=function(){ openForgot((overlay.querySelector('#aEmail').value||'').trim()); };
       overlay.querySelector('#aGo').onclick=doAuth;
       overlay.querySelector('#aPass').addEventListener('keydown',function(e){ if(e.key==='Enter') doAuth(); });
       if(prefillEmail) overlay.querySelector('#aEmail').value=prefillEmail;
@@ -923,14 +925,93 @@
     host.innerHTML=''; host.appendChild(overlay); draw();
   }
 
+  // A small sheet for the password screens: returns the overlay, already showing.
+  function pwdSheet(title,inner){
+    var host=$('#detail'), overlay=el('div','overlay');
+    overlay.innerHTML='<div class="sheet" style="max-width:440px"><div class="sheet-head"><h2>'+title+'</h2><button class="x">&times;</button></div><div class="sheet-body">'+inner+'</div></div>';
+    overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
+    overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
+    host.innerHTML=''; host.appendChild(overlay);
+    return overlay;
+  }
+  function openForgot(prefillEmail){
+    var overlay=pwdSheet('Reset your password',
+      '<p class="note">Enter your account email and we’ll send you a link to choose a new password.</p>'+
+      '<label class="fld">Email<input id="fEmail" type="email" autocomplete="email"></label>'+
+      '<div id="fMsg"></div><button id="fGo" class="cta-btn">Send reset link</button>'+
+      '<div class="auth-toggle"><a id="fBack">Back to sign in</a></div>');
+    var input=overlay.querySelector('#fEmail'), msg=overlay.querySelector('#fMsg'), btn=overlay.querySelector('#fGo');
+    if(prefillEmail) input.value=prefillEmail;
+    overlay.querySelector('#fBack').onclick=function(){ openAuth('login',(input.value||'').trim()); };
+    btn.onclick=async function(){
+      var email=(input.value||'').trim();
+      if(!email){ msg.innerHTML='<div class="msg err">Please enter your email.</div>'; return; }
+      btn.disabled=true; btn.textContent='Sending…'; msg.innerHTML='';
+      try{
+        var r=await fetch(API+'/public/account/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email})});
+        if(!r.ok) throw new Error('failed');
+        overlay.querySelector('.sheet-body').innerHTML='<div class="msg ok">If <b>'+esc(email)+'</b> has an account, a reset link is on its way. It works for one hour. Please check your spam folder too.</div>';
+      }catch(e){ msg.innerHTML='<div class="msg err">Something went wrong. Please try again.</div>'; btn.disabled=false; btn.textContent='Send reset link'; }
+    };
+  }
+  function newPasswordFields(){
+    return '<label class="fld">New password<input id="pNew" type="password" autocomplete="new-password" placeholder="At least 8 characters"></label>'+
+      '<label class="fld">Repeat new password<input id="pRep" type="password" autocomplete="new-password"></label>';
+  }
+  // Checks the two new-password boxes; returns the password, or null after showing why not.
+  function readNewPassword(overlay,msg){
+    var a=overlay.querySelector('#pNew').value||'', b=overlay.querySelector('#pRep').value||'';
+    if(a.length<8){ msg.innerHTML='<div class="msg err">Password must be at least 8 characters.</div>'; return null; }
+    if(a!==b){ msg.innerHTML='<div class="msg err">The two passwords don’t match.</div>'; return null; }
+    return a;
+  }
+  function openReset(token){
+    var overlay=pwdSheet('Choose a new password',newPasswordFields()+'<div id="pMsg"></div><button id="pGo" class="cta-btn">Save new password</button>');
+    var msg=overlay.querySelector('#pMsg'), btn=overlay.querySelector('#pGo');
+    btn.onclick=async function(){
+      var pass=readNewPassword(overlay,msg); if(!pass) return;
+      btn.disabled=true; btn.textContent='Saving…'; msg.innerHTML='';
+      try{
+        var r=await fetch(API+'/public/account/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token,password:pass})});
+        var d=await r.json();
+        if(!r.ok){
+          msg.innerHTML='<div class="msg err">'+esc(d.message||'Could not save your password.')+' <a id="pAgain" href="#">Send a new link</a></div>';
+          msg.querySelector('#pAgain').onclick=function(e){ e.preventDefault(); openForgot(''); };
+          btn.disabled=false; btn.textContent='Save new password'; return;
+        }
+        saveSession(d.token,d.account); refreshUnread(); openTrips();
+      }catch(e){ msg.innerHTML='<div class="msg err">Something went wrong. Please try again.</div>'; btn.disabled=false; btn.textContent='Save new password'; }
+    };
+  }
+  function openChangePassword(){
+    var overlay=pwdSheet('Change your password',
+      '<label class="fld">Current password<input id="pCur" type="password" autocomplete="current-password"></label>'+newPasswordFields()+
+      '<div id="pMsg"></div><button id="pGo" class="cta-btn">Change password</button>'+
+      '<div class="auth-toggle"><a id="pForgot">Forgot your current password?</a></div>');
+    var msg=overlay.querySelector('#pMsg'), btn=overlay.querySelector('#pGo');
+    overlay.querySelector('#pForgot').onclick=function(){ openForgot(GUEST&&GUEST.email||''); };
+    btn.onclick=async function(){
+      var pass=readNewPassword(overlay,msg); if(!pass) return;
+      btn.disabled=true; btn.textContent='Saving…'; msg.innerHTML='';
+      try{
+        var r=await fetch(API+'/public/account/change-password',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({currentPassword:overlay.querySelector('#pCur').value||'',newPassword:pass})});
+        var d=await r.json();
+        if(r.status===401){ clearSession(); openAuth('login'); return; }
+        if(!r.ok){ msg.innerHTML='<div class="msg err">'+esc(d.message||'Could not change your password.')+'</div>'; btn.disabled=false; btn.textContent='Change password'; return; }
+        overlay.querySelector('.sheet-body').innerHTML='<div class="msg ok">Your password has been changed.</div>';
+      }catch(e){ msg.innerHTML='<div class="msg err">Something went wrong. Please try again.</div>'; btn.disabled=false; btn.textContent='Change password'; }
+    };
+  }
+
   async function openTrips(){
     if(!GTOKEN){ openAuth('login'); return; }
     var host=$('#detail');
     var overlay=el('div','overlay');
     overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
-    overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>My trips</h2><button class="x">&times;</button></div><div class="sheet-body"><p class="note">Loading your trips…</p></div></div>';
+    overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>My trips</h2><button class="x">&times;</button></div><div class="sheet-body"><p class="note">Loading your trips…</p></div><div class="auth-toggle" style="padding:0 16px 14px"><a id="chgPwd">Change password</a></div></div>';
     host.innerHTML=''; host.appendChild(overlay);
     overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
+    overlay.querySelector('#chgPwd').onclick=openChangePassword;
     var data;
     try{
       var r=await fetch(API+'/public/account/trips',{headers:authHeaders()});
@@ -1047,7 +1128,7 @@
       body.innerHTML=threads.map(function(t){
         var last=t.messages[t.messages.length-1];
         return '<button class="th-item" data-id="'+esc(t.bookingId)+'"><div class="th-top"><span>'+place(t)+'</span>'+(t.unread?'<span class="badge pending">'+t.unread+' new</span>':'')+'</div>'+
-          '<div class="trip-sub">📅 '+esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut))+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div>'+
+          '<div class="trip-sub">📅 '+(t.dayUse?esc(fmtShort(t.checkIn))+' · day use':esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut)))+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div>'+
           '<div class="th-snip">'+(last?((last.sender==='guest'?'You: ':'')+esc(last.body)):'No messages yet — tap to message your host')+'</div></button>';
       }).join('');
       body.querySelectorAll('.th-item').forEach(function(b){ b.onclick=function(){ thread(b.getAttribute('data-id')); }; });
@@ -1057,7 +1138,7 @@
       var t=threads.find(function(x){ return x.bookingId===id; });
       if(!t){ list(); return; }
       body.innerHTML=(threads.length>1?'<button class="th-back">← All messages</button>':'')+
-        '<div class="th-head"><div><div class="trip-nm">'+esc(t.guestName||'')+(t.status==='enquiry'?' <span class="badge pending">Enquiry</span>':'')+'</div><div class="trip-sub">'+place(t)+'</div><div class="trip-sub">📅 '+esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut))+' · '+t.nights+' night'+(t.nights===1?'':'s')+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div></div>'+(t.amountCents!=null?'<div class="th-amt">'+rand(t.amountCents)+'</div>':'')+'</div>'+
+        '<div class="th-head"><div><div class="trip-nm">'+esc(t.guestName||'')+(t.status==='enquiry'?' <span class="badge pending">Enquiry</span>':'')+'</div><div class="trip-sub">'+place(t)+'</div><div class="trip-sub">📅 '+(t.dayUse?esc(fmtShort(t.checkIn))+' · day use':esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut))+' · '+t.nights+' night'+(t.nights===1?'':'s'))+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div></div>'+(t.amountCents!=null?'<div class="th-amt">'+rand(t.amountCents)+'</div>':'')+'</div>'+
         '<div class="bubbles">'+(t.messages.length?t.messages.map(function(m){ return '<div class="bub '+(m.sender==='guest'?'guest':'host')+'">'+esc(m.body)+(m.offer?invoiceCard(m.offer):'')+'<span class="when">'+(m.sender==='guest'?'You · ':'Host · ')+esc(fmtWhen(m.createdAt))+'</span></div>'; }).join(''):'<p class="note" style="text-align:center">No messages yet. Write to your host below.</p>')+'</div>'+
         '<div class="reply"><textarea id="replyTxt" rows="2" placeholder="Write a message…"></textarea><button id="replyBtn">Send</button></div><div id="rmsg"></div>';
       var bub=body.querySelector('.bubbles'); bub.scrollTop=bub.scrollHeight;
@@ -1109,8 +1190,8 @@
       '<div class="trip-body">'+
         '<div class="trip-nm">'+esc(t.propertyName||'Stay')+(t.unitName?(' · Unit '+esc(t.unitName)):'')+' <span class="badge '+t.status+'">'+esc(t.status)+'</span></div>'+
         '<div class="trip-sub">'+(t.address?('📍 '+esc(t.address)):'')+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div>'+
-        '<div class="trip-row"><span>📅 '+esc(t.checkIn)+' → '+esc(t.checkOut)+'</span><span>'+t.nights+' night'+(t.nights===1?'':'s')+'</span></div>'+
-        '<div class="trip-sub">Check-in from '+esc(t.checkInTime)+' · checkout by '+esc(t.checkOutTime)+'</div>'+
+        '<div class="trip-row"><span>📅 '+esc(t.checkIn)+(t.dayUse?'':' → '+esc(t.checkOut))+'</span><span>'+(t.dayUse?'Day use':t.nights+' night'+(t.nights===1?'':'s'))+'</span></div>'+
+        '<div class="trip-sub">'+(t.dayUse?'Times as agreed with your host':'Check-in from '+esc(t.checkInTime)+' · checkout by '+esc(t.checkOutTime))+'</div>'+
         (money.length?('<div style="margin-top:6px">'+money.join('')+'</div>'):'')+
         (info.length?('<div class="trip-info">'+info.join('<br>')+'</div>'):'')+
         pending+
@@ -1123,6 +1204,9 @@
   loadSession(); renderAcct(); refreshAccount();
   refreshUnread(); setInterval(refreshUnread, 60000);
   if(/[?&]messages\b/.test(location.search)) openInbox();
+  (function(){ var t=new URLSearchParams(location.search).get('reset');
+    // Take the token out of the address bar and browser history straight away.
+    if(t){ history.replaceState(null,'',location.pathname); openReset(t); } })();
   (function(){ var q=new URLSearchParams(location.search), b=q.get('booking');
     if(b && (q.get('paid') || q.get('payment')==='cancelled')) paymentReturn(b, q.get('payment')==='cancelled'); })();
   load();

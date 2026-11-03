@@ -282,7 +282,7 @@ function cellTitle(c) {
   if (b.hairDryer) reqs.push('hair dryer');
   if (b.cleans?.length) reqs.push(`${b.cleans.length} in-stay clean${b.cleans.length > 1 ? 's' : ''}`);
   const source = (SOURCE_TAG[b.source] || [null, b.source])[1];
-  return `${c.name} · ${b.checkIn.slice(0, 10)} → ${b.checkOut.slice(0, 10)} · ${source} · ${paid}${b.status === 'pending' ? ' · AWAITING PAYMENT' : ''}` +
+  return `${c.name} · ${b.dayUse ? `${b.checkIn.slice(0, 10)} · day use` : `${b.checkIn.slice(0, 10)} → ${b.checkOut.slice(0, 10)}`} · ${source} · ${paid}${b.status === 'pending' ? ' · AWAITING PAYMENT' : ''}` +
     (b.cleaner ? ` · checkout cleaner: ${b.cleaner}` : '') +
     (reqs.length ? `\nRequests: ${reqs.join(', ')}` : '') +
     (b.comments ? `\n${b.comments}` : '');

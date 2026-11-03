@@ -11,19 +11,31 @@ function rel(iso) {
 
 const typeLabel = (t) => (t === 'damage' ? 'Issue' : t === 'repair' ? 'Repair' : 'Clean');
 
-// The board's "form alerts" bell: polls for recent damage/clean/repair
-// submissions, shows a count of unhandled ("new") ones, and holds the sound
-// controls. The actual chime + toast is played globally by <FormChime>.
-export default function NotificationsBell({ onOpen, onCount }) {
+// The board's alerts bell: polls for unread guest messages and recent
+// damage/clean/repair submissions, shows a count of unhandled ones, and holds the
+// sound controls. The actual chime + toast is played globally by <FormChime>.
+export default function NotificationsBell({ onOpen, onOpenMessage, onCount }) {
   const [items, setItems] = useState([]);
+  const [messages, setMessages] = useState([]); // conversations with unread guest messages
+  const [loaded, setLoaded] = useState(false);
+  const [ringing, setRinging] = useState(false);
+  const seenRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [muted, setMuted] = useState(() => { try { return localStorage.getItem('ss_forms_mute') === '1'; } catch { return false; } });
   const ref = useRef(null);
 
   async function load() {
     try { const r = await api.listFormSubmissions('?limit=20'); setItems(r.submissions || []); } catch { /* offline */ }
+    try { const r = await api.messageUnread(); setMessages(r.threads || []); } catch { /* offline */ }
+    setLoaded(true);
   }
-  useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, []);
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 30000);
+    window.addEventListener('ss:new-alert', load); // <FormChime> just spotted something new
+    return () => { clearInterval(id); window.removeEventListener('ss:new-alert', load); };
+    // eslint-disable-next-line
+  }, []);
 
   useEffect(() => {
     if (!onCount) return;
@@ -47,21 +59,44 @@ export default function NotificationsBell({ onOpen, onCount }) {
     try { await api.updateFormSubmission(id, { status: 'reviewed' }); } catch { load(); }
   }
 
-  const newCount = items.filter((s) => s.status === 'new').length;
+  const newCount = items.filter((s) => s.status === 'new').length + messages.reduce((n, m) => n + m.unread, 0);
+
+  // Ring when the count goes up, but not just for opening the board with alerts waiting.
+  useEffect(() => {
+    if (!loaded) return;
+    if (seenRef.current !== null && newCount > seenRef.current) setRinging(true);
+    seenRef.current = newCount;
+  }, [loaded, newCount]);
+  useEffect(() => {
+    if (!ringing) return;
+    const t = setTimeout(() => setRinging(false), 1600);
+    return () => clearTimeout(t);
+  }, [ringing]);
 
   return (
     <div className="notif" ref={ref}>
-      <button className="ghost notif-bell" title="Form alerts" onClick={() => { setOpen((o) => !o); load(); }}>
+      <button className={`ghost notif-bell ${ringing ? 'ringing' : ''}`} title="Messages and form alerts" onClick={() => { setOpen((o) => !o); load(); }}>
         🔔{newCount > 0 && <span className="notif-badge">{newCount}</span>}
       </button>
       {open && (
         <div className="notif-panel">
           <div className="notif-head">
-            Form alerts{newCount > 0 ? <span className="muted small"> · {newCount} new</span> : ''}
+            Alerts{newCount > 0 ? <span className="muted small"> · {newCount} new</span> : ''}
             <button className="notif-mute" title="Play a test chime" onClick={testSound}>🔊 Test</button>
             <button className="notif-mute" title={muted ? 'Sounds off — click to turn on' : 'Sounds on — click to mute'} onClick={toggleMute}>{muted ? '🔕' : '🔔'}</button>
           </div>
-          {items.length === 0 && <div className="notif-empty">No submissions yet. Guests, cleaners and contractors can send them from the forms links.</div>}
+          {items.length === 0 && messages.length === 0 && <div className="notif-empty">Nothing yet. New guest messages appear here, along with reports sent from the forms links.</div>}
+          {messages.map((m) => (
+            <div key={m.bookingId} className="notif-item unseen">
+              <button className="ni-main" onClick={() => { setOpen(false); onOpenMessage(m.bookingId); }}>
+                <span className="ni-line">
+                  <span className="ftag message">{m.enquiry ? 'Enquiry' : 'Message'}</span>
+                  <span className="ni-where">{m.guestName || 'Guest'}{m.propertyName ? ` · ${m.propertyName}${m.unitName ? ' · ' + m.unitName : ''}` : ''}</span>
+                </span>
+                <span className="ni-sub">{m.unread > 1 ? `${m.unread} new · ` : ''}{m.body} · {rel(m.createdAt)}</span>
+              </button>
+            </div>
+          ))}
           {items.map((s) => (
             <div key={s.id} className={`notif-item ${s.status === 'new' ? 'unseen' : ''}`}>
               <button className="ni-main" onClick={() => { setOpen(false); onOpen(s.id); }}>
@@ -75,6 +110,7 @@ export default function NotificationsBell({ onOpen, onCount }) {
             </div>
           ))}
           {items.length > 0 && <button className="notif-all" onClick={() => { setOpen(false); onOpen(null); }}>View all in Forms →</button>}
+          <button className="notif-all" onClick={() => { setOpen(false); onOpenMessage(null); }}>View all messages →</button>
         </div>
       )}
     </div>

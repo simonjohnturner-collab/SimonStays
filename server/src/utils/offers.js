@@ -25,6 +25,8 @@ const validDay = (s) => YMD.test(s || '') && new Date(`${s}T12:00:00Z`).toISOStr
 
 // The accommodation lines of an invoice: what gets blocked once it's paid.
 const staysOf = (offer) => (Array.isArray(offer.lines) ? offer.lines : []).filter((l) => l.kind === 'stay');
+// The check-out to block with: a day-use line holds its date like one night.
+const blockOut = (s) => (s.dayUse ? new Date(Date.parse(`${s.checkIn}T12:00:00Z`) + 864e5).toISOString().slice(0, 10) : s.checkOut);
 
 // How the money splits across bookings. Each extra stay carries its own line and
 // the first booking carries the rest (fees, deposit, discounts), so the bookings
@@ -38,12 +40,12 @@ function splitOf(offer) {
 
 // Validate the host's lines; returns { lines, totalCents, depositCents } or { error }.
 // Nights and amounts on a stay are worked out here, not taken from the browser.
+// Check-in and check-out on the same date is day use, charged at the rate once.
 async function cleanLines(raw, hostId) {
   if (!Array.isArray(raw) || !raw.length) return { error: 'Add at least one line to the invoice.' };
   if (raw.length > MAX_LINES) return { error: `An invoice can have up to ${MAX_LINES} lines.` };
   const unitIds = raw.filter((l) => l && l.kind === 'stay' && l.unitId).map((l) => String(l.unitId));
   const units = await prisma.unit.findMany({ where: { id: { in: unitIds }, property: { hostId } }, include: { property: true } });
-  const today = iso(new Date());
   const lines = [];
   for (const l of raw) {
     if (l && l.kind === 'stay') {
@@ -53,14 +55,16 @@ async function cleanLines(raw, hostId) {
       const place = `${unit.property.name} · Unit ${unit.name}`;
       if (!validDay(checkIn) || !validDay(checkOut)) return { error: `Choose check-in and check-out dates for ${place}.` };
       const nights = nightsBetween(checkIn, checkOut);
-      if (nights < 1 || nights > MAX_NIGHTS) return { error: `Check the dates for ${place}: check-out must be after check-in.` };
-      if (checkIn < today) return { error: `The check-in date for ${place} has passed.` };
+      if (nights < 0 || nights > MAX_NIGHTS) return { error: `Check the dates for ${place}: check-out can't be before check-in.` };
       const nightlyCents = Number(l.nightlyCents);
-      if (!Number.isInteger(nightlyCents) || nightlyCents < 0 || nightlyCents > MAX_LINE_CENTS) return { error: `Check the nightly rate for ${place}.` };
+      const dayUse = nights === 0;
+      if (!Number.isInteger(nightlyCents) || nightlyCents < 0 || nightlyCents > MAX_LINE_CENTS) return { error: `Check the ${dayUse ? 'day' : 'nightly'} rate for ${place}.` };
       lines.push({
         kind: 'stay', unitId: unit.id, propertyName: unit.property.name, unitName: unit.name,
-        checkIn, checkOut, nights, nightlyCents, amountCents: nights * nightlyCents, deposit: false,
-        description: `${place}: ${fmtDay(checkIn)} → ${fmtDay(checkOut)} · ${nights} night${nights === 1 ? '' : 's'} @ R${(nightlyCents / 100).toFixed(2)}`,
+        checkIn, checkOut, nights, dayUse, nightlyCents, amountCents: dayUse ? nightlyCents : nights * nightlyCents, deposit: false,
+        description: dayUse
+          ? `${place}: ${fmtDay(checkIn)} · day use`
+          : `${place}: ${fmtDay(checkIn)} → ${fmtDay(checkOut)} · ${nights} night${nights === 1 ? '' : 's'} @ R${(nightlyCents / 100).toFixed(2)}`,
       });
       continue;
     }
@@ -75,7 +79,7 @@ async function cleanLines(raw, hostId) {
   for (let i = 0; i < stays.length; i++) {
     for (let j = i + 1; j < stays.length; j++) {
       const a = stays[i], b = stays[j];
-      if (a.unitId === b.unitId && a.checkIn < b.checkOut && b.checkIn < a.checkOut) return { error: `Two lines overlap for ${a.propertyName} · Unit ${a.unitName}.` };
+      if (a.unitId === b.unitId && a.checkIn < blockOut(b) && b.checkIn < blockOut(a)) return { error: `Two lines overlap for ${a.propertyName} · Unit ${a.unitName}.` };
     }
   }
   const totalCents = lines.reduce((n, l) => n + l.amountCents, 0);
@@ -116,7 +120,7 @@ const draftFor = (lastOffer, q, b) => (lastOffer && staysOf(lastOffer).length ? 
 // Are all this invoice's units free? Returns the first stay that isn't, or null.
 async function firstClash(stays, excludeBookingId) {
   for (const s of stays) {
-    const a = await checkAvailability(s.unitId, s.checkIn, s.checkOut, excludeBookingId);
+    const a = await checkAvailability(s.unitId, s.checkIn, blockOut(s), excludeBookingId);
     if (a.error || !a.available) return s;
   }
   return null;
@@ -130,7 +134,7 @@ async function saveExtraStays(offer, primary, status) {
   const saved = [];
   for (let i = 0; i < extras.length; i++) {
     const s = extras[i], share = shareOf(s);
-    const checkIn = dateOnly(s.checkIn), checkOut = dateOnly(s.checkOut);
+    const checkIn = dateOnly(s.checkIn), checkOut = dateOnly(blockOut(s));
     const money = {
       status, totalCents: share, quotedCents: share, paid, paymentStatus: paid ? 'paid' : 'unpaid',
       amountPaidCents: paid ? share : 0, amountOwingCents: paid ? 0 : share,
@@ -140,7 +144,7 @@ async function saveExtraStays(offer, primary, status) {
       ? await prisma.booking.update({ where: { id: existing.id }, data: money })
       : await prisma.booking.create({
         data: {
-          ...money, unitId: s.unitId, hostId: primary.hostId, source: 'website', sourceOfferId: offer.id, checkIn, checkOut,
+          ...money, unitId: s.unitId, hostId: primary.hostId, source: 'website', sourceOfferId: offer.id, checkIn, checkOut, dayUse: !!s.dayUse,
           guestName: primary.guestName, guestEmail: primary.guestEmail, guestPhone: primary.guestPhone, guestAccountId: primary.guestAccountId,
           ref: primary.ref ? `${primary.ref}-${i + 2}` : null, termsAcceptedAt: primary.termsAcceptedAt,
           comments: `Second or later unit on invoice ${primary.ref || ''}`.trim(),
@@ -207,7 +211,7 @@ async function sendOffer(booking, { lines: rawLines, note }) {
       where: { id: booking.id },
       data: {
         // The conversation follows the first accommodation line.
-        unitId: stays[0].unitId, checkIn: dateOnly(stays[0].checkIn), checkOut: dateOnly(stays[0].checkOut),
+        unitId: stays[0].unitId, checkIn: dateOnly(stays[0].checkIn), checkOut: dateOnly(blockOut(stays[0])), dayUse: !!stays[0].dayUse,
         totalCents: clean.totalCents, quotedCents: clean.totalCents, depositCents: clean.depositCents || null,
         paymentStatus: 'unpaid', amountOwingCents: null,
       },
@@ -221,4 +225,4 @@ async function sendOffer(booking, { lines: rawLines, note }) {
   return { offer, message: sent.message };
 }
 
-module.exports = { OFFER_HOURS, cleanLines, staysOf, splitOf, firstClash, saveExtraStays, standardQuote, draftFor, invoiceBlock, offerState, offerLink, offerOut, sendOffer };
+module.exports = { OFFER_HOURS, cleanLines, staysOf, blockOut, splitOf, firstClash, saveExtraStays, standardQuote, draftFor, invoiceBlock, offerState, offerLink, offerOut, sendOffer };

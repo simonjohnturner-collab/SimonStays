@@ -72,27 +72,32 @@ function InvoiceCard({ offer }) {
 }
 
 const nightsOf = (l) => (l.checkIn && l.checkOut ? Math.round((Date.parse(`${l.checkOut}T12:00:00Z`) - Date.parse(`${l.checkIn}T12:00:00Z`)) / 864e5) : 0);
-const stayCents = (l) => Math.max(0, nightsOf(l)) * randToCents(l.rate);
-const today = () => new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10); // SAST
+const isDayUse = (l) => !!l.checkIn && l.checkIn === l.checkOut; // same date in and out: charged at the rate once
+const stayCents = (l) => (isDayUse(l) ? 1 : Math.max(0, nightsOf(l))) * randToCents(l.rate);
+const datesOk = (l) => l.checkIn && l.checkOut && l.checkOut >= l.checkIn;
+const nextDay = (ymd) => new Date(Date.parse(`${ymd}T12:00:00Z`) + 864e5).toISOString().slice(0, 10);
 
 // One accommodation line: the unit and dates to block, and this guest's own rate.
 // Fills in the pricing sheet's rate until the host types their own.
 function StayLine({ line, properties, onChange, onRemove }) {
   const { unitId, checkIn, checkOut } = line;
   const nights = nightsOf(line);
-  const ready = unitId && nights > 0;
+  const dayUse = isDayUse(line);
+  const ready = unitId && datesOk(line);
   useEffect(() => {
     if (!ready) { onChange({ standardCents: null, unavailable: false }); return undefined; }
     let live = true;
+    // The pricing sheet has no day rate, so the host types one.
+    if (dayUse) onChange((l) => ({ standardCents: null, ...(l.rateEdited ? {} : { rate: '' }) }));
     const t = setTimeout(() => {
-      api.quoteUnit(unitId, { checkIn, checkOut, cleans: 1 })
+      if (!dayUse) api.quoteUnit(unitId, { checkIn, checkOut, cleans: 1 })
         .then((r) => {
           if (!live) return;
           const standardCents = Math.round(r.quote.accommodationCents / r.quote.nights);
           onChange((l) => ({ standardCents, ...(l.rateEdited ? {} : { rate: (standardCents / 100).toFixed(2) }) }));
         })
         .catch(() => { if (live) onChange({ standardCents: null }); });
-      api.availability(unitId, checkIn, checkOut)
+      api.availability(unitId, checkIn, dayUse ? nextDay(checkIn) : checkOut)
         .then((r) => { if (live) onChange({ unavailable: !r.available }); })
         .catch(() => {});
     }, 300);
@@ -112,16 +117,17 @@ function StayLine({ line, properties, onChange, onRemove }) {
           ))}
         </select>
       </label>
-      <label><span>Check-in</span><input type="date" min={today()} value={checkIn} onChange={(e) => onChange({ checkIn: e.target.value })} /></label>
-      <label><span>Check-out</span><input type="date" min={checkIn || today()} value={checkOut} onChange={(e) => onChange({ checkOut: e.target.value })} /></label>
-      <div className="msg-stay-calc"><span>Nights</span><b>{nights > 0 ? nights : '–'}</b></div>
-      <label><span>Rate per night</span><input className="amt" inputMode="decimal" placeholder="0.00" value={line.rate} onChange={(e) => onChange({ rate: e.target.value, rateEdited: true })} /></label>
+      <label><span>Check-in</span><input type="date" value={checkIn} onChange={(e) => onChange({ checkIn: e.target.value })} /></label>
+      <label><span>Check-out</span><input type="date" min={checkIn || undefined} value={checkOut} onChange={(e) => onChange({ checkOut: e.target.value })} /></label>
+      <div className="msg-stay-calc"><span>Nights</span><b>{dayUse ? 'Day' : nights > 0 ? nights : '–'}</b></div>
+      <label><span>{dayUse ? 'Rate for the day' : 'Rate per night'}</span><input className="amt" inputMode="decimal" placeholder="0.00" value={line.rate} onChange={(e) => onChange({ rate: e.target.value, rateEdited: true })} /></label>
       <div className="msg-stay-calc amt"><span>Amount</span><b>{fmtR(stayCents(line))}</b></div>
       <button type="button" className="mini" aria-label="Remove this accommodation line" onClick={onRemove}>✕</button>
-      {(line.standardCents != null || line.unavailable || (checkIn && checkOut && nights <= 0)) && (
+      {(line.standardCents != null || line.unavailable || dayUse || (checkIn && checkOut && nights < 0)) && (
         <div className="msg-stay-note small">
-          {checkIn && checkOut && nights <= 0 ? <span className="msg-stay-bad">Check-out must be after check-in.</span>
+          {checkIn && checkOut && nights < 0 ? <span className="msg-stay-bad">Check-out can't be before check-in.</span>
             : line.unavailable ? <span className="msg-stay-bad">This unit is already booked for these dates.</span>
+              : dayUse ? <span className="muted">Day use: this date is blocked on the calendar, including that night.</span>
               : <span className="muted">Standard rate {fmtR(line.standardCents)} a night</span>}
         </div>
       )}
@@ -142,7 +148,7 @@ function InvoiceComposer({ bookingId, properties, invoice, standardCents, onSent
   const [err, setErr] = useState('');
   const totalCents = lines.reduce((n, l) => n + (l.kind === 'stay' ? stayCents(l) : randToCents(l.amount)), 0);
   const stays = lines.filter((l) => l.kind === 'stay');
-  const staysReady = stays.length > 0 && stays.every((l) => l.unitId && nightsOf(l) > 0 && !l.unavailable);
+  const staysReady = stays.length > 0 && stays.every((l) => l.unitId && datesOk(l) && !l.unavailable);
   const edit = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...(typeof patch === 'function' ? patch(l) : patch) } : l)));
   const remove = (key) => setLines((ls) => ls.filter((l) => l.key !== key));
 
@@ -170,8 +176,8 @@ function InvoiceComposer({ bookingId, properties, invoice, standardCents, onSent
           <button type="button" className="mini" aria-label={`Remove ${l.description || 'line'}`} onClick={() => remove(l.key)}>✕</button>
         </div>
       ))}
-      <button type="button" className="secondary small" onClick={() => setLines((ls) => [...ls, { key: nextKey.current++, kind: 'charge', description: '', amount: '', deposit: false }])}>＋ Add a fee or discount</button>
-      <div className="muted small">Use a minus amount for a discount, for example -500.</div>
+      <button type="button" className="secondary small" onClick={() => setLines((ls) => [...ls, { key: nextKey.current++, kind: 'charge', description: '', amount: '', deposit: false }])}>＋ Add an item, fee or discount</button>
+      <div className="muted small">For anything not tied to a unit, such as mattress hire. Use a minus amount for a discount, for example -500.</div>
       <div className="msg-invoice-row total"><span>Guest pays</span><span>{fmtR(totalCents)}</span></div>
       <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note to the guest (optional)" />
       {err && <div className="msg-warn">{err}</div>}
@@ -282,7 +288,7 @@ function Inbox({ templates, properties, initialBookingId, onUnreadChange }) {
                 <div>
                   <b>{b.guestName || 'Guest'}</b>{b.status === 'enquiry' && <span className="msg-enquiry-tag">Enquiry</span>}{b.ref ? <span className="muted small"> · {b.ref}</span> : null}
                   <div className="muted small">{placeOf(b)}{b.guestEmail ? ` · ${b.guestEmail}` : ''}</div>
-                  <div className="small">{fmtDay(b.checkIn)} → {fmtDay(b.checkOut)} · {b.nights} night{b.nights === 1 ? '' : 's'}</div>
+                  <div className="small">{b.dayUse ? `${fmtDay(b.checkIn)} · day use` : <>{fmtDay(b.checkIn)} → {fmtDay(b.checkOut)} · {b.nights} night{b.nights === 1 ? '' : 's'}</>}</div>
                 </div>
                 <div className="msg-summary-price">
                   <b>{b.amountCents != null ? fmtR(b.amountCents) : thread.standardCents != null ? fmtR(thread.standardCents) : 'No price yet'}</b>
