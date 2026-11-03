@@ -90,17 +90,17 @@ router.get('/attachments/:id', async (req, res, next) => {
 router.get('/threads', async (req, res, next) => {
   try {
     const bookings = await prisma.booking.findMany({
-      where: { ...owned(req.hostId), messages: { some: {} } },
+      where: { ...owned(req.hostId), messages: { some: { unsentAt: null } } },
       include: {
         ...SUMMARY_INCLUDE,
-        messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+        messages: { where: { unsentAt: null }, orderBy: { createdAt: 'desc' }, take: 1 },
         _count: { select: { messages: { where: { sender: 'guest', readAt: null } } } },
       },
       take: 300,
     });
     const threads = bookings.map((b) => ({
       booking: bookingSummary(b),
-      last: b.messages[0] ? { body: b.messages[0].unsentAt ? 'Message unsent' : b.messages[0].body, sender: b.messages[0].sender, createdAt: b.messages[0].createdAt } : null,
+      last: b.messages[0] ? { body: b.messages[0].body, sender: b.messages[0].sender, createdAt: b.messages[0].createdAt } : null,
       unread: b._count.messages,
     })).sort((a, b) => new Date(b.last.createdAt) - new Date(a.last.createdAt));
     res.json({ threads });
@@ -134,7 +134,7 @@ router.get('/booking/:bookingId', async (req, res, next) => {
   try {
     const b = await loadOwnedBooking(req, res); if (!b) return;
     const messages = await prisma.message.findMany({
-      where: { bookingId: b.id }, orderBy: { createdAt: 'asc' },
+      where: { bookingId: b.id, unsentAt: null }, orderBy: { createdAt: 'asc' },
       include: { schedule: { select: { name: true } }, offer: true, attachments: { select: { id: true, filename: true } } },
     });
     await prisma.message.updateMany({ where: { bookingId: b.id, sender: 'guest', readAt: null }, data: { readAt: new Date() } });
@@ -162,7 +162,7 @@ router.get('/booking/:bookingId', async (req, res, next) => {
       travellers: await tripGuestsOf(b.id),
       messages: messages.map((m) => ({
         id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt, authorName: m.authorName || null, scheduleId: m.scheduleId || null,
-        emailedAt: m.emailedAt, unsentAt: m.unsentAt, scheduleName: m.schedule ? m.schedule.name : (m.scheduleId ? 'Scheduled message' : null),
+        emailedAt: m.emailedAt, scheduleName: m.schedule ? m.schedule.name : (m.scheduleId ? 'Scheduled message' : null),
         offer: m.offer ? offers.offerOut(m.offer, b) : null,
         attachments: m.attachments,
       })),
@@ -268,15 +268,16 @@ router.post('/booking/:bookingId/close', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /messages/booking/:bookingId/messages/:messageId/unsend — take back a message
-// the host sent. The row stays, so a scheduled message doesn't send itself again.
+// POST /messages/booking/:bookingId/messages/:messageId/unsend — delete a message the
+// host sent, for both sides. An empty row stays, hidden, so a scheduled message
+// doesn't send itself again.
 router.post('/booking/:bookingId/messages/:messageId/unsend', async (req, res, next) => {
   try {
     const b = await loadOwnedBooking(req, res); if (!b) return;
     const m = await prisma.message.findFirst({ where: { id: req.params.messageId, bookingId: b.id, sender: 'host' }, select: { id: true, offerId: true, unsentAt: true } });
     if (!m) return res.status(404).json({ error: 'not_found' });
     if (m.offerId) return res.status(400).json({ error: 'has_invoice', message: 'This message carries an invoice, so it can’t be unsent.' });
-    if (!m.unsentAt) await prisma.message.update({ where: { id: m.id }, data: { unsentAt: new Date() } });
+    if (!m.unsentAt) await prisma.message.update({ where: { id: m.id }, data: { unsentAt: new Date(), body: '' } });
     res.json({ ok: true });
   } catch (e) { next(e); }
 });

@@ -224,8 +224,8 @@ router.get('/guests', async (req, res) => {
 router.get('/messages', async (req, res) => {
   const names = await hostNames();
   const bookings = await prisma.booking.findMany({
-    where: { messages: { some: {} }, ...(req.query.hostId ? ownedBy(req.query.hostId) : {}) },
-    include: { ...BOOKING_INCLUDE, messages: { orderBy: { createdAt: 'desc' }, take: 1 }, _count: { select: { messages: true } } },
+    where: { messages: { some: { unsentAt: null } }, ...(req.query.hostId ? ownedBy(req.query.hostId) : {}) },
+    include: { ...BOOKING_INCLUDE, messages: { where: { unsentAt: null }, orderBy: { createdAt: 'desc' }, take: 1 }, _count: { select: { messages: { where: { unsentAt: null } } } } },
     take: 500,
   });
   const threads = bookings.map((b) => {
@@ -246,7 +246,7 @@ router.get('/messages', async (req, res) => {
 router.get('/messages/:bookingId', async (req, res) => {
   const b = await prisma.booking.findUnique({
     where: { id: req.params.bookingId },
-    include: { ...BOOKING_INCLUDE, messages: { orderBy: { createdAt: 'asc' } } },
+    include: { ...BOOKING_INCLUDE, messages: { where: { unsentAt: null }, orderBy: { createdAt: 'asc' } } },
   });
   if (!b) return res.status(404).json({ error: 'not_found' });
   const names = await hostNames();
@@ -255,7 +255,7 @@ router.get('/messages/:bookingId', async (req, res) => {
       id: b.id, ref: b.ref || null, host: names[hostOfBooking(b)] || '—', guestName: b.guestName || null,
       property: b.unit?.property?.name || null, unit: b.unit?.name || null, checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
     },
-    messages: b.messages.map((m) => ({ id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt, unsent: !!m.unsentAt, automatic: !!m.scheduleId })),
+    messages: b.messages.map((m) => ({ id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt, automatic: !!m.scheduleId })),
   });
 });
 

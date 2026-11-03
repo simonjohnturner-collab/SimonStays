@@ -433,7 +433,7 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
 
   async function unsend(m) {
     const already = [m.readAt && 'The guest has already read it.', m.emailedAt && 'They were also emailed a copy, and that can’t be taken back.'].filter(Boolean).join(' ');
-    if (!window.confirm(`Unsend this message? The guest will see that a message was removed.${already ? ` ${already}` : ''}`)) return;
+    if (!window.confirm(`Unsend this message? It’s deleted for you and the guest, and can’t be brought back.${already ? ` ${already}` : ''}`)) return;
     try { await api.unsendMessage(activeId, m.id); await refreshThread('Message unsent.'); }
     catch (e) { setNote((e.data && e.data.message) || e.message); }
   }
@@ -513,19 +513,18 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
             <div className="msg-bubbles">
               {thread.messages.length === 0 && <p className="muted small center">No messages yet.</p>}
               {thread.messages.map((m) => (
-                <div key={m.id} className={`msg-bubble ${m.sender}${m.unsentAt ? ' unsent' : ''}`}>
+                <div key={m.id} className={`msg-bubble ${m.sender}`}>
                   {m.scheduleName && <div className="msg-auto">⏰ {m.scheduleName}</div>}
                   {m.sender === 'guest' && m.authorName && (thread.travellers || []).length > 0 && <div className="msg-auto">{m.authorName}</div>}
-                  {m.unsentAt && <div className="msg-auto">You unsent this. The guest can’t see it.</div>}
                   <div className="msg-body">{m.body}</div>
                   {(m.attachments || []).map((a) => (
                     <div key={a.id}><button type="button" className="linklike" onClick={() => openMessageAttachment(a.id).catch(() => window.alert('Could not open that file.'))}>📎 Open {a.filename}</button></div>
                   ))}
                   {m.offer && <InvoiceCard offer={m.offer} onMarkPaid={markChangePaid} />}
                   <div className="msg-meta">
-                    {m.sender === 'host' && !m.offer && !m.unsentAt && <button type="button" className="msg-link msg-unsend" onClick={() => unsend(m)}>Unsend</button>}
+                    {m.sender === 'host' && !m.offer && <button type="button" className="msg-link msg-unsend" onClick={() => unsend(m)}>Unsend</button>}
                     {fmtWhen(m.createdAt)}
-                    {m.sender === 'host' && !m.unsentAt && <Ticks message={m} />}
+                    {m.sender === 'host' && <Ticks message={m} />}
                   </div>
                 </div>
               ))}

@@ -428,7 +428,7 @@ function Messages({ hostFilter, HostPicker }) {
                   <div key={m.id} className={`msg-bubble ${m.sender}`}>
                     {m.automatic && <div className="msg-auto">⏰ Scheduled message</div>}
                     <div className="msg-body">{m.body}</div>
-                    <div className="msg-meta">{m.sender === 'host' ? 'Host' : 'Guest'} · {fmtWhen(m.createdAt)}{m.readAt ? ' · Read' : ''}{m.unsent ? ' · Unsent' : ''}</div>
+                    <div className="msg-meta">{m.sender === 'host' ? 'Host' : 'Guest'} · {fmtWhen(m.createdAt)}{m.readAt ? ' · Read' : ''}</div>
                   </div>
                 ))}
               </div>

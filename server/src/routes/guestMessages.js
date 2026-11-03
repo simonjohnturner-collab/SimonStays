@@ -37,7 +37,7 @@ async function accountOf(req, res) {
 // booker paid is theirs, so invoices, refunds and proof of payment stay with them.
 const seenByFriends = (m) => !m.bookerOnly && !m.offerId;
 const msgOut = (m, b, acct) => ({
-  id: m.id, sender: m.sender, body: m.unsentAt ? '' : m.body, unsent: !!m.unsentAt, createdAt: m.createdAt, readAt: m.readAt,
+  id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt,
   authorName: m.authorName || null, mine: m.sender === 'guest' && (m.authorId ? m.authorId === acct.id : isBooker(b, acct)),
   offer: m.offer ? offerOut(m.offer, b) : null,
 });
@@ -54,12 +54,12 @@ router.get('/', async (req, res, next) => {
       where: {
         unitId: { not: null },
         AND: [onTrip(acct), { OR: [
-          { messages: { some: {} } },
+          { messages: { some: { unsentAt: null } } },
           { status: { in: ['confirmed', 'pending'] }, checkOut: { gte: today } },
         ] }],
       },
       include: {
-        unit: { include: { property: true } }, messages: { orderBy: { createdAt: 'asc' }, include: { offer: true } },
+        unit: { include: { property: true } }, messages: { where: { unsentAt: null }, orderBy: { createdAt: 'asc' }, include: { offer: true } },
         tripGuests: { orderBy: { createdAt: 'asc' }, select: { account: { select: { id: true, name: true, email: true } } } },
       },
     });
@@ -78,7 +78,7 @@ router.get('/', async (req, res, next) => {
       canRequest: booker && b.status === 'confirmed' && INVOICEABLE_SOURCES.includes(b.source),
       refundDueCents: booker ? b.refundDueCents : null, refundedAt: booker ? b.refundedAt : null,
       messages: seen.map((m) => msgOut(m, b, acct)),
-      unread: seen.filter((m) => m.sender === 'host' && !m.readAt && !m.unsentAt).length,
+      unread: seen.filter((m) => m.sender === 'host' && !m.readAt).length,
       };
     });
     const lastAt = (t) => (t.messages.length ? new Date(t.messages[t.messages.length - 1].createdAt).getTime() : 0);
