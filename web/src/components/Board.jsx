@@ -134,7 +134,7 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
             title={cellTitle(c) + (c.floating ? ' · FLOATING (does not block)' : '')}>
             <SourceTag b={c.booking} />
             <span className={`stay-name ${c.red ? 'red' : ''}`}>
-              {c.booking.status === 'pending' && <span className="badge-inline" title="Awaiting payment — not confirmed, doesn't block the calendar">⏳ </span>}
+              {c.booking.status === 'pending' && <span className="badge-inline" title={c.booking.paymentStatus === 'paid' ? 'Marked paid, dates blocked. Press Confirm booking to confirm it and tell the guest' : "Awaiting payment — not confirmed, doesn't block the calendar"}>⏳ </span>}
               {s.early && <span className="badge-inline" title="Early check-in">⏰ </span>}
               {c.name}
               {s.insta && <span className="badge-inline" title="In-stay clean during this stay"> 🧽</span>}
@@ -282,7 +282,7 @@ function cellTitle(c) {
   if (b.hairDryer) reqs.push('hair dryer');
   if (b.cleans?.length) reqs.push(`${b.cleans.length} in-stay clean${b.cleans.length > 1 ? 's' : ''}`);
   const source = (SOURCE_TAG[b.source] || [null, b.source])[1];
-  return `${c.name} · ${b.dayUse ? `${b.checkIn.slice(0, 10)} · day use` : `${b.checkIn.slice(0, 10)} → ${b.checkOut.slice(0, 10)}`} · ${source} · ${paid}${b.status === 'pending' ? ' · AWAITING PAYMENT' : ''}` +
+  return `${c.name} · ${b.dayUse ? `${b.checkIn.slice(0, 10)} · day use` : `${b.checkIn.slice(0, 10)} → ${b.checkOut.slice(0, 10)}`} · ${source} · ${paid}${b.status === 'pending' && b.paymentStatus !== 'paid' ? ' · AWAITING PAYMENT' : ''}` +
     (b.cleaner ? ` · checkout cleaner: ${b.cleaner}` : '') +
     (reqs.length ? `\nRequests: ${reqs.join(', ')}` : '') +
     (b.comments ? `\n${b.comments}` : '');

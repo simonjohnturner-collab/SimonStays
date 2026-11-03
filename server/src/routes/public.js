@@ -5,7 +5,7 @@
 const express = require('express');
 const prisma = require('../lib/prisma');
 const { checkAvailability } = require('../utils/sync');
-const { dateOnly } = require('../utils/ical');
+const { dateOnly, HOLDS_DATES } = require('../utils/ical');
 const { quote } = require('../utils/pricing');
 const payments = require('../utils/payments');
 const locks = require('../utils/locks');
@@ -249,7 +249,7 @@ router.get('/units', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// GET /public/units/:unitId/calendar?from=&to= — confirmed booked ranges (to grey out)
+// GET /public/units/:unitId/calendar?from=&to= — booked ranges (to grey out)
 router.get('/units/:unitId/calendar', async (req, res, next) => {
   try {
     const unit = await prisma.unit.findFirst({ where: { id: req.params.unitId }, select: { id: true } });
@@ -257,7 +257,7 @@ router.get('/units/:unitId/calendar', async (req, res, next) => {
     const from = req.query.from ? dateOnly(req.query.from) : new Date();
     const to = req.query.to ? dateOnly(req.query.to) : new Date(Date.now() + 365 * 864e5);
     const bookings = await prisma.booking.findMany({
-      where: { unitId: unit.id, status: 'confirmed', checkOut: { gt: from }, checkIn: { lt: to } },
+      where: { unitId: unit.id, ...HOLDS_DATES, checkOut: { gt: from }, checkIn: { lt: to } },
       select: { checkIn: true, checkOut: true },
       orderBy: { checkIn: 'asc' },
     });

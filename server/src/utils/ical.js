@@ -16,6 +16,12 @@ const GENERIC_TITLES = ['reserved', 'airbnb (not available)', 'not available',
   'blocked', 'closed - not available', 'unavailable', 'airbnb', 'booking.com',
   'closed', 'external booking'];
 
+// Bookings that take their dates off sale: confirmed ones, and pending ones the host
+// has marked as fully paid. 'partial' doesn't count, because a website 50/50 split
+// starts as partial before any money has arrived.
+const HOLDS_DATES = { OR: [{ status: 'confirmed' }, { status: 'pending', paymentStatus: 'paid' }] };
+const holdsDates = (b) => b.status === 'confirmed' || (b.status === 'pending' && b.paymentStatus === 'paid');
+
 /** Parse iCal text → [{ uid, start, end, summary, description, resCode }]. */
 function parseFeed(text) {
   const data = nodeIcal.parseICS(text);
@@ -50,8 +56,8 @@ function isGenericTitle(summary) {
 }
 
 /**
- * Build the export .ics for a unit: one all-day VEVENT per confirmed booking,
- * blocking [checkIn, checkOut). Floating/cancelled bookings are never exported.
+ * Build the export .ics for a unit: one all-day VEVENT per booking that holds its
+ * dates, blocking [checkIn, checkOut). Floating/cancelled bookings are never exported.
  * `excludeSource` lets a per-channel feed omit that channel's own bookings so we
  * never echo a channel's reservations back to itself.
  */
@@ -62,7 +68,7 @@ function buildFeed({ unitName, bookings, excludeSource, prodId }) {
     ttl: 60 * 60, // suggest hourly refresh
   });
   bookings.forEach((b) => {
-    if (b.status !== 'confirmed') return;
+    if (!holdsDates(b)) return;
     if (excludeSource && b.source === excludeSource) return;
     cal.createEvent({
       id: `${b.id}@staysync`,
@@ -110,4 +116,4 @@ function dateFromIcal(d) {
 const shownCheckOut = (b) => (b.dayUse ? b.checkIn : b.checkOut);
 const shownNights = (b) => (b.dayUse ? 0 : Math.max(0, Math.round((new Date(b.checkOut) - new Date(b.checkIn)) / 864e5)));
 
-module.exports = { parseFeed, buildFeed, overlaps, dateOnly, dateFromIcal, isGenericTitle, extractResCode, shownCheckOut, shownNights };
+module.exports = { HOLDS_DATES, holdsDates, parseFeed, buildFeed, overlaps, dateOnly, dateFromIcal, isGenericTitle, extractResCode, shownCheckOut, shownNights };

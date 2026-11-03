@@ -1,6 +1,6 @@
 const express = require('express');
 const prisma = require('../lib/prisma');
-const { buildFeed } = require('../utils/ical');
+const { buildFeed, HOLDS_DATES } = require('../utils/ical');
 
 // PUBLIC (no auth) — this is the URL each channel imports to block dates.
 // GET /feed/:unitId.ics?token=<publishToken>&exclude=airbnb
@@ -15,7 +15,7 @@ router.get('/:unitId', async (req, res) => {
   if (!token || token !== unit.publishToken) return res.status(403).type('text/plain').send('bad token');
 
   const bookings = await prisma.booking.findMany({
-    where: { unitId, status: 'confirmed' },
+    where: { unitId, ...HOLDS_DATES },
     orderBy: { checkIn: 'asc' },
   });
 

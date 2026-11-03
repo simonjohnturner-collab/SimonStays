@@ -2,10 +2,10 @@
  * Channel import + availability.
  *  - syncUnit(unitId): pull every channel connection's iCal into the unit's
  *    bookings (idempotent upsert by externalUid; removes cancelled ones).
- *  - checkAvailability(...): does a date range clash with any confirmed booking?
+ *  - checkAvailability(...): does a date range clash with a booking that holds its dates?
  */
 const prisma = require('../lib/prisma');
-const { parseFeed, isGenericTitle, dateOnly, overlaps } = require('./ical');
+const { parseFeed, isGenericTitle, dateOnly, overlaps, HOLDS_DATES, holdsDates } = require('./ical');
 const { onBookingConfirmed } = require('./bookingConfirmed');
 
 const SOURCE_FOR = { airbnb: 'airbnb', booking: 'booking', lekkeslaap: 'lekkeslaap', other: 'import', manual: 'manual' };
@@ -157,13 +157,19 @@ async function checkAvailability(unitId, checkIn, checkOut, excludeBookingId) {
   // Pull candidates that could overlap, then apply half-open overlap precisely.
   const candidates = await prisma.booking.findMany({
     where: {
-      unitId, status: 'confirmed',
+      unitId, ...HOLDS_DATES,
       id: excludeBookingId ? { not: excludeBookingId } : undefined,
       checkIn: { lt: outD }, checkOut: { gt: inD },
     },
   });
+  // A channel can send our own block back to us as a guestless "Blocked" on the same
+  // dates. That copy mustn't stop the booking it came from.
+  const self = excludeBookingId ? await prisma.booking.findUnique({ where: { id: excludeBookingId } }) : null;
+  const isEcho = (b) => self && holdsDates(self) && b.externalUid && b.guestName === 'Blocked'
+    && dateOnly(b.checkIn).getTime() === dateOnly(self.checkIn).getTime()
+    && dateOnly(b.checkOut).getTime() === dateOnly(self.checkOut).getTime();
   const conflicts = candidates
-    .filter((b) => overlaps(inD, outD, b.checkIn, b.checkOut))
+    .filter((b) => overlaps(inD, outD, b.checkIn, b.checkOut) && !isEcho(b))
     .map((b) => ({ id: b.id, guestName: b.guestName, source: b.source, checkIn: b.checkIn, checkOut: b.checkOut }));
   return { available: conflicts.length === 0, conflicts };
 }
