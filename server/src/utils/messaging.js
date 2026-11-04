@@ -148,6 +148,7 @@ const NOTICES = {
   cancelled: 'Your SimonStays booking is cancelled',
   refund: 'About your SimonStays refund',
   invoice: 'Your SimonStays payment invoice',
+  details: 'Your SimonStays booking details',
 };
 
 // Guests we take bookings for directly, on a stay that isn't over. Airbnb and the
@@ -162,7 +163,7 @@ function noticeable(b) {
 // general "new message" copy.
 function emailNotice(to, b, body, kind) {
   const v = valuesFor(b);
-  const live = kind === 'confirmed' || kind === 'changed';
+  const live = ['confirmed', 'changed', 'details'].includes(kind);
   const rows = [
     ['Reference', v.ref],
     ['Where', [v.property, v.unit && `Unit ${v.unit}`].filter(Boolean).join(' · ')],

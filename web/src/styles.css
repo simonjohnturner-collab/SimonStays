@@ -1098,3 +1098,5 @@ button.tx-icon:hover, button.tx-icon.on { background:#e2f0e7; }
 button.tx-link { background:none; color:var(--green-d); padding:0; text-decoration:underline; font-size:13px; }
 button.tx-link:hover { background:none; }
 .tx-guest .guest-avatar { margin-right:8px; }
+.tx-email { margin-top:14px; }
+.tx-email .msg-warn { margin:8px 0 0; }

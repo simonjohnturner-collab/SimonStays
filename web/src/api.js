@@ -66,6 +66,7 @@ export const api = {
   adminListHosts: () => req('GET', '/admin/hosts'),
   adminImpersonate: (hostId) => req('POST', `/admin/impersonate/${hostId}`),
   adminProperties: () => req('GET', '/admin/properties'),
+  adminEmailDetails: (bookingId) => req('POST', `/admin/transactions/${bookingId}/email-details`),
   adminGuests: (hostId) => req('GET', `/admin/guests${hostId ? `?hostId=${encodeURIComponent(hostId)}` : ''}`),
   adminTransactions: (f = {}) => req('GET', `/admin/transactions?${new URLSearchParams(Object.entries(f).filter(([, v]) => v))}`),
   adminMessageThreads: (hostId) => req('GET', `/admin/messages${hostId ? `?hostId=${encodeURIComponent(hostId)}` : ''}`),

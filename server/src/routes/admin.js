@@ -8,7 +8,8 @@ const prisma = require('../lib/prisma');
 const { sign } = require('../lib/jwt');
 const { authHost, requireAdmin, isAdminEmail } = require('../middleware/auth');
 const { DOCUMENT_KINDS } = require('../utils/guestDocuments');
-const { breakdownOf, offerLines } = require('../utils/paymentInvoice');
+const { breakdownOf, offerLines, sendBookingDetails } = require('../utils/paymentInvoice');
+const { noticeable } = require('../utils/messaging');
 
 const router = express.Router();
 router.use(authHost, requireAdmin);
@@ -88,6 +89,16 @@ router.get('/properties', async (req, res) => {
   });
 });
 
+// POST /admin/transactions/:bookingId/email-details — email the guest everything about
+// their booking, for their records.
+router.post('/transactions/:bookingId/email-details', async (req, res, next) => {
+  try {
+    const r = await sendBookingDetails(req.params.bookingId);
+    if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
+    res.json(r);
+  } catch (e) { next(e); }
+});
+
 // GET /admin/transactions?hostId=&from=&to=&status= — every SimonStays booking
 // (made on the website/app) with what was paid and the SimonStays fee.
 // Dates filter on when the booking was made.
@@ -143,6 +154,8 @@ router.get('/transactions', async (req, res) => {
       depositCents: b.depositCents || 0,
       paidCents: b.amountPaidCents || 0,
       owingCents: b.amountOwingCents || 0,
+      canEmailDetails: b.status === 'confirmed' && noticeable(b),
+      detailsEmailedAt: b.detailsEmailedAt,
       grossCents, feeCents, hostNetCents: earns ? grossCents - feeCents : 0,
       breakdown: await breakdownOf(b, invoice),
       sharedInvoice: !!invoice && invoice.bookingId !== b.id,

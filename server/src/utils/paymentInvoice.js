@@ -86,4 +86,53 @@ async function sendPaymentInvoice(bookingId, { method, receivedCents, offer = nu
   return messaging.sendHostMessage(b.id, body, { bookerOnly: true, notice: 'invoice' });
 }
 
-module.exports = { quoteLines, breakdownOf, offerLines, sendPaymentInvoice };
+// An invoice's accommodation lines without their dates and nights: an invoice's
+// dates can be adjusted to get it paid, and the booking holds the real stay.
+const recordLines = (offer) => offer.lines.map((l) => ({
+  description: l.kind === 'stay' ? `Accommodation: ${[l.propertyName, l.unitName && `Unit ${l.unitName}`].filter(Boolean).join(' · ') || 'your stay'}` : l.description,
+  amountCents: l.amountCents,
+}));
+
+// Everything for the guest's records, in one email: their stay, what they paid, and
+// the messages sent to them so far. Leaves out anything unsent. Answers { ok } or { error }.
+async function sendBookingDetails(bookingId) {
+  const b = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: {
+      ...messaging.BOOKING_INCLUDE,
+      guestAccount: { select: { email: true } },
+      payments: { where: { status: 'COMPLETE' }, select: { id: true } },
+      offers: { where: { status: 'paid' }, orderBy: { createdAt: 'asc' } },
+      messages: { where: { sender: 'host', unsentAt: null, offerId: null }, orderBy: { createdAt: 'asc' } },
+    },
+  });
+  if (!b) return { error: 'not_found', status: 404, message: 'Booking not found.' };
+  if (b.status !== 'confirmed' || !messaging.noticeable(b)) return { error: 'not_eligible', status: 400, message: 'This booking can’t be emailed: it needs to be confirmed, not finished, and have a guest email.' };
+
+  const invoice = b.offers.find((o) => o.kind !== 'change')
+    || (b.sourceOfferId ? await prisma.priceOffer.findUnique({ where: { id: b.sourceOfferId } }) : null);
+  const changes = b.offers.filter((o) => o.kind === 'change');
+  const base = invoice ? { lines: recordLines(invoice), totalCents: invoice.totalCents } : await breakdownOf(b);
+  const lines = [...base.lines, ...changes.flatMap(recordLines)];
+  const totalCents = base.totalCents + changes.reduce((n, o) => n + o.totalCents, 0);
+  const paidCents = invoice ? totalCents : b.amountPaidCents || 0;
+  const owing = invoice ? 0 : b.amountOwingCents || 0;
+  const method = b.payments.length ? 'card' : 'EFT';
+  const payment = lines.length ? [
+    'Payment invoice',
+    ...lines.map((l) => `${l.description}: ${rand(l.amountCents)}`),
+    '',
+    `Total: ${rand(totalCents)}`,
+    ...(paidCents > 0 ? [`Paid by ${method}: ${rand(paidCents)}`] : []),
+    ...(owing > 0 ? [`Balance due: ${rand(owing)}`] : []),
+  ].join('\n') : null;
+  const sent = b.messages.map((m) => m.body).filter((body) => !body.startsWith('Payment invoice') && !body.startsWith("We've received your payment"));
+  const name = String(b.guestName || '').trim().split(/\s+/)[0];
+  const body = [`Hi${name ? ` ${name}` : ''}, here are your booking details for your records.`, payment, ...sent].filter(Boolean).join('\n\n');
+
+  if (!(await messaging.emailBookingNotice(b, 'details', body))) return { error: 'not_sent', status: 502, message: 'The email couldn’t be sent. Check the [mailer] lines in Render’s logs.' };
+  const updated = await prisma.booking.update({ where: { id: b.id }, data: { detailsEmailedAt: new Date() }, select: { detailsEmailedAt: true } });
+  return { ok: true, detailsEmailedAt: updated.detailsEmailedAt };
+}
+
+module.exports = { quoteLines, breakdownOf, offerLines, sendPaymentInvoice, sendBookingDetails };

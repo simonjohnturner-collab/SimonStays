@@ -375,6 +375,28 @@ const breakdownSummary = (tx) => [
   'Click for the full breakdown',
 ].join('\n');
 
+// Email the guest everything about their booking. Goes only when the admin confirms.
+function EmailDetails({ tx }) {
+  const [sentAt, setSentAt] = useState(tx.detailsEmailedAt);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function send() {
+    const again = sentAt ? ` They were last sent these on ${fmtWhen(sentAt)}.` : '';
+    if (!window.confirm(`Email ${tx.guestName || 'this guest'} at ${tx.guestEmail} their booking details and payment breakdown?${again}`)) return;
+    setBusy(true); setError('');
+    try { const r = await api.adminEmailDetails(tx.id); setSentAt(r.detailsEmailedAt); }
+    catch (e) { setError((e.data && e.data.message) || e.message); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="tx-email">
+      <button type="button" className="secondary small" disabled={busy} onClick={send}>{busy ? 'Sending…' : '✉️ Email guest their details'}</button>
+      {sentAt && <div className="muted small">Last sent {fmtWhen(sentAt)}</div>}
+      {error && <div className="msg-warn">{error}</div>}
+    </div>
+  );
+}
+
 // How a transaction's amount came about, opened from its receipt icon.
 function PaymentBreakdown({ tx }) {
   const [viewing, setViewing] = useState(null);
@@ -405,6 +427,7 @@ function PaymentBreakdown({ tx }) {
           <dt>Paid by</dt><dd>{tx.method}{tx.paygateRef ? ` · Paygate #${tx.paygateRef}` : ''}</dd>
         </dl>
         {tx.sharedInvoice && <p className="muted small">This invoice covers several units and was paid on its first booking.</p>}
+        {tx.canEmailDetails && <EmailDetails key={tx.id} tx={tx} />}
       </div>
       <div>
         <h4>How the amount came about</h4>
