@@ -15,24 +15,30 @@ const { DEFAULT_CANCELLATION_POLICY } = require('../utils/policy');
 const payments = require('../utils/payments');
 const mailer = require('../utils/mailer');
 const { onTrip, isBooker } = require('../utils/guestAccess');
+const { readDocument } = require('../utils/guestDocuments');
 
 const router = express.Router();
 
 const iso = (d) => new Date(d).toISOString().slice(0, 10);
 const publicAcct = (a) => ({ id: a.id, email: a.email, name: a.name || null, phone: a.phone || null, createdAt: a.createdAt, emailVerified: !!a.emailVerifiedAt });
 
-// POST /public/account/register { email, password, name, phone }
+// POST /public/account/register { email, password, name, phone, profilePhoto, idDocument }
+// (the two files are each { filename, data } with data in base64)
 router.post('/register', async (req, res, next) => {
   try {
-    const { email, password, name, phone } = req.body || {};
+    const { email, password, name, phone, profilePhoto, idDocument } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'email_and_password_required' });
     if (String(password).length < 8) return res.status(400).json({ error: 'password_too_short', message: 'Please use at least 8 characters.' });
     const norm = String(email).trim().toLowerCase();
     const existing = await prisma.guestAccount.findUnique({ where: { email: norm } });
     if (existing) return res.status(409).json({ error: 'email_taken', message: 'An account with that email already exists — please sign in.' });
+    const photo = readDocument('photo', profilePhoto);
+    if (photo.error) return res.status(400).json({ error: 'profile_photo_required', message: photo.error });
+    const id = readDocument('id', idDocument);
+    if (id.error) return res.status(400).json({ error: 'id_document_required', message: id.error });
     const passwordHash = await bcrypt.hash(password, 10);
     const acct = await prisma.guestAccount.create({
-      data: { email: norm, passwordHash, name: (name || '').trim() || null, phone: (phone || '').trim() || null },
+      data: { email: norm, passwordHash, name: (name || '').trim() || null, phone: (phone || '').trim() || null, documents: { create: [photo, id] } },
     });
     sendConfirmation(acct).catch(() => {});
     res.status(201).json({ token: signGuest(acct), account: publicAcct(acct) });

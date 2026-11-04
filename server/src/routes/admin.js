@@ -7,6 +7,7 @@ const express = require('express');
 const prisma = require('../lib/prisma');
 const { sign } = require('../lib/jwt');
 const { authHost, requireAdmin, isAdminEmail } = require('../middleware/auth');
+const { DOCUMENT_KINDS } = require('../utils/guestDocuments');
 
 const router = express.Router();
 router.use(authHost, requireAdmin);
@@ -150,7 +151,7 @@ router.get('/transactions', async (req, res) => {
 // person (matched by account, then email, then phone), latest activity first.
 router.get('/guests', async (req, res) => {
   const names = await hostNames();
-  const accounts = await prisma.guestAccount.findMany({ select: { id: true, email: true, name: true, phone: true, createdAt: true } });
+  const accounts = await prisma.guestAccount.findMany({ select: { id: true, email: true, name: true, phone: true, createdAt: true, documents: { select: { kind: true } } } });
   const accountById = Object.fromEntries(accounts.map((a) => [a.id, a]));
   const accountByEmail = Object.fromEntries(accounts.map((a) => [a.email.trim().toLowerCase(), a]));
   const bookings = await prisma.booking.findMany({
@@ -196,6 +197,9 @@ router.get('/guests', async (req, res) => {
     return {
       key, name: g.name, email: g.email, phone: g.phone,
       hasAccount: !!g.account, joinedAt: g.account?.createdAt || null,
+      accountId: g.account?.id || null,
+      hasPhoto: !!g.account?.documents.some((d) => d.kind === 'photo'),
+      hasId: !!g.account?.documents.some((d) => d.kind === 'id'),
       hosts: [...g.hostIds].map((id) => names[id] || '—'),
       lastActivity: g.lastActivity,
       counts: { confirmed: confirmed.length, pending: count('pending'), cancelled: count('cancelled'), enquiries: count('enquiry') },
@@ -217,6 +221,21 @@ router.get('/guests', async (req, res) => {
       pending: rows.filter((r) => r.counts.pending > 0).length,
     },
   });
+});
+
+// GET /admin/guests/:accountId/documents/:kind — a guest's profile picture or copy
+// of ID. Its type was worked out from the file when it arrived.
+router.get('/guests/:accountId/documents/:kind', async (req, res, next) => {
+  try {
+    if (!DOCUMENT_KINDS.includes(req.params.kind)) return res.status(404).json({ error: 'not_found' });
+    const d = await prisma.guestDocument.findUnique({ where: { guestAccountId_kind: { guestAccountId: req.params.accountId, kind: req.params.kind } } });
+    if (!d) return res.status(404).json({ error: 'not_found' });
+    res.set('Content-Type', d.contentType);
+    res.set('Content-Disposition', `inline; filename="${d.filename.replace(/"/g, '')}"`);
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Cache-Control', 'private, no-store');
+    res.send(Buffer.from(d.data));
+  } catch (e) { next(e); }
 });
 
 // GET /admin/messages?hostId= — every booking conversation, latest first.

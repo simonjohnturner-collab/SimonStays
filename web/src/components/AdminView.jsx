@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-import { api } from '../api.js';
+import { api, guestDocumentUrl, openGuestDocument } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { fmtR } from '../money.js';
 
@@ -154,6 +154,23 @@ function Hosts({ hosts, onShow }) {
   );
 }
 
+// A guest's profile picture, fetched with the admin's token because it's private.
+function GuestPhoto({ accountId, name }) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    let live = true;
+    let made = null;
+    guestDocumentUrl(accountId, 'photo').then((u) => { made = u; if (live) setUrl(u); }).catch(() => {});
+    return () => { live = false; if (made) URL.revokeObjectURL(made); };
+  }, [accountId]);
+  if (!url) return <span className="guest-avatar" />;
+  return (
+    <button type="button" className="guest-avatar" title="Open profile picture" onClick={() => openGuestDocument(accountId, 'photo').catch((e) => window.alert(e.message))}>
+      <img src={url} alt={`Profile picture of ${name || 'guest'}`} />
+    </button>
+  );
+}
+
 function Guests({ hostFilter, HostPicker }) {
   const [data, setData] = useState(null);
   const [q, setQ] = useState('');
@@ -200,14 +217,20 @@ function Guests({ hostFilter, HostPicker }) {
                   return (
                     <Fragment key={g.key}>
                       <tr>
-                        <td className="small">
+                        <td className="small guest-cell">
+                          {g.hasPhoto && <GuestPhoto accountId={g.accountId} name={g.name} />}
                           <button className="linklike" disabled={!g.stays.length} title={g.stays.length ? 'Show their bookings' : 'No bookings yet'} onClick={() => setOpenKey(openKey === g.key ? null : g.key)}>
                             {g.stays.length ? (openKey === g.key ? '▾ ' : '▸ ') : ''}{g.name || 'Guest'}
                           </button>
                           <div className="muted">{g.email}</div>
                         </td>
                         <td className="small">{g.phone || <span className="muted">—</span>}</td>
-                        <td className="small">{g.hasAccount ? `✅ ${fmtDate(g.joinedAt)}` : <span className="muted">—</span>}</td>
+                        <td className="small">
+                          {g.hasAccount ? `✅ ${fmtDate(g.joinedAt)}` : <span className="muted">—</span>}
+                          {g.hasAccount && (g.hasId
+                            ? <div><button type="button" className="linklike" onClick={() => openGuestDocument(g.accountId, 'id').catch((e) => window.alert(e.message))}>🪪 View ID</button></div>
+                            : <div className="muted">No ID on file</div>)}
+                        </td>
                         <td className="small">{g.hosts.join(', ') || <span className="muted">—</span>}</td>
                         <td className="small">
                           {stay ? <>{place(stay)}<div className="muted">{g.nextStay ? 'Next: ' : 'Last: '}{fmtDay(stay.checkIn)} → {fmtDay(stay.checkOut)}</div></> : <span className="muted">—</span>}

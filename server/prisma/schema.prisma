@@ -121,6 +121,22 @@ model GuestAccount {
   updatedAt    DateTime  @updatedAt
   bookings     Booking[]
   sharedTrips  TripGuest[]
+  documents    GuestDocument[]
+}
+
+// What a guest uploads when creating an account. Private: only the SimonStays
+// admin can open these, never a host or another guest.
+model GuestDocument {
+  id             String       @id @default(uuid())
+  guestAccountId String
+  account        GuestAccount @relation(fields: [guestAccountId], references: [id], onDelete: Cascade)
+  kind           String // 'photo' | 'id'
+  data           Bytes
+  contentType    String // worked out from the file itself
+  filename       String
+  createdAt      DateTime     @default(now())
+
+  @@unique([guestAccountId, kind])
 }
 
 // A friend the booker or host has added to a trip: they see it and its messages.

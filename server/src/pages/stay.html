@@ -156,6 +156,9 @@
   .acct-btn{ background:#eef1f4; color:var(--ink); border-radius:8px; padding:8px 14px; font-weight:600; font-size:14px; white-space:nowrap; }
   .acct-btn:hover{ background:#e2e6ea; }
   .acct-name{ font-size:14px; color:var(--ink); font-weight:600; white-space:nowrap; }
+  .doc-pick{ display:block; margin:12px 0 0; font-size:14px; font-weight:600; }
+  .doc-pick .note{ display:block; font-weight:400; margin:2px 0 6px; }
+  .doc-pick input{ display:block; width:100%; font-weight:400; }
   .auth-toggle{ text-align:center; margin-top:12px; font-size:14px; color:var(--muted); }
   .auth-toggle a{ font-weight:600; cursor:pointer; }
   .tabs{ display:flex; gap:8px; margin-bottom:14px; }
@@ -906,6 +909,10 @@
             (login?'':'<input id="aPhone" placeholder="Phone (optional)" autocomplete="tel" />')+
             '<input id="aPass" type="password" placeholder="Password'+(login?'':' (at least 8 characters)')+'" autocomplete="'+(login?'current-password':'new-password')+'" />'+
           '</div>'+
+          (login?'':
+            '<label class="doc-pick">Profile picture<span class="note small">A clear photo of your face.</span><input id="aPhoto" type="file" accept="image/*" /></label>'+
+            '<label class="doc-pick">Copy of your ID<span class="note small">Your ID book or card, or your passport, as a photo or PDF.</span><input id="aId" type="file" accept="image/*,application/pdf" /></label>'+
+            '<p class="note small">Only SimonStays administrators can see these, not property owners or other guests. See our <a href="/privacy" target="_blank">Privacy Policy</a>.</p>')+
           '<div id="amsg"></div>'+
           '<button id="aGo" class="cta-btn">'+(login?'Sign in':'Create account')+'</button>'+
           (login?"<div class='auth-toggle'><a id='aForgot'>Forgot your password?</a></div>":'')+
@@ -926,8 +933,12 @@
       if(!login && pass.length<8){ msg.innerHTML='<div class="msg err">Password must be at least 8 characters.</div>'; return; }
       var body={ email:email, password:pass };
       if(!login){ body.name=(overlay.querySelector('#aName').value||'').trim(); body.phone=(overlay.querySelector('#aPhone').value||'').trim(); }
+      var photoFile=!login&&overlay.querySelector('#aPhoto').files[0], idFile=!login&&overlay.querySelector('#aId').files[0];
+      if(!login&&!photoFile){ msg.innerHTML='<div class="msg err">Please add a profile picture.</div>'; return; }
+      if(!login&&!idFile){ msg.innerHTML='<div class="msg err">Please add a copy of your ID.</div>'; return; }
       var btn=overlay.querySelector('#aGo'); btn.disabled=true; btn.textContent=login?'Signing in…':'Creating…'; msg.innerHTML='';
       try{
+        if(!login){ body.profilePhoto=await readGuestDoc(photoFile,800); body.idDocument=await readGuestDoc(idFile,2000); }
         var r=await fetch(API+'/public/account/'+(login?'login':'register'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         var d=await r.json();
         if(!r.ok){ msg.innerHTML='<div class="msg err">'+esc(d.message||'Could not sign you in. Please try again.')+'</div>'; btn.disabled=false; btn.textContent=login?'Sign in':'Create account'; return; }
@@ -935,10 +946,40 @@
         var next=AFTER_AUTH; AFTER_AUTH=null;
         if(next) next(); else openTrips();
         refreshUnread();
-      }catch(e){ msg.innerHTML='<div class="msg err">Something went wrong. Please try again.</div>'; btn.disabled=false; btn.textContent=login?'Sign in':'Create account'; }
+      }catch(e){ msg.innerHTML='<div class="msg err">'+esc(e.guestMessage||'Something went wrong. Please try again.')+'</div>'; btn.disabled=false; btn.textContent=login?'Sign in':'Create account'; }
     }
     overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
     host.innerHTML=''; host.appendChild(overlay); draw();
+  }
+
+  // Ready a chosen file for upload. Photos are shrunk to fit the limit, which also
+  // drops the location a phone stores in them. PDFs go as they are.
+  function readGuestDoc(file,maxSide){
+    function fail(text){ var e=new Error(text); e.guestMessage=text; return e; }
+    return new Promise(function(resolve,reject){
+      var name=file.name;
+      if(file.type==='application/pdf'){
+        if(file.size>4*1024*1024){ reject(fail('That PDF is too big. The limit is 4 MB.')); return; }
+        var reader=new FileReader();
+        reader.onload=function(){ resolve({ filename:name, data:reader.result }); };
+        reader.onerror=function(){ reject(fail('We could not read that file. Please try another.')); };
+        reader.readAsDataURL(file);
+        return;
+      }
+      var img=new Image(), url=URL.createObjectURL(file);
+      img.onload=function(){
+        URL.revokeObjectURL(url);
+        var scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+        var canvas=document.createElement('canvas');
+        canvas.width=Math.round(img.naturalWidth*scale); canvas.height=Math.round(img.naturalHeight*scale);
+        var ctx=canvas.getContext('2d');
+        ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        resolve({ filename:name.replace(/\.[^.]*$/,'')+'.jpg', data:canvas.toDataURL('image/jpeg',0.85) });
+      };
+      img.onerror=function(){ URL.revokeObjectURL(url); reject(fail('We could not read '+name+'. Please use a JPG or PNG photo.')); };
+      img.src=url;
+    });
   }
 
   // A small sheet for the password screens: returns the overlay, already showing.
