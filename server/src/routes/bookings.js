@@ -6,6 +6,11 @@ const { dateOnly } = require('../utils/ical');
 const { quote } = require('../utils/pricing');
 const { onBookingConfirmed } = require('../utils/bookingConfirmed');
 const { confirmByHost } = require('../utils/payments');
+const messaging = require('../utils/messaging');
+
+const LIVE_STATUSES = ['confirmed', 'pending'];
+const CANCELLED_TEXT = 'Your booking at [Property] has been cancelled. If you have any questions, please message us on SimonStays or email support@simonstays.co.za.';
+const logTellFailure = (id) => (e) => console.error('[bookings] guest notice failed', id, e.message);
 
 const router = express.Router();
 router.use(authHost);
@@ -209,6 +214,17 @@ router.patch('/bookings/:id', async (req, res) => {
   }
   const updated = await prisma.booking.update({ where: { id: booking.id }, data, include: { cleans: true } });
   if (updated.status === 'confirmed' && booking.status !== 'confirmed') onBookingConfirmed(updated.id);
+  // Tell the guest when the host moves or cancels their stay from here.
+  if (messaging.noticeable(updated)) {
+    const moved = updated.unitId !== booking.unitId
+      || updated.checkIn.getTime() !== booking.checkIn.getTime()
+      || updated.checkOut.getTime() !== booking.checkOut.getTime();
+    if (updated.status === 'cancelled' && LIVE_STATUSES.includes(booking.status)) {
+      messaging.sendHostMessage(updated.id, CANCELLED_TEXT, { notice: 'cancelled' }).catch(logTellFailure(updated.id));
+    } else if (updated.status === 'confirmed' && booking.status === 'confirmed' && moved) {
+      messaging.sendHostMessage(updated.id, 'Your booking has been updated: [Property], Unit [Unit], [Check In] to [Check Out].', { notice: 'changed' }).catch(logTellFailure(updated.id));
+    }
+  }
   res.json({ booking: updated });
 });
 
@@ -267,9 +283,16 @@ async function loadOwnedWithCleans(req, res) {
 // guest sees it as cancelled in My trips); other bookings are deleted.
 router.delete('/bookings/:id', async (req, res) => {
   const booking = await loadOwned(req, res); if (!booking) return;
+  const tell = LIVE_STATUSES.includes(booking.status) && messaging.noticeable(booking);
   if (booking.source === 'website') {
     await prisma.booking.update({ where: { id: booking.id }, data: { status: 'cancelled' } });
+    if (tell) messaging.sendHostMessage(booking.id, CANCELLED_TEXT, { notice: 'cancelled' }).catch(logTellFailure(booking.id));
     return res.json({ ok: true, cancelled: true });
+  }
+  // The conversation goes with the booking, so this one is email only.
+  if (tell) {
+    const full = await prisma.booking.findUnique({ where: { id: booking.id }, include: { ...messaging.BOOKING_INCLUDE, guestAccount: { select: { email: true } } } });
+    messaging.emailBookingNotice(full, 'cancelled', CANCELLED_TEXT).catch(logTellFailure(booking.id));
   }
   await prisma.booking.delete({ where: { id: booking.id } });
   res.json({ ok: true });

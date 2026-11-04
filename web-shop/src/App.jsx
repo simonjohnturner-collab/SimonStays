@@ -4,7 +4,7 @@ import { api, photoUrl } from './api.js';
 const money = (cents) => `R${(cents / 100).toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const CONTACT = {
   phone: import.meta.env.VITE_CONTACT_PHONE || '+27 82 853 1554',
-  email: import.meta.env.VITE_CONTACT_EMAIL || 'stay@simonstays.com',
+  email: import.meta.env.VITE_CONTACT_EMAIL || 'support@simonstays.co.za',
 };
 
 export default function App() {

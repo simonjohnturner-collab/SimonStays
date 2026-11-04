@@ -3,7 +3,8 @@
 //   1. stamp Booking.confirmedAt (only once — guards everything below)
 //   2. WhatsApp the host a confirmation (website + channel bookings; a manual
 //      booking was typed in by the host, so they already know)
-//   3. send the host's "when a booking is confirmed" scheduled messages
+//   3. email the guest their confirmation
+//   4. send the host's "when a booking is confirmed" scheduled messages
 //
 // Fire-and-forget from callers: never throws, never blocks the request.
 //
@@ -45,6 +46,12 @@ async function notifyHost(b) {
   return wa.sendWhatsApp({ to: phone, body, contentSid: process.env.TWILIO_WHATSAPP_BOOKING_CONTENT_SID || null, contentVariables });
 }
 
+function confirmationText(b) {
+  const name = String(b.guestName || '').trim().split(/\s+/)[0];
+  const owing = b.source === 'website' && !b.paid ? b.amountOwingCents || 0 : 0;
+  return `Thank you${name ? `, ${name}` : ''}. Your booking is confirmed, and we look forward to hosting you.${owing > 0 ? ` The balance of ${rand(owing)} is due at least 3 days before check-in.` : ''}`;
+}
+
 async function onBookingConfirmed(bookingId) {
   try {
     // Atomic claim: only the first caller for this booking gets count 1.
@@ -57,6 +64,8 @@ async function onBookingConfirmed(bookingId) {
       out.whatsapp = await notifyHost(b);
       if (!out.whatsapp.ok) console.warn('[booking-confirmed] host WhatsApp not sent', b.id, out.whatsapp.skipped || out.whatsapp.error);
     }
+    // A slow mail server mustn't hold up whoever confirmed the booking.
+    messaging.emailBookingNotice(b, 'confirmed', confirmationText(b)).catch((e) => console.error('[booking-confirmed] email failed', b.id, e.message));
     out.messages = await messaging.runConfirmedSchedules(b);
     return out;
   } catch (e) {

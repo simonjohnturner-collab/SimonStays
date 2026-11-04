@@ -18,7 +18,7 @@ function init() {
   const user = process.env.SMTP_USER || process.env.ZOHO_IMAP_USER || null;
   const pass = process.env.SMTP_PASSWORD || process.env.ZOHO_IMAP_PASSWORD || null;
   const port = Number(process.env.SMTP_PORT || 465);
-  fromAddress = process.env.SMTP_FROM || process.env.MAIL_FROM || user || null;
+  fromAddress = process.env.SMTP_FROM || process.env.MAIL_FROM || 'SimonStays <support@simonstays.co.za>';
 
   if (!host || !user || !pass) {
     console.warn('[mailer] SMTP not configured — invoice emails will be skipped. Set SMTP_HOST/SMTP_USER/SMTP_PASSWORD/SMTP_FROM (or Zoho IMAP creds).');

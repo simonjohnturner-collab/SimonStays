@@ -180,7 +180,7 @@ async function confirmByHost(bookingId) {
   }
   if (booking.guestEmail || booking.guestAccountId) {
     const dates = `${iso(booking.checkIn)} to ${iso(booking.checkOut)}`;
-    await messaging.sendHostMessage(booking.id, `We've received your payment, thank you. Your booking${booking.ref ? ` ${booking.ref}` : ''} at ${placeOf(booking)}, ${dates}, is confirmed.${balance > 0 ? ` The balance of R${(balance / 100).toFixed(2)} is due at least 3 days before check-in.` : ''}`, { bookerOnly: balance > 0 })
+    await messaging.sendHostMessage(booking.id, `We've received your payment, thank you. Your booking${booking.ref ? ` ${booking.ref}` : ''} at ${placeOf(booking)}, ${dates}, is confirmed.${balance > 0 ? ` The balance of R${(balance / 100).toFixed(2)} is due at least 3 days before check-in.` : ''}`, { bookerOnly: balance > 0, noEmail: true }) // onBookingConfirmed has emailed them
       .catch((e) => console.error('[confirm] guest message failed', booking.id, e.message));
   }
   return { ok: true, booking: await prisma.booking.findUnique({ where: { id: booking.id } }) };

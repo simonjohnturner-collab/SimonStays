@@ -64,15 +64,18 @@ function invoiceHtml(data) {
   <div style="background:#fff;border:1px solid #e3e3e3;border-radius:14px;padding:24px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
       <div><div style="font-size:22px;font-weight:800;color:#2e7d5b">Simon<span style="color:#1f2430">Stays</span></div>
-        <div style="color:#6b7280;font-size:13px">Booking confirmation &amp; invoice</div></div>
+        <div style="color:#6b7280;font-size:13px">${data.awaitingPayment ? 'Invoice' : 'Booking confirmation &amp; invoice'}</div></div>
       <div style="text-align:right"><div style="font-weight:700">${esc(data.ref)}</div>
         <div style="color:#6b7280;font-size:13px">${new Date().toLocaleDateString('en-ZA')}</div></div>
     </div>
 
-    <div style="margin-top:16px;padding:12px 14px;background:#eef6f0;border:1px solid #cfe6d6;border-radius:10px;font-size:14px;line-height:1.6">
+    ${data.awaitingPayment ? `<div style="margin-top:16px;padding:12px 14px;background:#fff7e6;border:1px solid #f0d9a8;border-radius:10px;font-size:14px;line-height:1.6">
+      <div style="font-weight:700;color:#8a5a00">⏳ Your booking is awaiting payment</div>
+      Thank you${data.guestName ? ', ' + esc(String(data.guestName).split(' ')[0]) : ''}! Your dates aren't held until your payment comes through. We'll email you as soon as your booking is confirmed.
+    </div>` : `<div style="margin-top:16px;padding:12px 14px;background:#eef6f0;border:1px solid #cfe6d6;border-radius:10px;font-size:14px;line-height:1.6">
       <div style="font-weight:700;color:#1f7a44">✅ Your booking is confirmed</div>
       Thank you${data.guestName ? ', ' + esc(String(data.guestName).split(' ')[0]) : ''}! We look forward to hosting you.
-    </div>
+    </div>`}
 
     <div style="margin-top:16px;font-size:14px;line-height:1.7">
       <div><b>${esc(data.propertyName)}</b> &middot; Unit ${esc(data.unitName)}</div>
@@ -103,7 +106,7 @@ function invoiceHtml(data) {
 
     <div style="margin-top:20px;color:#6b7280;font-size:12px;line-height:1.6;border-top:1px solid #eee;padding-top:12px">
       SimonStays is a trading name owned, controlled and managed by Catwalk Investments (registration number 1999/010697/07).<br>
-      support@simonstays.com &middot; 078 511 9336 &middot; 23 Firenza, Pam Road, Benmore Gardens
+      support@simonstays.co.za &middot; 078 511 9336 &middot; 23 Firenza, Pam Road, Benmore Gardens
     </div>
   </div>
 </div>
