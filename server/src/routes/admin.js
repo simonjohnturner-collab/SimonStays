@@ -113,6 +113,8 @@ router.get('/transactions', async (req, res) => {
   const offerIds = bookings.map((b) => b.sourceOfferId).filter(Boolean);
   const offerPayments = offerIds.length ? await prisma.payment.findMany({ where: { offerId: { in: offerIds } } }) : [];
   const sourceOffers = offerIds.length ? await prisma.priceOffer.findMany({ where: { id: { in: offerIds } } }) : [];
+  const guestAccounts = await prisma.guestAccount.findMany({ select: { id: true, email: true, documents: { select: { kind: true } } } });
+  const accountOf = (b) => guestAccounts.find((a) => a.id === b.guestAccountId || a.email === (b.guestEmail || '').trim().toLowerCase()) || null;
   const rows = await Promise.all(bookings.map(async (b) => {
     const hostId = hostOfBooking(b);
     const grossCents = grossOf(b);
@@ -121,11 +123,15 @@ router.get('/transactions', async (req, res) => {
     const feeCents = earns ? feeOf(grossCents) : 0;
     const card = payments.find((p) => p.status === 'COMPLETE');
     const invoice = b.offers.find((o) => o.kind !== 'change') || sourceOffers.find((o) => o.id === b.sourceOfferId) || null;
+    const account = accountOf(b);
     return {
       id: b.id, ref: b.ref || null, createdAt: b.createdAt, status: b.status,
       hostId, host: names[hostId] || '—',
       property: b.unit?.property?.name || null, unit: b.unit?.name || null,
       guestName: b.guestName || null, guestEmail: b.guestEmail || null,
+      accountId: account ? account.id : null,
+      hasPhoto: !!account && account.documents.some((d) => d.kind === 'photo'),
+      hasId: !!account && account.documents.some((d) => d.kind === 'id'),
       checkIn: iso(b.checkIn), checkOut: iso(b.checkOut), dayUse: !!b.dayUse,
       checkInTime: b.unit?.checkInTime || b.unit?.property?.checkInTime || '15:00',
       checkOutTime: b.unit?.checkOutTime || b.unit?.property?.checkOutTime || '10:00',

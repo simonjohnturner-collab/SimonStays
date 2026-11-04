@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-import { api, guestDocumentUrl, openGuestDocument } from '../api.js';
+import { api, guestDocumentFile } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { fmtR } from '../money.js';
 
@@ -154,21 +154,66 @@ function Hosts({ hosts, onShow }) {
   );
 }
 
-// A guest's profile picture, fetched with the admin's token because it's private.
-function GuestPhoto({ accountId, name }) {
-  const [url, setUrl] = useState(null);
+// A guest's private file, fetched with the admin's token and released when it's done with.
+function useGuestFile(accountId, kind) {
+  const [state, setState] = useState({ file: null, error: '' });
   useEffect(() => {
     let live = true;
     let made = null;
-    guestDocumentUrl(accountId, 'photo').then((u) => { made = u; if (live) setUrl(u); }).catch(() => {});
+    setState({ file: null, error: '' });
+    guestDocumentFile(accountId, kind)
+      .then((f) => { if (live) { made = f.url; setState({ file: f, error: '' }); } else URL.revokeObjectURL(f.url); })
+      .catch((e) => { if (live) setState({ file: null, error: e.message }); });
     return () => { live = false; if (made) URL.revokeObjectURL(made); };
-  }, [accountId]);
-  if (!url) return <span className="guest-avatar" />;
+  }, [accountId, kind]);
+  return state;
+}
+
+// Shows a guest's picture or ID over the page. Esc or a click outside closes it.
+function GuestDocViewer({ accountId, kind, name, onClose }) {
+  const { file, error } = useGuestFile(accountId, kind);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const label = `${kind === 'id' ? 'ID' : 'Profile picture'} of ${name || 'guest'}`;
   return (
-    <button type="button" className="guest-avatar" title="Open profile picture" onClick={() => openGuestDocument(accountId, 'photo').catch((e) => window.alert(e.message))}>
-      <img src={url} alt={`Profile picture of ${name || 'guest'}`} />
-    </button>
+    <div className="overlay guest-doc-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="guest-doc" role="dialog" aria-modal="true" aria-label={label}>
+        <div className="modal-head"><h3>{label}</h3><button type="button" className="secondary small" onClick={onClose}>Close</button></div>
+        {error && <p className="small">{error}</p>}
+        {!error && !file && <p className="muted small">Loading…</p>}
+        {file && (file.type === 'application/pdf'
+          ? <iframe src={`${file.url}#toolbar=0`} title={label} />
+          : <img src={file.url} alt={label} />)}
+      </div>
+    </div>
   );
+}
+
+// A guest's profile picture: hover to enlarge it, click to open it.
+function GuestPhoto({ accountId, name, onView }) {
+  const { file } = useGuestFile(accountId, 'photo');
+  const [hover, setHover] = useState(null);
+  if (!file) return <span className="guest-avatar" />;
+  const alt = `Profile picture of ${name || 'guest'}`;
+  const show = (e) => { const r = e.currentTarget.getBoundingClientRect(); setHover({ left: r.right + 8, top: Math.max(8, Math.min(r.top - 40, window.innerHeight - 248)) }); };
+  return (
+    <>
+      <button type="button" className="guest-avatar" aria-label={`View ${alt.toLowerCase()}`} onMouseEnter={show} onMouseLeave={() => setHover(null)} onFocus={show} onBlur={() => setHover(null)} onClick={() => { setHover(null); onView('photo'); }}>
+        <img src={file.url} alt={alt} />
+      </button>
+      {hover && <img className="guest-hover" src={file.url} alt="" style={hover} />}
+    </>
+  );
+}
+
+// A guest's picture and ID, or why there are none. `g` has accountId, hasPhoto and hasId.
+function GuestIdLink({ g, onView }) {
+  if (!g.accountId) return <div className="muted">No account, so no ID</div>;
+  if (!g.hasId) return <div className="muted">No ID on file</div>;
+  return <div><button type="button" className="tx-link" onClick={() => onView('id')}>🪪 View ID</button></div>;
 }
 
 function Guests({ hostFilter, HostPicker }) {
@@ -176,6 +221,7 @@ function Guests({ hostFilter, HostPicker }) {
   const [q, setQ] = useState('');
   const [openKey, setOpenKey] = useState(null);
   const [msg, setMsg] = useState('');
+  const [viewing, setViewing] = useState(null); // { accountId, kind, name }
 
   useEffect(() => {
     setData(null); setOpenKey(null);
@@ -193,6 +239,7 @@ function Guests({ hostFilter, HostPicker }) {
         <input type="search" placeholder="Search by name, email or phone…" value={q} onChange={(e) => setQ(e.target.value)} />
         <span className="muted small">{msg || (data ? `${list.length} of ${t.guests} guest${t.guests === 1 ? '' : 's'}` : 'Loading…')}</span>
       </div>
+      {viewing && <GuestDocViewer {...viewing} onClose={() => setViewing(null)} />}
       {data && (
         <>
           <div className="mk-tiles">
@@ -218,7 +265,7 @@ function Guests({ hostFilter, HostPicker }) {
                     <Fragment key={g.key}>
                       <tr>
                         <td className="small guest-cell">
-                          {g.hasPhoto && <GuestPhoto accountId={g.accountId} name={g.name} />}
+                          {g.hasPhoto && <GuestPhoto accountId={g.accountId} name={g.name} onView={(kind) => setViewing({ accountId: g.accountId, kind, name: g.name })} />}
                           <button className="linklike" disabled={!g.stays.length} title={g.stays.length ? 'Show their bookings' : 'No bookings yet'} onClick={() => setOpenKey(openKey === g.key ? null : g.key)}>
                             {g.stays.length ? (openKey === g.key ? '▾ ' : '▸ ') : ''}{g.name || 'Guest'}
                           </button>
@@ -227,9 +274,7 @@ function Guests({ hostFilter, HostPicker }) {
                         <td className="small">{g.phone || <span className="muted">—</span>}</td>
                         <td className="small">
                           {g.hasAccount ? `✅ ${fmtDate(g.joinedAt)}` : <span className="muted">—</span>}
-                          {g.hasAccount && (g.hasId
-                            ? <div><button type="button" className="linklike" onClick={() => openGuestDocument(g.accountId, 'id').catch((e) => window.alert(e.message))}>🪪 View ID</button></div>
-                            : <div className="muted">No ID on file</div>)}
+                          <GuestIdLink g={g} onView={(kind) => setViewing({ accountId: g.accountId, kind, name: g.name })} />
                         </td>
                         <td className="small">{g.hosts.join(', ') || <span className="muted">—</span>}</td>
                         <td className="small">
@@ -332,6 +377,7 @@ const breakdownSummary = (tx) => [
 
 // How a transaction's amount came about, opened from its receipt icon.
 function PaymentBreakdown({ tx }) {
+  const [viewing, setViewing] = useState(null);
   const row = (label, cents, cls) => <tr key={label} className={cls}><td colSpan={2}>{label}</td><td className="num">{fmtR(cents)}</td></tr>;
   const line = (l, i) => (
     <Fragment key={i}>
@@ -343,11 +389,17 @@ function PaymentBreakdown({ tx }) {
   );
   return (
     <div className="tx-breakdown">
+      {viewing && <GuestDocViewer accountId={tx.accountId} kind={viewing} name={tx.guestName} onClose={() => setViewing(null)} />}
       <div>
         <h4>The stay</h4>
         <dl className="tx-stay">
           <dt>Where</dt><dd>{place(tx)}</dd>
-          <dt>Guest</dt><dd>{tx.guestName || '—'}</dd>
+          <dt>Guest</dt>
+          <dd className="tx-guest">
+            {tx.hasPhoto && <GuestPhoto accountId={tx.accountId} name={tx.guestName} onView={setViewing} />}
+            {tx.guestName || '—'}
+            <GuestIdLink g={tx} onView={setViewing} />
+          </dd>
           <dt>Check-in</dt><dd>{fmtFullDay(tx.checkIn)} from {tx.checkInTime}{tx.earlyCheckIn ? ' · early check-in' : ''}</dd>
           {!tx.dayUse && <><dt>Check-out</dt><dd>{fmtFullDay(tx.checkOut)} by {tx.checkOutTime}{tx.lateCheckOut ? ' · late checkout' : ''}</dd></>}
           <dt>Paid by</dt><dd>{tx.method}{tx.paygateRef ? ` · Paygate #${tx.paygateRef}` : ''}</dd>

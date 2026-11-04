@@ -1090,3 +1090,11 @@ button.msg-shortcut:disabled:hover { background:#fff; }
 button.tx-icon { background:none; color:inherit; padding:2px 5px; margin-right:6px; font-size:16px; line-height:1; border-radius:6px; }
 button.tx-icon:hover, button.tx-icon.on { background:#e2f0e7; }
 @media (max-width:760px) { .tx-breakdown { grid-template-columns:1fr; } }
+.guest-hover { position:fixed; width:240px; height:240px; object-fit:cover; border-radius:12px; border:3px solid #fff; box-shadow:0 8px 30px rgba(0,0,0,.3); z-index:15; pointer-events:none; }
+.guest-doc-overlay { z-index:30; }
+.guest-doc { background:#fff; border-radius:14px; padding:16px; width:min(900px,94vw); max-height:92vh; display:flex; flex-direction:column; }
+.guest-doc img { max-width:100%; max-height:calc(92vh - 90px); object-fit:contain; align-self:center; }
+.guest-doc iframe { width:100%; height:calc(92vh - 90px); border:1px solid var(--line); border-radius:8px; }
+button.tx-link { background:none; color:var(--green-d); padding:0; text-decoration:underline; font-size:13px; }
+button.tx-link:hover { background:none; }
+.tx-guest .guest-avatar { margin-right:8px; }

@@ -23,18 +23,12 @@ export async function openMessageAttachment(id) {
   if (win) win.location = url; else window.location = url;
 }
 
-// A guest's profile picture or ID, which only the admin can fetch. Answers a local URL.
-export async function guestDocumentUrl(accountId, kind) {
+// A guest's profile picture or ID, which only the admin can fetch. Answers a local URL and its type.
+export async function guestDocumentFile(accountId, kind) {
   const res = await fetch(`${BASE}/admin/guests/${accountId}/documents/${kind}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   if (!res.ok) throw new Error('Could not open that file.');
-  return URL.createObjectURL(await res.blob());
-}
-export async function openGuestDocument(accountId, kind) {
-  const win = window.open('', '_blank'); // opened now, or a popup blocker stops it
-  try {
-    const url = await guestDocumentUrl(accountId, kind);
-    if (win) win.location = url; else window.location = url;
-  } catch (e) { if (win) win.close(); throw e; }
+  const blob = await res.blob();
+  return { url: URL.createObjectURL(blob), type: blob.type };
 }
 
 export function photoUrl(id) { return `${BASE}/photos/${id}`; }
