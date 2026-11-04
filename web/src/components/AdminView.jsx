@@ -317,12 +317,37 @@ function Properties({ hostFilter, HostPicker }) {
 
 const STATUS = { confirmed: '✅ Confirmed', pending: '⏳ Awaiting payment', cancelled: '✖ Cancelled', enquiry: '💬 Enquiry' };
 
+// What the guest paid for, opened from a row in Transactions.
+function PaymentBreakdown({ tx }) {
+  const row = (label, cents, cls) => <tr key={label} className={cls}><td>{label}</td><td className="num">{fmtR(cents)}</td></tr>;
+  return (
+    <table className="admin-table tx-lines">
+      <tbody>
+        {tx.breakdown.lines.map((l, i) => <tr key={i}><td>{l.description}</td><td className="num">{fmtR(l.amountCents)}</td></tr>)}
+        {row('Total', tx.breakdown.totalCents, 'tx-total')}
+        {tx.changes.map((c) => (
+          <Fragment key={c.id}>
+            <tr><td colSpan={2} className="muted small">Booking change, paid {fmtDate(c.paidAt)}</td></tr>
+            {c.lines.map((l, i) => <tr key={i}><td>{l.description}</td><td className="num">{fmtR(l.amountCents)}</td></tr>)}
+          </Fragment>
+        ))}
+        {row(`Paid by ${tx.method}`, tx.paidCents, 'tx-total')}
+        {tx.owingCents > 0 && row('Balance due', tx.owingCents)}
+        {tx.feeCents > 0 && row('SimonStays fee', tx.feeCents)}
+        {tx.hostNetCents > 0 && row('To host', tx.hostNetCents)}
+      </tbody>
+      {tx.sharedInvoice && <caption className="muted small">This invoice covers several units and was paid on its first booking.</caption>}
+    </table>
+  );
+}
+
 function Transactions({ hostFilter, HostPicker }) {
   const [data, setData] = useState(null);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [status, setStatus] = useState('');
   const [msg, setMsg] = useState('');
+  const [openId, setOpenId] = useState(null);
 
   useEffect(() => {
     setData(null);
@@ -375,8 +400,12 @@ function Transactions({ hostFilter, HostPicker }) {
               </thead>
               <tbody>
                 {data.rows.map((x) => (
-                  <tr key={x.id} className={x.status === 'cancelled' ? 'muted' : ''}>
-                    <td className="small">{fmtDate(x.createdAt)}<div className="muted">{x.ref}</div></td>
+                  <Fragment key={x.id}>
+                  <tr className={x.status === 'cancelled' ? 'muted' : ''}>
+                    <td className="small">
+                      <button className="linklike" title="Show what was paid" aria-expanded={openId === x.id} onClick={() => setOpenId(openId === x.id ? null : x.id)}>{openId === x.id ? '▾ ' : '▸ '}{fmtDate(x.createdAt)}</button>
+                      <div className="muted">{x.ref}</div>
+                    </td>
                     <td className="small">{x.guestName || '—'}<div className="muted">{x.guestEmail}</div></td>
                     <td className="small">{place(x)}<div className="muted">{fmtDay(x.checkIn)} → {fmtDay(x.checkOut)}</div></td>
                     <td className="small">{x.host}</td>
@@ -387,6 +416,8 @@ function Transactions({ hostFilter, HostPicker }) {
                     <td className="num"><b>{x.feeCents ? fmtR(x.feeCents) : '—'}</b></td>
                     <td className="num">{x.hostNetCents ? fmtR(x.hostNetCents) : '—'}</td>
                   </tr>
+                  {openId === x.id && <tr><td colSpan={10} className="tx-detail"><PaymentBreakdown tx={x} /></td></tr>}
+                  </Fragment>
                 ))}
                 {data.rows.length === 0 && <tr><td colSpan={10} className="muted small" style={{ padding: 16 }}>No SimonStays bookings match.</td></tr>}
               </tbody>

@@ -517,6 +517,7 @@ model Booking {
   billingDetails String? // optional business/billing details the guest entered for their invoice
   termsAcceptedAt DateTime? // when the guest ticked the T&Cs + cancellation policy at checkout (chargeback evidence)
   depositCents  Int?    // refundable breakage deposit collected on the shopfront
+  paymentLines  Json?   // what the guest was charged, as quoted when they booked: [{description, amountCents, deposit}]
   depositStatus String? // null (none) | 'held' | 'refunded' | 'forfeited'
   cleaner      String?
   comments     String?

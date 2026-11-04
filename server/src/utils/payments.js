@@ -75,6 +75,12 @@ async function reconcile(payment, { query = paygate.query } = {}) {
   return applyPaid(payment, q.data && q.data.TRANSACTION_ID);
 }
 
+// A paid booking stands even if this message can't be sent.
+function sendInvoice(bookingId, details) {
+  return require('./paymentInvoice').sendPaymentInvoice(bookingId, details)
+    .catch((e) => console.error('[payment-invoice] failed', bookingId, e.message));
+}
+
 // Money has been received for `payment` — update the booking.
 async function applyPaid(payment, txId) {
   if (payment.kind === 'change') return require('./changes').applyPaidChange(payment, txId);
@@ -99,6 +105,7 @@ async function applyPaid(payment, txId) {
   if (payment.kind === 'balance') {
     await prisma.booking.update({ where: { id: booking.id }, data: money });
     alertHost(booking, `💳 Balance paid — ${placeOf(booking)}\n👤 ${booking.guestName || 'Guest'} · ${booking.ref || ''}\nR${(payment.amountCents / 100).toFixed(2)} received via Paygate${owing ? ` · R${(owing / 100).toFixed(2)} still owing` : ' · fully paid'}`);
+    await sendInvoice(booking.id, { method: 'card', receivedCents: payment.amountCents });
     return { ok: true, outcome: 'balance_paid' };
   }
   if (booking.status === 'confirmed') {
@@ -135,6 +142,7 @@ async function applyPaid(payment, txId) {
     try { await require('./locks').issueGuestCode(full, full.unit); } catch (e) { /* stubbed until smart locks are live */ }
     await onBookingConfirmed(extra.id);
   }
+  await sendInvoice(booking.id, { method: 'card', receivedCents: payment.amountCents, offer });
   return { ok: true, outcome: 'confirmed' };
 }
 
@@ -183,6 +191,7 @@ async function confirmByHost(bookingId) {
     await messaging.sendHostMessage(booking.id, `We've received your payment, thank you. Your booking${booking.ref ? ` ${booking.ref}` : ''} at ${placeOf(booking)}, ${dates}, is confirmed.${balance > 0 ? ` The balance of R${(balance / 100).toFixed(2)} is due at least 3 days before check-in.` : ''}`, { bookerOnly: balance > 0, noEmail: true }) // onBookingConfirmed has emailed them
       .catch((e) => console.error('[confirm] guest message failed', booking.id, e.message));
   }
+  await sendInvoice(booking.id, { method: 'EFT', receivedCents: offer ? offer.totalCents : money.amountPaidCents, offer });
   return { ok: true, booking: await prisma.booking.findUnique({ where: { id: booking.id } }) };
 }
 

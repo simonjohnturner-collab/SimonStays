@@ -8,6 +8,7 @@ const prisma = require('../lib/prisma');
 const { sign } = require('../lib/jwt');
 const { authHost, requireAdmin, isAdminEmail } = require('../middleware/auth');
 const { DOCUMENT_KINDS } = require('../utils/guestDocuments');
+const { breakdownOf, offerLines } = require('../utils/paymentInvoice');
 
 const router = express.Router();
 router.use(authHost, requireAdmin);
@@ -101,19 +102,25 @@ router.get('/transactions', async (req, res) => {
   if (AND.length) where.AND = AND;
   const bookings = await prisma.booking.findMany({
     where, orderBy: { createdAt: 'desc' }, take: 1000,
-    include: { ...BOOKING_INCLUDE, payments: { orderBy: { createdAt: 'desc' } } },
+    include: {
+      unit: { include: { pricingGroup: true, property: { select: { name: true, hostId: true } } } },
+      payments: { orderBy: { createdAt: 'desc' } },
+      offers: { where: { status: 'paid' }, orderBy: { createdAt: 'asc' } },
+    },
   });
   // An invoice's extra units hold no payments of their own: the invoice's payment
   // sits on its first booking, so look it up by the invoice.
   const offerIds = bookings.map((b) => b.sourceOfferId).filter(Boolean);
   const offerPayments = offerIds.length ? await prisma.payment.findMany({ where: { offerId: { in: offerIds } } }) : [];
-  const rows = bookings.map((b) => {
+  const sourceOffers = offerIds.length ? await prisma.priceOffer.findMany({ where: { id: { in: offerIds } } }) : [];
+  const rows = await Promise.all(bookings.map(async (b) => {
     const hostId = hostOfBooking(b);
     const grossCents = grossOf(b);
     const payments = b.payments.length ? b.payments : offerPayments.filter((p) => p.offerId === b.sourceOfferId);
     const earns = b.status === 'confirmed'; // the fee is only earned on a confirmed stay
     const feeCents = earns ? feeOf(grossCents) : 0;
     const card = payments.find((p) => p.status === 'COMPLETE');
+    const invoice = b.offers.find((o) => o.kind !== 'change') || sourceOffers.find((o) => o.id === b.sourceOfferId) || null;
     return {
       id: b.id, ref: b.ref || null, createdAt: b.createdAt, status: b.status,
       hostId, host: names[hostId] || '—',
@@ -126,9 +133,14 @@ router.get('/transactions', async (req, res) => {
       totalCents: b.totalCents != null ? b.totalCents : (b.quotedCents || 0),
       depositCents: b.depositCents || 0,
       paidCents: b.amountPaidCents || 0,
+      owingCents: b.amountOwingCents || 0,
       grossCents, feeCents, hostNetCents: earns ? grossCents - feeCents : 0,
+      breakdown: await breakdownOf(b, invoice),
+      sharedInvoice: !!invoice && invoice.bookingId !== b.id,
+      changes: b.offers.filter((o) => o.kind === 'change').map((o) => ({ id: o.id, paidAt: o.paidAt, lines: offerLines(o), totalCents: o.totalCents })),
+      payments: payments.filter((p) => p.status === 'COMPLETE').map((p) => ({ id: p.id, kind: p.kind, amountCents: p.amountCents, createdAt: p.updatedAt })),
     };
-  });
+  }));
   const confirmed = rows.filter((r) => r.status === 'confirmed');
   const sum = (xs, k) => xs.reduce((n, r) => n + r[k], 0);
   res.json({

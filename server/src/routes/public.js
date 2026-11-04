@@ -342,6 +342,7 @@ router.post('/book', optionalGuest, async (req, res, next) => {
         checkIn: dateOnly(iso(b.checkIn)), checkOut: dateOnly(iso(b.checkOut)),
         comments, paymentStatus: split ? 'partial' : 'unpaid', amountOwingCents: owingCents,
         depositCents: q.depositCents || null, depositStatus: q.depositCents ? 'held' : null,
+        paymentLines: require('../utils/paymentInvoice').quoteLines(q, adminFeeCents),
         earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut,
       },
     });

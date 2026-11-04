@@ -147,6 +147,7 @@ const NOTICES = {
   changed: 'Your SimonStays booking has changed',
   cancelled: 'Your SimonStays booking is cancelled',
   refund: 'About your SimonStays refund',
+  invoice: 'Your SimonStays payment invoice',
 };
 
 // Guests we take bookings for directly, on a stay that isn't over. Airbnb and the
