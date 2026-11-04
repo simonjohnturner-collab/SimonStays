@@ -397,18 +397,27 @@ function EmailDetails({ tx }) {
   );
 }
 
+// The rubber stamp on a paper invoice.
+function paperStamp(tx) {
+  if (tx.status === 'cancelled') return { text: 'CANCELLED', cls: 'red' };
+  if (tx.paidCents > 0 && tx.owingCents > 0) return { text: 'PART PAID', cls: 'red' };
+  if (tx.paidCents > 0) return { text: 'PAID', cls: '' };
+  return { text: 'UNPAID', cls: 'red' };
+}
+
 // How a transaction's amount came about, opened from its receipt icon.
 function PaymentBreakdown({ tx }) {
   const [viewing, setViewing] = useState(null);
-  const row = (label, cents, cls) => <tr key={label} className={cls}><td colSpan={2}>{label}</td><td className="num">{fmtR(cents)}</td></tr>;
+  const row = (label, cents, cls) => <tr key={label} className={cls}><td>{label}</td><td className="num">{fmtR(cents)}</td></tr>;
   const line = (l, i) => (
     <Fragment key={i}>
-      <tr className={l.nights ? 'tx-sub' : ''}><td colSpan={2}>{l.description}</td><td className="num">{fmtR(l.amountCents)}</td></tr>
+      <tr><td>{l.description}</td><td className="num">{fmtR(l.amountCents)}</td></tr>
       {(l.nights || []).map((n) => (
-        <tr key={n.date} className="tx-night"><td>{fmtFullDay(n.date)}</td><td className="muted">{nightNote(n)}</td><td className="num">{fmtR(n.cents)}</td></tr>
+        <tr key={n.date} className="paper-night"><td>{fmtFullDay(n.date)}{nightNote(n) ? ` (${nightNote(n).toLowerCase()})` : ''}</td><td className="num">{fmtR(n.cents)}</td></tr>
       ))}
     </Fragment>
   );
+  const stamp = paperStamp(tx);
   return (
     <div className="tx-breakdown">
       {viewing && <GuestDocViewer accountId={tx.accountId} kind={viewing} name={tx.guestName} onClose={() => setViewing(null)} />}
@@ -430,23 +439,47 @@ function PaymentBreakdown({ tx }) {
         {tx.canEmailDetails && <EmailDetails key={tx.id} tx={tx} />}
       </div>
       <div>
-        <h4>How the amount came about</h4>
-        <table className="admin-table tx-lines">
-          <tbody>
-            {tx.breakdown.lines.map(line)}
-            {row('Total', tx.breakdown.totalCents, 'tx-total')}
-            {tx.changes.map((c) => (
-              <Fragment key={c.id}>
-                <tr><td colSpan={3} className="muted small">Booking change, paid {fmtDate(c.paidAt)}</td></tr>
-                {c.lines.map(line)}
-              </Fragment>
-            ))}
-            {row(`Paid by ${tx.method}`, tx.paidCents, 'tx-total')}
-            {tx.owingCents > 0 && row('Balance due', tx.owingCents)}
-            {tx.feeCents > 0 && row('SimonStays fee', tx.feeCents)}
-            {tx.hostNetCents > 0 && row('To host', tx.hostNetCents)}
-          </tbody>
-        </table>
+        <div className="paper">
+          <header className="paper-head">
+            <div>
+              <div className="paper-brand">SimonStays</div>
+              <div>support@simonstays.co.za</div>
+              <div>078 511 9336</div>
+            </div>
+            <div className="paper-no">
+              <div className="paper-title">INVOICE</div>
+              <div>No. {tx.ref || '—'}</div>
+              <div>Date: {fmtDate(tx.createdAt)}</div>
+            </div>
+          </header>
+          <div className="paper-to">
+            <div><span>Bill to:</span> {tx.guestName || '—'}</div>
+            <div><span>For:</span> {place(tx)}</div>
+            <div><span>Stay:</span> {tx.dayUse ? fmtFullDay(tx.checkIn) : `${fmtFullDay(tx.checkIn)} to ${fmtFullDay(tx.checkOut)}`}</div>
+          </div>
+          <table className="paper-lines">
+            <thead><tr><th>Description</th><th className="num">Amount</th></tr></thead>
+            <tbody>
+              {tx.breakdown.lines.map(line)}
+              {tx.changes.map((c) => (
+                <Fragment key={c.id}>
+                  <tr className="paper-night"><td colSpan={2}>Booking change, paid {fmtDate(c.paidAt)}</td></tr>
+                  {c.lines.map(line)}
+                </Fragment>
+              ))}
+            </tbody>
+            <tfoot>
+              {row('Total', tx.breakdown.totalCents, 'paper-total')}
+              {row(`Paid by ${tx.method}`, tx.paidCents)}
+              {tx.owingCents > 0 && row('Balance due', tx.owingCents, 'paper-total')}
+            </tfoot>
+          </table>
+          {stamp && <div className={`paper-stamp ${stamp.cls}`} aria-label={`Stamped ${stamp.text}`}>{stamp.text}</div>}
+          <p className="paper-thanks">Thank you for staying with us!</p>
+        </div>
+        {(tx.feeCents > 0 || tx.hostNetCents > 0) && (
+          <p className="small tx-share">Not on the invoice: SimonStays fee <b>{fmtR(tx.feeCents)}</b> · to host <b>{fmtR(tx.hostNetCents)}</b></p>
+        )}
       </div>
     </div>
   );
@@ -514,7 +547,7 @@ function Transactions({ hostFilter, HostPicker }) {
                   <Fragment key={x.id}>
                   <tr className={x.status === 'cancelled' ? 'muted' : ''}>
                     <td className="small">{fmtDate(x.createdAt)}<div className="muted">{x.ref}</div></td>
-                    <td className="small">{x.guestName || '—'}<div className="muted">{x.guestEmail}</div></td>
+                    <td className="small tx-wrap">{x.guestName || '—'}<div className="muted">{x.guestEmail}</div></td>
                     <td className="small">{place(x)}<div className="muted">{fmtDay(x.checkIn)} → {fmtDay(x.checkOut)}</div></td>
                     <td className="small">{x.host}</td>
                     <td className="small">{STATUS[x.status] || x.status}</td>
