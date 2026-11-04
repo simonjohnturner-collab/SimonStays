@@ -124,6 +124,26 @@ model GuestAccount {
   documents    GuestDocument[]
 }
 
+// A rating left after a stay. `kind` is who's being rated: 'host' (by the guest) or
+// 'guest' (by the host). One of each per booking. A guest's ratings follow their email.
+model Rating {
+  id         String   @id @default(uuid())
+  bookingId  String
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  kind       String
+  hostId     String
+  propertyId String
+  guestEmail String
+  scores     Json // { category: 1 to 5 }
+  average    Float
+  createdAt  DateTime @default(now())
+
+  @@unique([bookingId, kind])
+  @@index([hostId, kind])
+  @@index([propertyId, kind])
+  @@index([guestEmail, kind])
+}
+
 // What a guest uploads when creating an account. Private: only the SimonStays
 // admin can open these, never a host or another guest.
 model GuestDocument {
@@ -519,6 +539,8 @@ model Booking {
   depositCents  Int?    // refundable breakage deposit collected on the shopfront
   paymentLines  Json?   // what the guest was charged, as quoted when they booked: [{description, amountCents, deposit}]
   detailsEmailedAt DateTime? // when the admin last emailed the guest their booking details
+  ratingInviteAt DateTime? // when the guest was invited to rate their stay
+  ratings        Rating[]
   depositStatus String? // null (none) | 'held' | 'refunded' | 'forfeited'
   cleaner      String?
   comments     String?

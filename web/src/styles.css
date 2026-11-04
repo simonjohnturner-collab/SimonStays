@@ -1116,3 +1116,20 @@ button.tx-link:hover { background:none; }
 .tx-email { margin-top:14px; }
 .tx-email .msg-warn { margin:8px 0 0; }
 .admin-table td.tx-wrap { white-space:normal; overflow-wrap:anywhere; min-width:150px; }
+.rating-chip { display:inline-block; margin:2px 0; padding:1px 8px; font-size:12px; font-weight:600; color:#7a5600; background:#fdf3d6; border-radius:999px; cursor:default; }
+.rating-chip.none { color:var(--muted); background:#eef1f4; font-weight:400; }
+.modal-rating { margin-bottom:8px; }
+.ratings-view { width:100%; padding:14px 16px 30px; }
+.ratings-view h3 { margin:18px 0 8px; font-size:16px; }
+.ratings-view h3:first-child { margin-top:0; }
+.rating-summary { display:flex; flex-wrap:wrap; align-items:center; gap:18px; }
+.rating-big { font-size:30px; font-weight:800; color:#b98500; }
+.rating-summary dl { display:flex; flex-wrap:wrap; gap:6px 22px; margin:0; font-size:14px; }
+.rating-summary dt { color:var(--muted); font-size:12px; }
+.rating-summary dd { margin:0; font-weight:700; }
+.rate-card { display:grid; grid-template-columns:minmax(220px,1fr) minmax(320px,2fr); gap:16px; }
+.rate-row { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; font-size:14px; }
+button[role=radio] { padding:0 3px; font-size:24px; line-height:1.2; color:#cfd4da; background:none; }
+button[role=radio]:hover { background:none; color:#e2a100; }
+button[role=radio].on { color:#e2a100; }
+@media (max-width:760px) { .rate-card { grid-template-columns:1fr; } }

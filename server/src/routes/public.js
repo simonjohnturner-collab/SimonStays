@@ -176,7 +176,8 @@ router.get('/properties/:id', async (req, res, next) => {
     res.json({
       property: {
         id: p.id, name: p.name, address: p.address || null, description: p.description || null,
-        host: await hostInfo(p.hostId),
+        host: { ...(await hostInfo(p.hostId)), rating: await require('../utils/ratings').hostRatingOf(p.hostId) },
+        rating: await require('../utils/ratings').propertyRatingOf(p.id),
         latitude: p.latitude ?? null, longitude: p.longitude ?? null,
         cancellationPolicy: p.cancellationPolicy || DEFAULT_CANCELLATION_POLICY,
         photos: p.photos.map((ph) => ({ id: ph.id })),
@@ -225,6 +226,7 @@ router.get('/units', async (req, res, next) => {
       }
     }
 
+    const ratings = await require('../utils/ratings').ratingsByProperty();
     const out = [];
     for (const { u, p } of best.values()) {
       if (minGuests && u.capacity && u.capacity < minGuests) continue;
@@ -236,7 +238,7 @@ router.get('/units', async (req, res, next) => {
       }
       const cover = u.photos[0] || p.photos[0] || null;
       out.push({
-        unitId: u.id, unitName: u.name, propertyId: p.id, propertyName: p.name,
+        unitId: u.id, unitName: u.name, propertyId: p.id, propertyName: p.name, rating: ratings[p.id] || null,
         address: p.address || null, latitude: p.latitude ?? null, longitude: p.longitude ?? null,
         capacity: u.capacity, bedrooms: u.bedrooms ?? null, bathrooms: u.bathrooms ?? null,
         coverPhotoId: cover ? cover.id : null,

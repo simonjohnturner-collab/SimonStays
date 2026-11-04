@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, openMessageAttachment } from '../api.js';
+import RatingsView, { GuestRatingChip } from './RatingsView.jsx';
 import { useAuth } from '../auth.jsx';
 import { fmtR, randToCents } from '../money.js';
 import TeachSimon from './TeachSimon.jsx';
@@ -35,12 +36,14 @@ export default function MessagesView({ onClose, properties = [], initialBookingI
         <button className={tab === 'saved' ? 'on' : ''} onClick={() => setTab('saved')}>📝 Saved messages</button>
         <button className={tab === 'scheduled' ? 'on' : ''} onClick={() => setTab('scheduled')}>⏰ Scheduled</button>
         <button className={tab === 'teach' ? 'on' : ''} onClick={() => setTab('teach')}>🧠 Ask Simon{teachCount > 0 && <span className="msg-dot">{teachCount}</span>}</button>
+        <button className={tab === 'ratings' ? 'on' : ''} onClick={() => setTab('ratings')}>⭐ Ratings</button>
       </div>
 
       {tab === 'inbox' && <Inbox templates={templates} shortcuts={shortcuts} properties={properties} initialBookingId={initialBookingId} onUnreadChange={onUnreadChange} onManageSaved={() => setTab('saved')} />}
       {tab === 'saved' && <SavedMessages templates={templates} shortcuts={shortcuts} onChanged={loadTemplates} />}
       {tab === 'scheduled' && <Scheduled templates={templates} shortcuts={shortcuts} properties={properties} />}
       {tab === 'teach' && <TeachSimon properties={properties} onCountChange={onUnreadChange} />}
+      {tab === 'ratings' && <RatingsView />}
     </div>
   );
 }
@@ -494,6 +497,7 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
               <div className="msg-summary">
                 <div>
                   <b>{b.guestName || 'Guest'}</b>{b.status === 'enquiry' && <span className="msg-enquiry-tag">Enquiry</span>}{b.status === 'cancelled' && <span className="msg-enquiry-tag">Cancelled</span>}{b.ref ? <span className="muted small"> · {b.ref}</span> : null}
+                  <GuestRatingChip rating={thread.guestRating} />
                   <div className="muted small">{placeOf(b)}{b.guestEmail ? ` · ${b.guestEmail}` : ''}</div>
                   <div className="small">{b.dayUse ? `${fmtDay(b.checkIn)} · day use` : <>{fmtDay(b.checkIn)} → {fmtDay(b.checkOut)} · {b.nights} night{b.nights === 1 ? '' : 's'}</>}</div>
                 </div>

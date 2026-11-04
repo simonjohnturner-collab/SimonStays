@@ -77,6 +77,7 @@ const recordLines = (offer) => offer.lines.map((l) => ({
   amountCents: l.amountCents,
 }));
 
+const signupLink = (email) => `${(process.env.SHOPFRONT_URL || 'https://simonstays.co.za').trim().replace(/\/$/, '')}/?signup=${encodeURIComponent(email || '')}`;
 const dayOf = (d) => new Date(`${iso(d)}T00:00:00Z`).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const nightNote = (n) => (n.overridden ? '' : [n.weekend && 'weekend rate', n.flexPercent > 0 && `+${n.flexPercent}% seasonal`].filter(Boolean).join(', '));
 
@@ -99,6 +100,7 @@ async function invoiceEmailFor(b, { method, receivedCents = 0, link = threadLink
     guestName: b.guestName, place: [v.property, v.unit && `Unit ${v.unit}`].filter(Boolean).join(' · '), address: v.address,
     checkIn: `${v.checkIn} from ${v.checkInTime}`, checkOut: b.dayUse ? '' : `${v.checkOut} by ${v.checkOutTime}`,
     lines, totalCents, method, paidCents, owingCents, link,
+    signupLink: b.guestAccountId ? null : signupLink(messaging.bookerEmailOf(b)),
   });
   return {
     email: { subject: `Your SimonStays invoice${b.ref ? ` · ${b.ref}` : ''}`, ...made },

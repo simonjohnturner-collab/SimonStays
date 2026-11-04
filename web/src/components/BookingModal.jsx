@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { fmtR, centsToRand, randToCents } from '../money.js';
+import { GuestRatingChip } from './RatingsView.jsx';
 
 export default function BookingModal({ unit, booking, floating, units = [], groups = [], cleaners = [], onClose, onSaved, onInvoice, onMessage }) {
   const editing = !!booking;
   const isFloating = floating || (editing && !booking.unitId);
+  const [guestRating, setGuestRating] = useState(undefined);
+  useEffect(() => {
+    if (editing && (booking.guestEmail || booking.guestAccountId)) api.guestRating(booking.id).then((r) => setGuestRating(r.rating)).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [guestName, setGuestName] = useState(booking?.guestName || '');
   const [guestEmail, setGuestEmail] = useState(booking?.guestEmail || '');
@@ -172,6 +178,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
           <div className="reslabel">Airbnb confirmation code&nbsp;<code title="Click to select, then copy">{booking.resCode}</code></div>
         )}
 
+        {guestRating !== undefined && <div className="modal-rating"><GuestRatingChip rating={guestRating} /></div>}
         <label>Guest<input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Guest name" /></label>
         <div className="row2">
           <label>Guest email <span className="muted small">(so they get your messages)</span>

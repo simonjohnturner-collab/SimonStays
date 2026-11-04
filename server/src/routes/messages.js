@@ -160,6 +160,7 @@ router.get('/booking/:bookingId', async (req, res, next) => {
       },
       cancel: await changes.cancelQuote(b, 'host'),
       travellers: await tripGuestsOf(b.id),
+      guestRating: await require('../utils/ratings').guestRatingOf(require('../utils/ratings').guestEmailOf(b)),
       messages: messages.map((m) => ({
         id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt, authorName: m.authorName || null, scheduleId: m.scheduleId || null,
         emailedAt: m.emailedAt, scheduleName: m.schedule ? m.schedule.name : (m.scheduleId ? 'Scheduled message' : null),

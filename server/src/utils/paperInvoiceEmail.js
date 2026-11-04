@@ -14,7 +14,10 @@ const stampOf = (paidCents, owing) => {
   return { text: 'UNPAID', color: '#b3261e' };
 };
 
-// i: { ref, date, guestName, place, address, checkIn, checkOut, lines, totalCents, method, paidCents, owingCents, link }
+const SIGNUP_TEXT = 'All communication will be sent inside SimonStays, so you need to set up an account to see your communications.';
+
+// i: { ref, date, guestName, place, address, checkIn, checkOut, lines, totalCents, method, paidCents, owingCents, link, signupLink }
+// signupLink is for a guest with no account yet.
 function paperInvoiceEmail(i) {
   const stamp = stampOf(i.paidCents, i.owingCents);
   const line = (l) => `<tr><td style="padding:6px 0;border-bottom:1px solid #d3cbb8;font-family:${HAND};font-size:14px;color:${INK}">${esc(l.description)}</td><td align="right" style="padding:6px 0 6px 14px;border-bottom:1px solid #d3cbb8;font-family:${HAND};font-size:14px;color:${INK};white-space:nowrap">${rand(l.amountCents)}</td></tr>` +
@@ -49,6 +52,7 @@ function paperInvoiceEmail(i) {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px"><tr><td style="padding:18px 8px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;text-align:center;color:#1d2433">
   <a href="${esc(i.link)}" style="color:#1a7a3a;font-weight:700">${LINK_TEXT}</a>
   <div style="margin-top:8px;font-size:13px;color:#6b7280">This link is private to you, so please don't share it. You can also reply to this email to reach us.</div>
+  ${i.signupLink ? `<div style="margin-top:16px;font-size:15px;font-weight:700;color:#c0141a">${SIGNUP_TEXT} <a href="${esc(i.signupLink)}" style="color:#c0141a">Set up your account</a></div>` : ''}
 </td></tr></table>
 </td></tr></table>
 </body></html>`;
@@ -71,6 +75,7 @@ function paperInvoiceEmail(i) {
     '',
     LINK_TEXT,
     i.link,
+    ...(i.signupLink ? ['', SIGNUP_TEXT, `Set up your account: ${i.signupLink}`] : []),
   ].join('\n');
   return { html, text };
 }

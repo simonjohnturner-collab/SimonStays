@@ -30,6 +30,7 @@ app.use('/listings', require('./routes/listings'));
 // its paths are matched first (the /public router has no /account/* routes).
 app.use('/public/account/messages', require('./routes/guestMessages'));
 app.use('/public/thread', require('./routes/guestThread'));
+app.use('/public/rate', require('./routes/guestRating'));
 app.use('/public/documents', require('./routes/documents').publicRouter);
 app.use('/public/account', require('./routes/guestAuth'));
 // Paygate PayWeb3 callbacks (notify + guest return) — public, verified with Paygate.
@@ -116,6 +117,15 @@ app.get('/thread/:token', (req, res) => {
   res.setHeader('X-Robots-Tag', 'noindex');
   res.type('html').send(threadHtml);
 });
+// Where a guest rates their stay, from the link in their invitation.
+const rateHtml = fs.readFileSync(path.join(__dirname, 'pages/rate.html'), 'utf8');
+app.get('/rate/:token', (req, res) => {
+  res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Robots-Tag', 'noindex');
+  res.type('html').send(rateHtml);
+});
 // Privacy Policy — same plain self-contained style as the terms page.
 const privacyHtml = fs.readFileSync(path.join(__dirname, 'pages/privacy.html'), 'utf8');
 app.get(['/privacy', '/privacy.html', '/privacy-policy'], (req, res) => {
@@ -141,6 +151,7 @@ app.use('/cleaners', require('./routes/cleaners'));
 app.use('/providers', require('./routes/providers'));
 app.use('/guests', require('./routes/guests'));
 app.use('/messages', require('./routes/messages'));
+app.use('/ratings', require('./routes/ratings'));
 app.use('/documents', require('./routes/documents').hostRouter);
 app.use('/teach', require('./routes/teach'));
 app.use('/smartlocks', require('./routes/smartlocks'));
@@ -252,6 +263,12 @@ if (require.main === module) {
     });
     console.log(`Scheduled guest messages: ${messageExpr}`);
   }
+
+  // Invite guests to rate their stay, from 10:00 SAST the day after checkout.
+  cron.schedule('13,43 * * * *', async () => {
+    try { const r = await require('./utils/ratings').runRatingInvites(); if (r.sent) console.log('[ratings] invited', r.sent); }
+    catch (e) { console.error('[ratings] invite run failed', e.message); }
+  });
 
   // Night-before checkout reminders to the cleaner (WhatsApp), 19:00 SAST daily.
   // Auto-on where Twilio WhatsApp creds are set; override the time with
