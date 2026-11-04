@@ -378,6 +378,7 @@ const breakdownSummary = (tx) => [
 // Email the guest everything about their booking. Goes only when the admin confirms.
 function EmailDetails({ tx }) {
   const [sentAt, setSentAt] = useState(tx.detailsEmailedAt);
+  const [previewedTo, setPreviewedTo] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   async function send() {
@@ -388,9 +389,17 @@ function EmailDetails({ tx }) {
     catch (e) { setError((e.data && e.data.message) || e.message); }
     finally { setBusy(false); }
   }
+  async function preview() {
+    setBusy(true); setError(''); setPreviewedTo('');
+    try { const r = await api.adminEmailPreview(tx.id); setPreviewedTo(r.sentTo); }
+    catch (e) { setError((e.data && e.data.message) || e.message); }
+    finally { setBusy(false); }
+  }
   return (
     <div className="tx-email">
-      <button type="button" className="secondary small" disabled={busy} onClick={send}>{busy ? 'Sending…' : '✉️ Email guest their invoice'}</button>
+      <button type="button" className="secondary small" disabled={busy} onClick={send}>{busy ? 'Sending…' : '✉️ Email guest their invoice'}</button>{' '}
+      <button type="button" className="secondary small" disabled={busy} onClick={preview}>👁 Send me a preview</button>
+      {previewedTo && <div className="muted small">Preview sent to {previewedTo}. The guest wasn’t emailed.</div>}
       {sentAt && <div className="muted small">Last sent {fmtWhen(sentAt)}</div>}
       {error && <div className="msg-warn">{error}</div>}
     </div>

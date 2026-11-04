@@ -8,7 +8,7 @@ const prisma = require('../lib/prisma');
 const { sign } = require('../lib/jwt');
 const { authHost, requireAdmin, isAdminEmail } = require('../middleware/auth');
 const { DOCUMENT_KINDS } = require('../utils/guestDocuments');
-const { breakdownOf, offerLines, sendBookingDetails } = require('../utils/paymentInvoice');
+const { breakdownOf, offerLines, sendBookingDetails, sendInvoicePreview } = require('../utils/paymentInvoice');
 const { noticeable } = require('../utils/messaging');
 
 const router = express.Router();
@@ -94,6 +94,16 @@ router.get('/properties', async (req, res) => {
 router.post('/transactions/:bookingId/email-details', async (req, res, next) => {
   try {
     const r = await sendBookingDetails(req.params.bookingId);
+    if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
+    res.json(r);
+  } catch (e) { next(e); }
+});
+
+// POST /admin/transactions/:bookingId/email-preview — email the admin, and only the
+// admin, a copy of the invoice this guest would get.
+router.post('/transactions/:bookingId/email-preview', async (req, res, next) => {
+  try {
+    const r = await sendInvoicePreview(req.params.bookingId, req.adminHost.email);
     if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
     res.json(r);
   } catch (e) { next(e); }

@@ -272,7 +272,8 @@ function appliesTo(s, b) {
 // with a guest email or a linked shopfront account.
 const reachable = { status: 'confirmed', unitId: { not: null }, OR: [{ guestEmail: { not: null } }, { guestAccountId: { not: null } }] };
 
-// Send every due scheduled message. Each (schedule, booking) pair sends once:
+// Send every due scheduled message, in the conversation only: guests read them from
+// the link on their invoice, or by signing in. Each (schedule, booking) pair sends once:
 // due within the catch-up window, and never for a time before the schedule existed.
 async function runSchedules(now = new Date()) {
   const schedules = await prisma.messageSchedule.findMany({ where: { active: true }, include: { template: true } });
@@ -295,7 +296,7 @@ async function runSchedules(now = new Date()) {
       const due = dueAt(s, b);
       if (!due || due.getTime() > now.getTime() || due.getTime() < floor) continue;
       try {
-        const r = await sendHostMessage(b, scheduleBody(s), { scheduleId: s.id });
+        const r = await sendHostMessage(b, scheduleBody(s), { scheduleId: s.id, noEmail: true });
         if (r.ok) out.sent++;
       } catch (e) { out.failed++; console.error('[messages] schedule send failed', s.id, b.id, e.message); }
     }
@@ -311,7 +312,7 @@ async function runConfirmedSchedules(booking) {
   let sent = 0;
   for (const s of schedules) {
     if (!appliesTo(s, booking) || s.offsetMinutes > 0) continue; // a delayed one waits for the job
-    const r = await sendHostMessage(booking, scheduleBody(s), { scheduleId: s.id });
+    const r = await sendHostMessage(booking, scheduleBody(s), { scheduleId: s.id, noEmail: true });
     if (r.ok) sent++;
   }
   return sent;

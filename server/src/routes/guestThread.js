@@ -17,12 +17,13 @@ async function bookingOf(req, res, include = {}) {
   return b;
 }
 
-// GET /public/thread/:token — the conversation. Opening it counts as reading it.
+// GET /public/thread/:token — the conversation. Opening it counts as reading it,
+// except from an admin's preview of the invoice (?preview=1).
 router.get('/:token', async (req, res, next) => {
   try {
     const b = await bookingOf(req, res, { messages: { where: { unsentAt: null }, orderBy: { createdAt: 'asc' }, include: { offer: true } } });
     if (!b) return;
-    await prisma.message.updateMany({ where: { bookingId: b.id, sender: 'host', readAt: null, unsentAt: null }, data: { readAt: new Date() } });
+    if (req.query.preview !== '1') await prisma.message.updateMany({ where: { bookingId: b.id, sender: 'host', readAt: null, unsentAt: null }, data: { readAt: new Date() } });
     res.set('Cache-Control', 'no-store');
     res.json({
       ref: b.ref || null, guestName: b.guestName || null,

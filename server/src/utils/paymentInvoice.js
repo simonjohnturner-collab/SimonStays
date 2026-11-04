@@ -81,7 +81,7 @@ const dayOf = (d) => new Date(`${iso(d)}T00:00:00Z`).toLocaleDateString('en-ZA',
 const nightNote = (n) => (n.overridden ? '' : [n.weekend && 'weekend rate', n.flexPercent > 0 && `+${n.flexPercent}% seasonal`].filter(Boolean).join(', '));
 
 // The paper invoice for a booking, as an email. `b` needs BOOKING_INCLUDE and its paid offers.
-async function invoiceEmailFor(b, { method, receivedCents = 0 }) {
+async function invoiceEmailFor(b, { method, receivedCents = 0, link = threadLink(b.id) }) {
   const invoice = (b.offers || []).find((o) => o.kind !== 'change')
     || (b.sourceOfferId ? await prisma.priceOffer.findUnique({ where: { id: b.sourceOfferId } }) : null);
   const changes = (b.offers || []).filter((o) => o.kind === 'change');
@@ -98,7 +98,7 @@ async function invoiceEmailFor(b, { method, receivedCents = 0 }) {
     ref: b.ref, date: new Date(b.createdAt).toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' }),
     guestName: b.guestName, place: [v.property, v.unit && `Unit ${v.unit}`].filter(Boolean).join(' · '), address: v.address,
     checkIn: `${v.checkIn} from ${v.checkInTime}`, checkOut: b.dayUse ? '' : `${v.checkOut} by ${v.checkOutTime}`,
-    lines, totalCents, method, paidCents, owingCents, link: threadLink(b.id),
+    lines, totalCents, method, paidCents, owingCents, link,
   });
   return {
     email: { subject: `Your SimonStays invoice${b.ref ? ` · ${b.ref}` : ''}`, ...made },
@@ -133,6 +133,18 @@ async function sendPaymentInvoice(bookingId, { method, receivedCents, offer = nu
   return messaging.sendHostMessage(b.id, body, { bookerOnly: true, email: made.email });
 }
 
+// A copy of a guest's invoice for the admin to check, sent only to the admin. Its link
+// opens the conversation without marking anything as read by the guest.
+async function sendInvoicePreview(bookingId, to) {
+  const b = await bookingForInvoice(bookingId);
+  if (!b) return { error: 'not_found', status: 404, message: 'Booking not found.' };
+  const made = await invoiceEmailFor(b, { method: b.payments.length ? 'card' : 'EFT', link: `${threadLink(b.id)}?preview=1` });
+  if (!made) return { error: 'no_invoice', status: 400, message: 'This booking has no amounts to put on an invoice.' };
+  const sent = await sendMail({ to, ...made.email, subject: `[Preview] ${made.email.subject}` });
+  if (!sent) return { error: 'not_sent', status: 502, message: 'The email couldn’t be sent. Check the [mailer] lines in Render’s logs.' };
+  return { ok: true, sentTo: to };
+}
+
 // The admin sends the guest their invoice, for their records. Answers { ok } or { error }.
 async function sendBookingDetails(bookingId) {
   const b = await bookingForInvoice(bookingId);
@@ -145,4 +157,4 @@ async function sendBookingDetails(bookingId) {
   return { ok: true, detailsEmailedAt: updated.detailsEmailedAt };
 }
 
-module.exports = { quoteLines, breakdownOf, offerLines, sendPaymentInvoice, sendBookingDetails };
+module.exports = { quoteLines, breakdownOf, offerLines, sendPaymentInvoice, sendBookingDetails, sendInvoicePreview };
