@@ -9,11 +9,14 @@ const SPLIT_FEE_CENTS = 25000; // R250 admin fee for the 50/50 split plan
 const iso = (d) => new Date(d).toISOString().slice(0, 10);
 const rand = (c) => `${c < 0 ? '-' : ''}R${(Math.abs(c) / 100).toFixed(2)}`;
 
+// What each night cost, and why, as quoted.
+const nightsOf = (q) => q.nightLines.map((n) => ({ date: n.date, cents: n.cents, weekend: !!n.weekend, flexPercent: n.flexPercent || 0, overridden: !!n.overridden }));
+
 // A shopfront quote as lines. Saved on the booking when it's made.
 function quoteLines(q, adminFeeCents = 0) {
   const lines = [];
-  const add = (description, amountCents, deposit = false) => { if (amountCents) lines.push({ description, amountCents, deposit }); };
-  add(`${q.nights} night${q.nights === 1 ? '' : 's'} @ ${rand(q.avgNightlyCents)}`, q.accommodationCents);
+  const add = (description, amountCents, deposit = false, extra = {}) => { if (amountCents) lines.push({ description, amountCents, deposit, ...extra }); };
+  add(`${q.nights} night${q.nights === 1 ? '' : 's'} @ ${rand(q.avgNightlyCents)}`, q.accommodationCents, false, { nights: nightsOf(q) });
   add(`${q.discountPercent}% length discount`, -q.discountCents);
   add('Cleaning fee', q.cleaningCents);
   add('Early check-in', q.earlyCents);
@@ -27,15 +30,21 @@ function quoteLines(q, adminFeeCents = 0) {
 const offerLines = (offer) => offer.lines.map((l) => ({ description: l.description, amountCents: l.amountCents, deposit: !!l.deposit }));
 const sum = (lines) => lines.reduce((n, l) => n + l.amountCents, 0);
 
-// A booking made before lines were saved: rebuild them from the rate card, but only
-// trust that if it adds up to what the guest was charged, as rates may have changed.
-async function rebuiltLines(b, totalCents) {
+// This booking's stay at today's rate card, for one made before its lines were saved.
+async function currentQuote(b) {
   const rc = b.unit && b.unit.pricingGroup;
-  if (rc) {
-    const checkIn = iso(b.checkIn), checkOut = iso(b.checkOut);
-    const overrides = await overridesFor(b.unitId, checkIn, checkOut).catch(() => null);
-    const q = quote(rc, { checkIn, checkOut, cleans: 1, overrides, earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut });
-    const fee = q ? totalCents - q.totalCents : null;
+  if (!rc) return null;
+  const checkIn = iso(b.checkIn), checkOut = iso(b.checkOut);
+  const overrides = await overridesFor(b.unitId, checkIn, checkOut).catch(() => null);
+  return quote(rc, { checkIn, checkOut, cleans: 1, overrides, earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut });
+}
+
+// Rebuild the lines from the rate card, but only trust that if it adds up to what
+// the guest was charged, as rates may have changed.
+async function rebuiltLines(b, totalCents) {
+  const q = await currentQuote(b);
+  if (q) {
+    const fee = totalCents - q.totalCents;
     if (fee === 0 || fee === SPLIT_FEE_CENTS) return quoteLines(q, fee);
   }
   const deposit = b.depositCents || 0;
@@ -45,7 +54,15 @@ async function rebuiltLines(b, totalCents) {
 // `b` needs unit.pricingGroup. `offer` is the invoice it was paid on, if any.
 async function breakdownOf(b, offer = null) {
   if (offer) return { lines: offerLines(offer), totalCents: offer.totalCents };
-  if (Array.isArray(b.paymentLines) && b.paymentLines.length) return { lines: b.paymentLines, totalCents: sum(b.paymentLines) };
+  if (Array.isArray(b.paymentLines) && b.paymentLines.length) {
+    const lines = b.paymentLines;
+    // Saved before each night's price was kept: add them if they still add up.
+    if (lines[0].description.includes(' night') && !lines[0].nights) {
+      const q = await currentQuote(b);
+      if (q && q.accommodationCents === lines[0].amountCents) return { lines: [{ ...lines[0], nights: nightsOf(q) }, ...lines.slice(1)], totalCents: sum(lines) };
+    }
+    return { lines, totalCents: sum(lines) };
+  }
   const totalCents = b.totalCents != null ? b.totalCents : b.quotedCents || 0;
   return { lines: totalCents ? await rebuiltLines(b, totalCents) : [], totalCents };
 }

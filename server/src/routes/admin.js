@@ -103,7 +103,7 @@ router.get('/transactions', async (req, res) => {
   const bookings = await prisma.booking.findMany({
     where, orderBy: { createdAt: 'desc' }, take: 1000,
     include: {
-      unit: { include: { pricingGroup: true, property: { select: { name: true, hostId: true } } } },
+      unit: { include: { pricingGroup: true, property: { select: { name: true, hostId: true, checkInTime: true, checkOutTime: true } } } },
       payments: { orderBy: { createdAt: 'desc' } },
       offers: { where: { status: 'paid' }, orderBy: { createdAt: 'asc' } },
     },
@@ -126,7 +126,10 @@ router.get('/transactions', async (req, res) => {
       hostId, host: names[hostId] || '—',
       property: b.unit?.property?.name || null, unit: b.unit?.name || null,
       guestName: b.guestName || null, guestEmail: b.guestEmail || null,
-      checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
+      checkIn: iso(b.checkIn), checkOut: iso(b.checkOut), dayUse: !!b.dayUse,
+      checkInTime: b.unit?.checkInTime || b.unit?.property?.checkInTime || '15:00',
+      checkOutTime: b.unit?.checkOutTime || b.unit?.property?.checkOutTime || '10:00',
+      earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut,
       // A card attempt that was abandoned doesn't make a confirmed booking a card payment.
       method: card || (b.status !== 'confirmed' && payments.some((p) => p.provider !== 'eft')) ? 'Card' : 'EFT',
       paygateRef: card && card.raw && card.raw.TRANSACTION_ID ? String(card.raw.TRANSACTION_ID) : null,

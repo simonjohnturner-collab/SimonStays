@@ -317,27 +317,63 @@ function Properties({ hostFilter, HostPicker }) {
 
 const STATUS = { confirmed: '✅ Confirmed', pending: '⏳ Awaiting payment', cancelled: '✖ Cancelled', enquiry: '💬 Enquiry' };
 
-// What the guest paid for, opened from a row in Transactions.
+const fmtFullDay = (d) => new Date(`${String(d).slice(0, 10)}T00:00:00`).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+// Why a night cost what it did.
+const nightNote = (n) => (n.overridden ? 'Price set by hand' : [n.weekend && 'Weekend rate', n.flexPercent > 0 && `+${n.flexPercent}% seasonal`].filter(Boolean).join(', '));
+
+// The summary shown when hovering over a transaction's receipt icon.
+const breakdownSummary = (tx) => [
+  ...tx.breakdown.lines.map((l) => `${l.description}: ${fmtR(l.amountCents)}`),
+  `Total: ${fmtR(tx.breakdown.totalCents)}`,
+  `Paid: ${fmtR(tx.paidCents)}`,
+  '',
+  'Click for the full breakdown',
+].join('\n');
+
+// How a transaction's amount came about, opened from its receipt icon.
 function PaymentBreakdown({ tx }) {
-  const row = (label, cents, cls) => <tr key={label} className={cls}><td>{label}</td><td className="num">{fmtR(cents)}</td></tr>;
+  const row = (label, cents, cls) => <tr key={label} className={cls}><td colSpan={2}>{label}</td><td className="num">{fmtR(cents)}</td></tr>;
+  const line = (l, i) => (
+    <Fragment key={i}>
+      <tr className={l.nights ? 'tx-sub' : ''}><td colSpan={2}>{l.description}</td><td className="num">{fmtR(l.amountCents)}</td></tr>
+      {(l.nights || []).map((n) => (
+        <tr key={n.date} className="tx-night"><td>{fmtFullDay(n.date)}</td><td className="muted">{nightNote(n)}</td><td className="num">{fmtR(n.cents)}</td></tr>
+      ))}
+    </Fragment>
+  );
   return (
-    <table className="admin-table tx-lines">
-      <tbody>
-        {tx.breakdown.lines.map((l, i) => <tr key={i}><td>{l.description}</td><td className="num">{fmtR(l.amountCents)}</td></tr>)}
-        {row('Total', tx.breakdown.totalCents, 'tx-total')}
-        {tx.changes.map((c) => (
-          <Fragment key={c.id}>
-            <tr><td colSpan={2} className="muted small">Booking change, paid {fmtDate(c.paidAt)}</td></tr>
-            {c.lines.map((l, i) => <tr key={i}><td>{l.description}</td><td className="num">{fmtR(l.amountCents)}</td></tr>)}
-          </Fragment>
-        ))}
-        {row(`Paid by ${tx.method}`, tx.paidCents, 'tx-total')}
-        {tx.owingCents > 0 && row('Balance due', tx.owingCents)}
-        {tx.feeCents > 0 && row('SimonStays fee', tx.feeCents)}
-        {tx.hostNetCents > 0 && row('To host', tx.hostNetCents)}
-      </tbody>
-      {tx.sharedInvoice && <caption className="muted small">This invoice covers several units and was paid on its first booking.</caption>}
-    </table>
+    <div className="tx-breakdown">
+      <div>
+        <h4>The stay</h4>
+        <dl className="tx-stay">
+          <dt>Where</dt><dd>{place(tx)}</dd>
+          <dt>Guest</dt><dd>{tx.guestName || '—'}</dd>
+          <dt>Check-in</dt><dd>{fmtFullDay(tx.checkIn)} from {tx.checkInTime}{tx.earlyCheckIn ? ' · early check-in' : ''}</dd>
+          {!tx.dayUse && <><dt>Check-out</dt><dd>{fmtFullDay(tx.checkOut)} by {tx.checkOutTime}{tx.lateCheckOut ? ' · late checkout' : ''}</dd></>}
+          <dt>Paid by</dt><dd>{tx.method}{tx.paygateRef ? ` · Paygate #${tx.paygateRef}` : ''}</dd>
+        </dl>
+        {tx.sharedInvoice && <p className="muted small">This invoice covers several units and was paid on its first booking.</p>}
+      </div>
+      <div>
+        <h4>How the amount came about</h4>
+        <table className="admin-table tx-lines">
+          <tbody>
+            {tx.breakdown.lines.map(line)}
+            {row('Total', tx.breakdown.totalCents, 'tx-total')}
+            {tx.changes.map((c) => (
+              <Fragment key={c.id}>
+                <tr><td colSpan={3} className="muted small">Booking change, paid {fmtDate(c.paidAt)}</td></tr>
+                {c.lines.map(line)}
+              </Fragment>
+            ))}
+            {row(`Paid by ${tx.method}`, tx.paidCents, 'tx-total')}
+            {tx.owingCents > 0 && row('Balance due', tx.owingCents)}
+            {tx.feeCents > 0 && row('SimonStays fee', tx.feeCents)}
+            {tx.hostNetCents > 0 && row('To host', tx.hostNetCents)}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -378,7 +414,7 @@ function Transactions({ hostFilter, HostPicker }) {
           <option value="pending">Awaiting payment</option>
           <option value="cancelled">Cancelled</option>
         </select>
-        {data && data.rows.length > 0 && <button className="ghost sm" onClick={downloadCsv}>⬇ CSV</button>}
+        {data && data.rows.length > 0 && <button className="secondary small" onClick={downloadCsv}>⬇ CSV</button>}
       </div>
       {msg && <p className="small">{msg}</p>}
       {!data ? <p className="muted small">Loading…</p> : (
@@ -402,16 +438,16 @@ function Transactions({ hostFilter, HostPicker }) {
                 {data.rows.map((x) => (
                   <Fragment key={x.id}>
                   <tr className={x.status === 'cancelled' ? 'muted' : ''}>
-                    <td className="small">
-                      <button className="linklike" title="Show what was paid" aria-expanded={openId === x.id} onClick={() => setOpenId(openId === x.id ? null : x.id)}>{openId === x.id ? '▾ ' : '▸ '}{fmtDate(x.createdAt)}</button>
-                      <div className="muted">{x.ref}</div>
-                    </td>
+                    <td className="small">{fmtDate(x.createdAt)}<div className="muted">{x.ref}</div></td>
                     <td className="small">{x.guestName || '—'}<div className="muted">{x.guestEmail}</div></td>
                     <td className="small">{place(x)}<div className="muted">{fmtDay(x.checkIn)} → {fmtDay(x.checkOut)}</div></td>
                     <td className="small">{x.host}</td>
                     <td className="small">{STATUS[x.status] || x.status}</td>
                     <td className="small">{x.method}{x.paygateRef && <div className="muted">#{x.paygateRef}</div>}</td>
-                    <td className="num">{fmtR(x.paidCents)}</td>
+                    <td className="num">
+                      <button type="button" className={`tx-icon${openId === x.id ? ' on' : ''}`} title={breakdownSummary(x)} aria-label={`Breakdown of the ${fmtR(x.paidCents)} paid`} aria-expanded={openId === x.id} onClick={() => setOpenId(openId === x.id ? null : x.id)}>🧾</button>
+                      {fmtR(x.paidCents)}
+                    </td>
                     <td className="num">{fmtR(x.grossCents)}</td>
                     <td className="num"><b>{x.feeCents ? fmtR(x.feeCents) : '—'}</b></td>
                     <td className="num">{x.hostNetCents ? fmtR(x.hostNetCents) : '—'}</td>
