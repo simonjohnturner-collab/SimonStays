@@ -9,6 +9,7 @@
 const prisma = require('../lib/prisma');
 const { sendMail } = require('./mailer');
 const { folderLink } = require('./documents');
+const { threadLink } = require('./guestThread');
 
 // SAST is UTC+2 year-round (no DST).
 const SAST_MS = 2 * 60 * 60 * 1000;
@@ -111,7 +112,12 @@ function inboxUrl() {
 
 const escHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // A message as email HTML, with any web links clickable.
-const bodyHtml = (s) => escHtml(s).replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)]/g, (url) => `<a href="${url}" style="color:#1a7a3a">${url}</a>`);
+const bodyHtml = (s) => escHtml(s).replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)]/g, (url) => `<a href="${url}" style="color:#1a7a3a">${url}</a>`).replace(/\r?\n/g, '<br>');
+
+// Where to read the conversation: the guest who booked gets their private link, as
+// they may have no account. Anyone else on the trip signs in.
+const bookerEmailOf = (b) => b.guestEmail || (b.guestAccount && b.guestAccount.email) || null;
+const messagesLink = (to, b) => (to === bookerEmailOf(b) ? threadLink(b.id) : inboxUrl());
 
 // Email a copy to the guest and any friends on the trip. Anything about money only
 // goes to the guest who booked. Answers whether the guest who booked got theirs.
@@ -128,7 +134,7 @@ async function emailOne(to, booking, body, offer = null, notice = null) {
   if (!to) return false;
   if (notice) return emailNotice(to, booking, body, notice);
   const place = [booking.unit?.property?.name, booking.unit?.name && `Unit ${booking.unit.name}`].filter(Boolean).join(' · ') || 'your stay';
-  const link = inboxUrl();
+  const link = messagesLink(to, booking);
   if (offer) return emailInvoiceOffer(to, place, body, offer, link);
   return sendMail({
     to,
@@ -148,7 +154,6 @@ const NOTICES = {
   cancelled: 'Your SimonStays booking is cancelled',
   refund: 'About your SimonStays refund',
   invoice: 'Your SimonStays payment invoice',
-  details: 'Your SimonStays booking details',
 };
 
 // Guests we take bookings for directly, on a stay that isn't over. Airbnb and the
@@ -163,7 +168,7 @@ function noticeable(b) {
 // general "new message" copy.
 function emailNotice(to, b, body, kind) {
   const v = valuesFor(b);
-  const live = ['confirmed', 'changed', 'details'].includes(kind);
+  const live = kind === 'confirmed' || kind === 'changed';
   const rows = [
     ['Reference', v.ref],
     ['Where', [v.property, v.unit && `Unit ${v.unit}`].filter(Boolean).join(' · ')],
@@ -172,7 +177,7 @@ function emailNotice(to, b, body, kind) {
     !b.dayUse && ['Check-out', live ? `${v.checkOut} by ${v.checkOutTime}` : v.checkOut],
     !b.dayUse && ['Nights', v.nights],
   ].filter((r) => r && r[1]);
-  const link = inboxUrl();
+  const link = messagesLink(to, b);
   return sendMail({
     to,
     subject: `${NOTICES[kind]}${b.ref ? ` · ${b.ref}` : ''}`,
@@ -217,7 +222,7 @@ function hostIdOf(b) { return b.hostId || (b.unit && b.unit.property ? b.unit.pr
 // Send a host → guest message on a booking. `body` is rendered here, so it may
 // still contain placeholders. With `scheduleId`, a repeat for the same booking
 // is refused by the unique constraint and returns { duplicate: true }.
-async function sendHostMessage(bookingOrId, body, { scheduleId = null, offer = null, bookerOnly = false, notice = null, noEmail = false } = {}) {
+async function sendHostMessage(bookingOrId, body, { scheduleId = null, offer = null, bookerOnly = false, notice = null, noEmail = false, email = null } = {}) {
   const b = typeof bookingOrId === 'string' || !bookingOrId.unit
     ? await prisma.booking.findUnique({ where: { id: bookingOrId.id || bookingOrId }, include: { ...BOOKING_INCLUDE, guestAccount: { select: { email: true } } } })
     : bookingOrId;
@@ -234,7 +239,8 @@ async function sendHostMessage(bookingOrId, body, { scheduleId = null, offer = n
   if (noEmail) return { ok: true, message };
   // The message is saved, so a slow mail server mustn't hold up the host's screen:
   // wait briefly, and let a slower email finish on its own.
-  const emailing = emailGuest(b, text, offer, bookerOnly, notice)
+  // `email` is a ready-made email for the guest who booked, in place of the usual copy.
+  const emailing = (email ? sendMail({ to: bookerEmailOf(b), ...email }) : emailGuest(b, text, offer, bookerOnly, notice))
     .then((sent) => (sent ? prisma.message.update({ where: { id: message.id }, data: { emailedAt: new Date() } }) : null))
     .catch((e) => { console.error('[messaging] email failed', e.message); return null; });
   let timer;
@@ -313,5 +319,5 @@ async function runConfirmedSchedules(booking) {
 
 module.exports = {
   PLACEHOLDERS, SHORTCUTS, BOOKING_INCLUDE, render, sendHostMessage, runSchedules, runConfirmedSchedules,
-  dueAt, appliesTo, scheduleBody, inboxUrl, hostIdOf, noticeable, emailBookingNotice,
+  dueAt, appliesTo, scheduleBody, inboxUrl, hostIdOf, noticeable, emailBookingNotice, bookerEmailOf, bookingValues: valuesFor,
 };

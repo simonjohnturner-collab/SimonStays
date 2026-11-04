@@ -3,7 +3,7 @@
 //   1. stamp Booking.confirmedAt (only once — guards everything below)
 //   2. WhatsApp the host a confirmation (website + channel bookings; a manual
 //      booking was typed in by the host, so they already know)
-//   3. email the guest their confirmation
+//   3. email the guest their confirmation, unless their paid invoice is about to say so
 //   4. send the host's "when a booking is confirmed" scheduled messages
 //
 // Fire-and-forget from callers: never throws, never blocks the request.
@@ -52,7 +52,7 @@ function confirmationText(b) {
   return `Thank you${name ? `, ${name}` : ''}. Your booking is confirmed, and we look forward to hosting you.${owing > 0 ? ` The balance of ${rand(owing)} is due at least 3 days before check-in.` : ''}`;
 }
 
-async function onBookingConfirmed(bookingId) {
+async function onBookingConfirmed(bookingId, { invoiceFollows = false } = {}) {
   try {
     // Atomic claim: only the first caller for this booking gets count 1.
     const claimed = await prisma.booking.updateMany({ where: { id: bookingId, status: 'confirmed', confirmedAt: null }, data: { confirmedAt: new Date() } });
@@ -65,7 +65,7 @@ async function onBookingConfirmed(bookingId) {
       if (!out.whatsapp.ok) console.warn('[booking-confirmed] host WhatsApp not sent', b.id, out.whatsapp.skipped || out.whatsapp.error);
     }
     // A slow mail server mustn't hold up whoever confirmed the booking.
-    messaging.emailBookingNotice(b, 'confirmed', confirmationText(b)).catch((e) => console.error('[booking-confirmed] email failed', b.id, e.message));
+    if (!invoiceFollows) messaging.emailBookingNotice(b, 'confirmed', confirmationText(b)).catch((e) => console.error('[booking-confirmed] email failed', b.id, e.message));
     out.messages = await messaging.runConfirmedSchedules(b);
     return out;
   } catch (e) {

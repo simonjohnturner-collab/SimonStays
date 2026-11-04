@@ -134,13 +134,13 @@ async function applyPaid(payment, txId) {
   }
   await prisma.booking.update({ where: { id: booking.id }, data: { ...money, status: 'confirmed' } });
   try { await require('./locks').issueGuestCode({ ...booking, status: 'confirmed' }, booking.unit); } catch (e) { /* stubbed until smart locks are live */ }
-  await onBookingConfirmed(booking.id); // host WhatsApp + "on confirmation" guest messages
+  await onBookingConfirmed(booking.id, { invoiceFollows: true }); // host WhatsApp + "on confirmation" guest messages
   // Every other unit on the invoice is blocked and confirmed the same way.
   const extraBookings = offer ? await offers.saveExtraStays(offer, booking, 'confirmed') : [];
   for (const extra of extraBookings) {
     const full = await prisma.booking.findUnique({ where: { id: extra.id }, include: { unit: { include: { property: true } } } });
     try { await require('./locks').issueGuestCode(full, full.unit); } catch (e) { /* stubbed until smart locks are live */ }
-    await onBookingConfirmed(extra.id);
+    await onBookingConfirmed(extra.id, { invoiceFollows: true });
   }
   await sendInvoice(booking.id, { method: 'card', receivedCents: payment.amountCents, offer });
   return { ok: true, outcome: 'confirmed' };
@@ -179,12 +179,12 @@ async function confirmByHost(bookingId) {
   if (!claimed.count) return { error: 'not_pending', status: 409, message: 'Only a booking awaiting payment can be confirmed.' };
 
   try { await require('./locks').issueGuestCode({ ...booking, status: 'confirmed' }, booking.unit); } catch (e) { /* stubbed until smart locks are live */ }
-  await onBookingConfirmed(booking.id);
+  await onBookingConfirmed(booking.id, { invoiceFollows: true });
   const extraBookings = offer ? await offers.saveExtraStays(offer, booking, 'confirmed') : [];
   for (const extra of extraBookings) {
     const full = await prisma.booking.findUnique({ where: { id: extra.id }, include: { unit: { include: { property: true } } } });
     try { await require('./locks').issueGuestCode(full, full.unit); } catch (e) { /* stubbed until smart locks are live */ }
-    await onBookingConfirmed(extra.id);
+    await onBookingConfirmed(extra.id, { invoiceFollows: true });
   }
   if (booking.guestEmail || booking.guestAccountId) {
     const dates = `${iso(booking.checkIn)} to ${iso(booking.checkOut)}`;

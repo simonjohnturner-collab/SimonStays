@@ -381,8 +381,8 @@ function EmailDetails({ tx }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   async function send() {
-    const again = sentAt ? ` They were last sent these on ${fmtWhen(sentAt)}.` : '';
-    if (!window.confirm(`Email ${tx.guestName || 'this guest'} at ${tx.guestEmail} their booking details and payment breakdown?${again}`)) return;
+    const again = sentAt ? ` They were last sent one on ${fmtWhen(sentAt)}.` : '';
+    if (!window.confirm(`Email ${tx.guestName || 'this guest'} at ${tx.guestEmail} their invoice, with a link to their messages?${again}`)) return;
     setBusy(true); setError('');
     try { const r = await api.adminEmailDetails(tx.id); setSentAt(r.detailsEmailedAt); }
     catch (e) { setError((e.data && e.data.message) || e.message); }
@@ -390,7 +390,7 @@ function EmailDetails({ tx }) {
   }
   return (
     <div className="tx-email">
-      <button type="button" className="secondary small" disabled={busy} onClick={send}>{busy ? 'Sending…' : '✉️ Email guest their details'}</button>
+      <button type="button" className="secondary small" disabled={busy} onClick={send}>{busy ? 'Sending…' : '✉️ Email guest their invoice'}</button>
       {sentAt && <div className="muted small">Last sent {fmtWhen(sentAt)}</div>}
       {error && <div className="msg-warn">{error}</div>}
     </div>

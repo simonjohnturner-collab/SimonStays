@@ -29,6 +29,7 @@ app.use('/listings', require('./routes/listings'));
 // Public guest accounts (shopfront login → "my trips"). Mount before /public so
 // its paths are matched first (the /public router has no /account/* routes).
 app.use('/public/account/messages', require('./routes/guestMessages'));
+app.use('/public/thread', require('./routes/guestThread'));
 app.use('/public/documents', require('./routes/documents').publicRouter);
 app.use('/public/account', require('./routes/guestAuth'));
 // Paygate PayWeb3 callbacks (notify + guest return) — public, verified with Paygate.
@@ -105,6 +106,15 @@ app.get('/proof/:bookingId', (req, res) => {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-Robots-Tag', 'noindex');
   res.type('html').send(proofHtml);
+});
+// A guest's conversation, opened from the private link in their email.
+const threadHtml = fs.readFileSync(path.join(__dirname, 'pages/thread.html'), 'utf8');
+app.get('/thread/:token', (req, res) => {
+  res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Robots-Tag', 'noindex');
+  res.type('html').send(threadHtml);
 });
 // Privacy Policy — same plain self-contained style as the terms page.
 const privacyHtml = fs.readFileSync(path.join(__dirname, 'pages/privacy.html'), 'utf8');
