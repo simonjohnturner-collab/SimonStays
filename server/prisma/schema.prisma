@@ -359,6 +359,7 @@ model Photo {
   hostProfile Host?     @relation("HostPhotos", fields: [hostId], references: [id], onDelete: Cascade)
   fieldId     String? // which form question this photo answers
   data        Bytes // resized JPEG/PNG bytes
+  contentHash String? // SHA-256 of the uploaded form photo, so a repeat isn't stored twice
   contentType String
   filename    String?
   sort        Int       @default(0) // lower = earlier; the cover is the lowest

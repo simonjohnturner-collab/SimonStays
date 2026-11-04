@@ -769,11 +769,17 @@ router.post('/forms/:id/photos', async (req, res, next) => {
     if (!sub) return res.status(404).json({ error: 'not_found' });
     const img = decodeFormPhoto(req.body);
     if (!img) return res.status(400).json({ error: 'no_image' });
+    // The same picture on the same question is only kept once (re-picked on the
+    // phone, or re-sent on a retry). The first copy stays; the upload still succeeds.
+    const contentHash = require('crypto').createHash('sha256').update(img.buffer).digest('hex');
+    const fieldId = req.body.fieldId || null;
+    const existing = await prisma.photo.findFirst({ where: { formSubmissionId: sub.id, fieldId, contentHash }, select: { id: true } });
+    if (existing) return res.json({ id: existing.id, duplicate: true });
     // Transcode HEIC/HEIF (iPhone) to JPEG so it renders in every browser.
     const { toRenderable } = require('../utils/imagePrep');
     const out = await toRenderable(img.buffer, img.contentType);
     const photo = await prisma.photo.create({
-      data: { formSubmissionId: sub.id, fieldId: req.body.fieldId || null, data: out.buffer, contentType: out.contentType, filename: req.body.filename || null },
+      data: { formSubmissionId: sub.id, fieldId, data: out.buffer, contentHash, contentType: out.contentType, filename: req.body.filename || null },
       select: { id: true },
     });
     res.status(201).json({ id: photo.id });

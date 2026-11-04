@@ -157,7 +157,7 @@
   // Save-as-you-go state. SECTIONS describes each collapsible section (for the
   // completeness pills and the "sections still to complete" prompt at submit).
   // SETTERS/photoData/photoRedraw let a saved draft be restored into the form.
-  var SECTIONS = [], SETTERS = {}, photoData = {}, photoRedraw = {};
+  var SECTIONS = [], SETTERS = {}, photoData = {}, photoRedraw = {}, photoLabels = {};
   var restoring = false, saveTimer = null;
   // Live purchases summary (what the cleaner is owed) as she uploads invoices.
   var RATE_CENTS = null;        // the selected property's per-clean fee
@@ -280,7 +280,7 @@
       cleanerOther: document.getElementById('cleaner-other').value,
       propId: document.getElementById('prop').value,
       date: document.getElementById('date').value,
-      answers: answers, photos: photoData, ondemand: ondemandState(), ts: Date.now()
+      answers: answers, photos: photoData, photoHashes: photoHashState(), ondemand: ondemandState(), ts: Date.now()
     };
     var key = draftKey(UNIT.id);
     try { localStorage.setItem(key, JSON.stringify(draft)); }
@@ -289,6 +289,13 @@
       catch (e2) { return; }
     }
     flashSaved();
+  }
+  // Each photo's hash, in the same order as photoData, so a restored draft still
+  // recognises the originals (the draft itself only keeps compressed copies).
+  function photoHashState() {
+    var out = {};
+    Object.keys(photoFiles).forEach(function (fid) { out[fid] = (photoFiles[fid] || []).map(function (file) { return file._hash || null; }); });
+    return out;
   }
   function scheduleSave() { if (saveTimer) clearTimeout(saveTimer); saveTimer = setTimeout(doSave, 400); }
   function clearDraft() { try { if (UNIT) localStorage.removeItem(draftKey(UNIT.id)); } catch (e) {} }
@@ -372,6 +379,32 @@
     });
   }
 
+  // SHA-256 of the file exactly as picked, so the same picture chosen again is
+  // recognised. FAIL-OPEN like assessPhoto: null means we can't tell, so we allow it
+  // (the server still refuses a repeat on the same question).
+  function fileHash(file) {
+    return new Promise(function (resolve) {
+      if (!window.crypto || !crypto.subtle) return resolve(null);
+      var r = new FileReader();
+      r.onload = function () {
+        crypto.subtle.digest('SHA-256', r.result).then(function (buf) {
+          resolve(Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''));
+        }, function () { resolve(null); });
+      };
+      r.onerror = function () { resolve(null); };
+      r.readAsArrayBuffer(file);
+    });
+  }
+  // Which question already holds this picture (anywhere on the form), or null.
+  function fieldHoldingHash(hash) {
+    if (!hash) return null;
+    var fids = Object.keys(photoFiles);
+    for (var i = 0; i < fids.length; i++) {
+      if ((photoFiles[fids[i]] || []).some(function (o) { return o._hash === hash; })) return fids[i];
+    }
+    return null;
+  }
+
   function renderField(f) {
     var q = el('div', 'q');
     var lbl = el('div', 'field-label' + (f.required ? ' req' : ''));
@@ -402,6 +435,7 @@
       SETTERS[f.id] = function (v) { dt.value = v == null ? '' : v; answers[f.id] = dt.value; };
     } else if (f.type === 'photos') {
       photoFiles[f.id] = photoFiles[f.id] || []; photoData[f.id] = photoData[f.id] || [];
+      photoLabels[f.id] = (f.roomTag ? f.roomTag + ' – ' : '') + f.label;
       var photos = el('div', 'photos');
       function draw() { photos.innerHTML = ''; photoFiles[f.id].forEach(function (file, i) {
         var t = el('div', 'thumb'); var im = el('img'); im.src = URL.createObjectURL(file); t.appendChild(im);
@@ -442,11 +476,25 @@
         var files = Array.prototype.slice.call(e.target.files); e.target.value = '';
         if (!files.length) return;
         checking.style.display = 'block';
+        var dupMsg = null;
         files.reduce(function (chain, file) {
           return chain.then(function () {
-            return assessPhoto(file, strict).then(function (res) { if (res.ok) accept(file); else reject(file, res.reason); });
+            return fileHash(file).then(function (hash) {
+              var holder = fieldHoldingHash(hash);
+              if (holder) {
+                dupMsg = holder === f.id
+                  ? '✓ You already added that photo and it’s saved, so it hasn’t been added again.'
+                  : '⚠️ That photo is already added under “' + photoLabels[holder] + '”, so it hasn’t been added again. Please take a new photo for this question.';
+                return;
+              }
+              file._hash = hash;
+              return assessPhoto(file, strict).then(function (res) { if (res.ok) accept(file); else reject(file, res.reason); });
+            });
           });
-        }, Promise.resolve()).then(function () { checking.style.display = 'none'; });
+        }, Promise.resolve()).then(function () {
+          checking.style.display = 'none';
+          if (dupMsg && warn.style.display === 'none') warnMsg(dupMsg);
+        });
       };
       // Read a just-added invoice with the AI, dedup it, and refresh the live summary.
       function analyzeInvoiceFile(fid, file) {
@@ -482,9 +530,13 @@
         INVOICE_DATEBOX.appendChild(dta); q.appendChild(INVOICE_DATEBOX);
         renderLiveSummary();
       }
-      SETTERS[f.id] = function (list) {
+      SETTERS[f.id] = function (list, hashes) {
         list = list || []; photoData[f.id] = list.slice();
-        photoFiles[f.id] = list.map(function (d) { return dataURLtoFile(d); }).filter(Boolean);
+        photoFiles[f.id] = list.map(function (d, i) {
+          var file = dataURLtoFile(d);
+          if (file && hashes && hashes[i]) file._hash = hashes[i];
+          return file;
+        }).filter(Boolean);
         draw();
       };
     } else {
@@ -536,7 +588,7 @@
 
   function renderFields() {
     var host = document.getElementById('fields'); host.innerHTML = '';
-    answers = {}; photoFiles = {}; rendered = []; SECTIONS = []; SETTERS = {}; photoData = {}; photoRedraw = {};
+    answers = {}; photoFiles = {}; rendered = []; SECTIONS = []; SETTERS = {}; photoData = {}; photoRedraw = {}; photoLabels = {};
     // Group fields into sections (a 'section' field starts a new group).
     var groups = [], cur = { section: null, fields: [] };
     (TEMPLATE.fields || []).forEach(function (f) {
@@ -664,8 +716,8 @@
       });
       var a = d.answers || {};
       Object.keys(a).forEach(function (id) { if (SETTERS[id]) SETTERS[id](a[id]); else answers[id] = a[id]; });
-      var ph = d.photos || {};
-      Object.keys(ph).forEach(function (id) { if (SETTERS[id]) SETTERS[id](ph[id]); });
+      var ph = d.photos || {}, phHashes = d.photoHashes || {};
+      Object.keys(ph).forEach(function (id) { if (SETTERS[id]) SETTERS[id](ph[id], phHashes[id]); });
       var n = document.getElementById('dnote');
       if (n) n.textContent = d.photosDropped
         ? 'Answers restored — please re-add photos before submitting.'
