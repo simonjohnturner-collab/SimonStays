@@ -235,8 +235,10 @@ async function applyChange(offer, b, receivedCents) {
   }
   const paid = paidOn(b) + receivedCents;
   data.amountPaidCents = paid;
-  if (b.totalCents != null) {
-    const total = b.totalCents + offer.totalCents;
+  // A manual booking holds its price in quotedCents only.
+  const current = b.totalCents != null ? b.totalCents : b.quotedCents;
+  if (current != null) {
+    const total = current + offer.totalCents;
     const owing = Math.max(0, total - paid);
     Object.assign(data, { totalCents: total, quotedCents: total, amountOwingCents: owing, paid: owing === 0, paymentStatus: owing === 0 ? 'paid' : 'partial' });
   }
