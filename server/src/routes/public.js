@@ -339,7 +339,7 @@ router.post('/book', optionalGuest, async (req, res, next) => {
         unitId: unit.id, hostId: unit.property.hostId, source: 'website', status: 'pending',
         guestName: b.guestName, ref, billingDetails: billing,
         guestEmail, guestPhone, recommendedBy: (b.recommendedBy || '').trim() || null,
-        totalCents: payableCents, guestAccountId,
+        totalCents: payableCents, splitFeeCents: split ? SPLIT_FEE_CENTS : null, guestAccountId,
         termsAcceptedAt: b.acceptedTerms ? new Date() : null,
         checkIn: dateOnly(iso(b.checkIn)), checkOut: dateOnly(iso(b.checkOut)),
         comments, paymentStatus: split ? 'partial' : 'unpaid', amountOwingCents: owingCents,

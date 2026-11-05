@@ -183,6 +183,7 @@ if (require.main === module) {
   // Lift guest email/phone out of old website bookings' comments so guests can
   // see their previous trips, and link them to any registered accounts.
   require('./utils/guestBackfill').backfillGuestContacts().catch((e) => console.error('[guestBackfill] failed', e.message));
+  require('./utils/guestBackfill').backfillSplitFees().catch((e) => console.error('[splitFees] failed', e.message));
 
   const expr = process.env.SYNC_CRON || '*/30 * * * *';
   if (cron.validate(expr)) {

@@ -30,11 +30,12 @@ router.get('/', async (req, res) => {
 });
 
 // SimonStays takes its service fee (utils/fees, 10%) off each payout.
-const { FEE_PERCENT: AGENCY_FEE_PERCENT, feeOf } = require('../utils/fees');
+const { FEE_PERCENT: AGENCY_FEE_PERCENT, feeOf, grossOf } = require('../utils/fees');
 
 // GET /account/payments — bookings SimonStays collected for this host (website
 // bookings, paid), each with a priced breakdown and the SimonStays fee
-// deduction, so the host sees the net amount paid out to them.
+// deduction, so the host sees the net amount paid out to them. The money comes
+// from what the booking was actually charged; the quote only itemises it.
 router.get('/payments', async (req, res) => {
   const { quote } = require('../utils/pricing');
   const { overridesFor } = require('../utils/nightPrices');
@@ -47,14 +48,14 @@ router.get('/payments', async (req, res) => {
   const payments = [];
   for (const b of bookings) {
     if (!b.unit) continue;
-    let q = null, grossCents = 0, agencyFeeCents = 0, netPayoutCents = 0;
+    let q = null;
+    const grossCents = grossOf(b);
+    const agencyFeeCents = feeOf(grossCents);
+    const netPayoutCents = grossCents - agencyFeeCents;
     if (b.unit.pricingGroup) {
       const overrides = await overridesFor(b.unitId, iso(b.checkIn), iso(b.checkOut));
       const prepaid = (b.cleans || []).filter((c) => c.paymentMethod !== 'direct').length;
       q = quote(b.unit.pricingGroup, { checkIn: iso(b.checkIn), checkOut: iso(b.checkOut), mattress: b.extraMattress, earlyCheckIn: b.earlyCheckIn, lateCheckOut: b.lateCheckOut, cleans: 1 + prepaid, overrides });
-      grossCents = q.rentalCents;
-      agencyFeeCents = feeOf(grossCents);
-      netPayoutCents = grossCents - agencyFeeCents;
     }
     payments.push({
       id: b.id, property: b.unit.property.name, unit: b.unit.name, source: b.source, guestName: b.guestName || null,

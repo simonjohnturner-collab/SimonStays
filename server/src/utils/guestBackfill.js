@@ -22,6 +22,16 @@ function parseContact(comments) {
   return { email, phone };
 }
 
+// 50/50 bookings made before the plan's admin fee had its own column. Their
+// comments record the plan, and an invoice would have replaced the price.
+async function backfillSplitFees() {
+  const r = await prisma.booking.updateMany({
+    where: { source: 'website', splitFeeCents: null, comments: { contains: '50/50 split' }, offers: { none: {} } },
+    data: { splitFeeCents: 25000 },
+  });
+  if (r.count) console.log(`[splitFees] filled ${r.count} booking(s)`);
+}
+
 async function backfillGuestContacts() {
   const rows = await prisma.booking.findMany({
     where: { source: 'website', guestEmail: null },
@@ -48,4 +58,4 @@ async function backfillGuestContacts() {
   return { filled, linked };
 }
 
-module.exports = { backfillGuestContacts, parseContact };
+module.exports = { backfillGuestContacts, parseContact, backfillSplitFees };

@@ -53,7 +53,7 @@ router.post('/impersonate/:hostId', async (req, res) => {
 });
 
 // ---- SimonStays admin portal: every host's properties, transactions and guest messages ----
-const { FEE_PERCENT, feeOf, grossOf } = require('../utils/fees');
+const { FEE_PERCENT, feeOf, grossOf, simonStaysCutOf } = require('../utils/fees');
 const iso = (d) => new Date(d).toISOString().slice(0, 10);
 const ownedBy = (hostId) => ({ OR: [{ hostId }, { unit: { property: { hostId } } }] });
 const hostOfBooking = (b) => b.hostId || b.unit?.property?.hostId || null;
@@ -141,7 +141,7 @@ router.get('/transactions', async (req, res) => {
     const grossCents = grossOf(b);
     const payments = b.payments.length ? b.payments : offerPayments.filter((p) => p.offerId === b.sourceOfferId);
     const earns = b.status === 'confirmed'; // the fee is only earned on a confirmed stay
-    const feeCents = earns ? feeOf(grossCents) : 0;
+    const feeCents = earns ? simonStaysCutOf(b) : 0;
     const card = payments.find((p) => p.status === 'COMPLETE');
     const invoice = b.offers.find((o) => o.kind !== 'change') || sourceOffers.find((o) => o.id === b.sourceOfferId) || null;
     const account = accountOf(b);
@@ -166,7 +166,7 @@ router.get('/transactions', async (req, res) => {
       owingCents: b.amountOwingCents || 0,
       canEmailDetails: b.status === 'confirmed' && noticeable(b),
       detailsEmailedAt: b.detailsEmailedAt,
-      grossCents, feeCents, hostNetCents: earns ? grossCents - feeCents : 0,
+      grossCents, feeCents, hostNetCents: earns ? grossCents - feeOf(grossCents) : 0,
       breakdown: await breakdownOf(b, invoice),
       sharedInvoice: !!invoice && invoice.bookingId !== b.id,
       changes: b.offers.filter((o) => o.kind === 'change').map((o) => ({ id: o.id, paidAt: o.paidAt, lines: offerLines(o), totalCents: o.totalCents })),

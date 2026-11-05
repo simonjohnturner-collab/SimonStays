@@ -207,7 +207,7 @@ async function applyOfferTerms(offer, booking) {
     where: { id: booking.id },
     data: {
       ...(first ? { unitId: first.unitId, checkIn: dateOnly(first.checkIn), checkOut: dateOnly(blockOut(first)), dayUse: !!first.dayUse } : {}),
-      totalCents: share, quotedCents: share,
+      totalCents: share, quotedCents: share, splitFeeCents: null,
       depositCents: offer.depositCents || null, depositStatus: offer.depositCents ? 'held' : null,
     },
     include: { unit: { include: { property: true } } },

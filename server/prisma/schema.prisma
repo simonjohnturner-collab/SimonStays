@@ -541,6 +541,7 @@ model Booking {
   detailsEmailedAt DateTime? // when the admin last emailed the guest their booking details
   ratingInviteAt DateTime? // when the guest was invited to rate their stay
   ratings        Rating[]
+  splitFeeCents Int?    // 50/50 plan admin fee inside totalCents: all SimonStays', never the host's
   depositStatus String? // null (none) | 'held' | 'refunded' | 'forfeited'
   cleaner      String?
   comments     String?

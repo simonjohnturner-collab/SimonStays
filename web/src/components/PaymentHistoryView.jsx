@@ -51,7 +51,7 @@ export default function PaymentHistoryView({ onClose }) {
                       <div className="ph-sub">{p.checkIn} → {p.checkOut} · {p.guestName || '(guest)'} · <span className="ph-src">{p.source}</span></div>
                       <div className="ph-extras">Extras: {extrasText(p.extras)}</div>
                     </div>
-                    <div className="ph-amt">{q ? fmtR(p.netPayoutCents) : '—'}<span className="ph-caret">{open === p.id ? '▲' : '▼'}</span></div>
+                    <div className="ph-amt">{fmtR(p.netPayoutCents)}<span className="ph-caret">{open === p.id ? '▲' : '▼'}</span></div>
                   </div>
                   {open === p.id && (
                     <div className="ph-breakdown">
@@ -62,6 +62,7 @@ export default function PaymentHistoryView({ onClose }) {
                         {q.earlyCents ? <div className="ph-row"><span>Early check-in</span><span>{fmtR(q.earlyCents)}</span></div> : null}
                         {q.lateCents ? <div className="ph-row"><span>Late checkout</span><span>{fmtR(q.lateCents)}</span></div> : null}
                         {q.mattressCents ? <div className="ph-row"><span>Extra mattress</span><span>{fmtR(q.mattressCents)}</span></div> : null}
+                        {p.grossCents !== q.rentalCents ? <div className="ph-row"><span>Invoice adjustments</span><span>{fmtR(p.grossCents - q.rentalCents)}</span></div> : null}
                         <div className="ph-row"><span>Rental total</span><span>{fmtR(p.grossCents)}</span></div>
                         <div className="ph-row ph-fee"><span>SimonStays fee ({data.agencyFeePercent}%)</span><span>−{fmtR(p.agencyFeeCents)}</span></div>
                         <div className="ph-row ph-rowtot"><span>Net paid out to you</span><span>{fmtR(p.netPayoutCents)}</span></div>
