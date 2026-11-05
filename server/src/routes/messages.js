@@ -376,6 +376,7 @@ async function scheduleData(hostId, b, partial) {
   }
   if (!partial || 'body' in b) data.body = String(b.body || '').trim() || null;
   if ('active' in b) data.active = !!b.active;
+  if ('holdUntilPaid' in b) data.holdUntilPaid = !!b.holdUntilPaid;
   return data;
 }
 

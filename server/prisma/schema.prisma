@@ -641,6 +641,7 @@ model MessageSchedule {
   propertyIds Json             @default("[]") // properties this applies to; empty = all
   noProperties Boolean         @default(false) // tied to no property, so it never sends to a booking
   active      Boolean          @default(true)
+  holdUntilPaid Boolean        @default(false) // wait until the booking owes nothing before sending
   messages    Message[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt

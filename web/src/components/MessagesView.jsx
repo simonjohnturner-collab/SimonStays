@@ -719,14 +719,14 @@ function SavedMessages({ templates, shortcuts, onChanged }) {
 
 // ---------------- Scheduled messages ----------------
 
-const BLANK = { id: null, name: '', templateId: '', body: '', anchor: 'confirmed', offsetDays: 0, offsetMinutes: 0, sendTime: '10:00', propertyIds: [], noProperties: false, active: true };
+const BLANK = { id: null, name: '', templateId: '', body: '', anchor: 'confirmed', offsetDays: 0, offsetMinutes: 0, sendTime: '10:00', propertyIds: [], noProperties: false, active: true, holdUntilPaid: false };
 
 // Common messages a host can start from. Picking one only opens a draft: nothing
 // sends until the host presses Create.
 const SUGGESTED = [
   { name: 'Booking confirmed', anchor: 'confirmed', offsetDays: 0,
     body: 'Hi [First Name], your stay at [Property] is confirmed.\n\nCheck-in: [Check In] from [Check In Time]\nCheck-out: [Check Out] by [Check Out Time]\nReference: [Ref]\n\nWe look forward to hosting you.\n[Host Name]' },
-  { name: 'Check-in details', anchor: 'check_in', offsetDays: -1, sendTime: '10:00',
+  { name: 'Check-in details', anchor: 'check_in', offsetDays: -1, sendTime: '10:00', holdUntilPaid: true,
     body: 'Hi [First Name], you check in tomorrow from [Check In Time].\n\n[Property], Unit [Unit]\n[Address]\n\nAccess code: [Access Code]\nParking: [Parking]\nWifi: [Wifi Name], password [Wifi Password]\n\n[Host Name]' },
   { name: 'Welcome on arrival day', anchor: 'check_in', offsetDays: 0, sendTime: '16:00',
     body: 'Welcome to [Property], [First Name]! We hope you settle in well. Message us here if you need anything.\n\n[Host Name]' },
@@ -904,7 +904,7 @@ function Scheduled({ templates, shortcuts, properties }) {
   // Only the saved row is replaced, so unsaved edits to the others survive.
   async function save(r) {
     const data = { name: r.name, templateId: r.templateId || null, body: r.templateId ? null : r.body, anchor: r.anchor,
-      offsetDays: r.offsetDays, offsetMinutes: r.offsetMinutes, sendTime: r.sendTime, propertyIds: r.propertyIds, noProperties: !!r.noProperties, active: r.active };
+      offsetDays: r.offsetDays, offsetMinutes: r.offsetMinutes, sendTime: r.sendTime, propertyIds: r.propertyIds, noProperties: !!r.noProperties, active: r.active, holdUntilPaid: !!r.holdUntilPaid };
     try {
       const { schedule } = r.id ? await api.updateMessageSchedule(r.id, data) : await api.createMessageSchedule(data);
       setRows((rs) => rs.map((x) => (keyOf(x) === keyOf(r) ? scheduleRow(schedule) : x)));
@@ -939,6 +939,7 @@ function Scheduled({ templates, shortcuts, properties }) {
   const setEvent = (anchor) => edit(key, anchor === 'confirmed'
     ? { anchor, offsetDays: 0, offsetMinutes: 0 }
     : { anchor, offsetMinutes: 0, offsetDays: booked ? -1 : r.offsetDays });
+  const sendsAccess = r && !r.holdUntilPaid && /\[\s*access[\s-]*code\s*\]/i.test(template ? template.body : r.body);
   const taken = new Set(rows.map((x) => x.name.trim().toLowerCase()));
   const ideas = SUGGESTED.filter((s) => !taken.has(s.name.toLowerCase()) && !hiddenIdeas.includes(s.name));
 
@@ -961,7 +962,7 @@ function Scheduled({ templates, shortcuts, properties }) {
             <div key={keyOf(x)} className="msg-item-wrap">
               <button className={`msg-item${keyOf(x) === activeKey ? ' on' : ''}`} onClick={() => setActiveKey(keyOf(x))}>
                 <b>{x.name || 'Untitled message'}</b>
-                <span className="muted small">{describe(x, properties)}</span>
+                <span className="muted small">{describe(x, properties)}{x.holdUntilPaid ? ' · held until paid' : ''}</span>
                 <span className={`msg-item-state${!x.id || x.dirty ? ' draft' : x.active ? '' : ' off'}`}>{!x.id ? 'Draft, not created yet' : x.dirty ? 'Unsaved changes' : x.active ? `Active · sent ${x.sentCount}×` : `Off · sent ${x.sentCount}×`}</span>
               </button>
               <button type="button" className="msg-item-del" title={x.id ? 'Delete' : 'Discard'} aria-label={`${x.id ? 'Delete' : 'Discard'} ${x.name || 'Untitled message'}`} onClick={() => remove(x, keyOf(x))}>🗑</button>
@@ -1018,6 +1019,10 @@ function Scheduled({ templates, shortcuts, properties }) {
                   onClick={() => edit(key, { noProperties: false, propertyIds: on ? r.propertyIds.filter((x) => x !== p.id) : [...r.propertyIds, p.id] })}>{p.name}</button>;
               })}
             </div>
+
+            <label className="chk"><input type="checkbox" checked={!!r.holdUntilPaid} onChange={(e) => edit(key, { holdUntilPaid: e.target.checked })} /> Hold this message until the booking is fully paid</label>
+            {r.holdUntilPaid && <p className="muted small">If money is still owing when this is due, it waits and sends once the balance is paid.</p>}
+            {sendsAccess && <div className="msg-warn">This message includes the access code. A guest with a balance still owing would get it, unless you hold it above.</div>}
 
             <div className="msg-sched-row"><span className="msg-lbl">Message</span></div>
             {r.templateId

@@ -262,6 +262,10 @@ function dueAt(s, b) {
   return new Date(Date.UTC(y, m - 1, d + (s.offsetDays || 0), hh || 0, mm || 0) - SAST_MS);
 }
 
+// Still owes money it could pay us: a 50/50 balance, or a manual booking not yet
+// marked paid. Channel bookings (Airbnb etc.) are paid elsewhere, so never count.
+const owesBalance = (b) => ['website', 'manual'].includes(b.source) && (b.amountOwingCents || 0) > 0;
+
 function appliesTo(s, b) {
   if (s.noProperties) return false;
   const ids = Array.isArray(s.propertyIds) ? s.propertyIds : [];
@@ -275,12 +279,16 @@ const reachable = { status: 'confirmed', unitId: { not: null }, OR: [{ guestEmai
 // Send every due scheduled message, in the conversation only: guests read them from
 // the link on their invoice, or by signing in. Each (schedule, booking) pair sends once:
 // due within the catch-up window, and never for a time before the schedule existed.
+// A held schedule waits for the balance instead, so it goes out as soon as the
+// booking is paid, however late, as long as the stay isn't over.
 async function runSchedules(now = new Date()) {
   const schedules = await prisma.messageSchedule.findMany({ where: { active: true }, include: { template: true } });
   const out = { schedules: schedules.length, sent: 0, failed: 0 };
   for (const s of schedules) {
     const where = { ...reachable, unit: { property: { hostId: s.hostId } } };
-    if (s.anchor === 'confirmed') {
+    if (s.holdUntilPaid) {
+      where.checkOut = { gte: new Date(now.getTime() - Math.max(0, s.offsetDays || 0) * DAY_MS - CATCH_UP_MS) };
+    } else if (s.anchor === 'confirmed') {
       where.confirmedAt = { gte: new Date(now.getTime() - (s.offsetMinutes || 0) * MINUTE_MS - CATCH_UP_MS) };
     } else {
       // Anchor dates whose send time could fall inside [now − catch-up, now].
@@ -290,9 +298,9 @@ async function runSchedules(now = new Date()) {
     }
     where.NOT = { messages: { some: { scheduleId: s.id } } };
     const bookings = await prisma.booking.findMany({ where, include: { ...BOOKING_INCLUDE, guestAccount: { select: { email: true } } } });
-    const floor = Math.max(now.getTime() - CATCH_UP_MS, new Date(s.createdAt).getTime());
+    const floor = s.holdUntilPaid ? new Date(s.createdAt).getTime() : Math.max(now.getTime() - CATCH_UP_MS, new Date(s.createdAt).getTime());
     for (const b of bookings) {
-      if (!appliesTo(s, b)) continue;
+      if (!appliesTo(s, b) || (s.holdUntilPaid && owesBalance(b))) continue;
       const due = dueAt(s, b);
       if (!due || due.getTime() > now.getTime() || due.getTime() < floor) continue;
       try {
@@ -312,6 +320,7 @@ async function runConfirmedSchedules(booking) {
   let sent = 0;
   for (const s of schedules) {
     if (!appliesTo(s, booking) || s.offsetMinutes > 0) continue; // a delayed one waits for the job
+    if (s.holdUntilPaid && owesBalance(booking)) continue; // the job sends it once paid
     const r = await sendHostMessage(booking, scheduleBody(s), { scheduleId: s.id, noEmail: true });
     if (r.ok) sent++;
   }
@@ -320,5 +329,5 @@ async function runConfirmedSchedules(booking) {
 
 module.exports = {
   PLACEHOLDERS, SHORTCUTS, BOOKING_INCLUDE, render, sendHostMessage, runSchedules, runConfirmedSchedules,
-  dueAt, appliesTo, scheduleBody, inboxUrl, hostIdOf, noticeable, emailBookingNotice, bookerEmailOf, bookingValues: valuesFor,
+  dueAt, appliesTo, owesBalance, scheduleBody, inboxUrl, hostIdOf, noticeable, emailBookingNotice, bookerEmailOf, bookingValues: valuesFor,
 };

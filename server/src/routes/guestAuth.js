@@ -16,6 +16,7 @@ const payments = require('../utils/payments');
 const mailer = require('../utils/mailer');
 const { onTrip, isBooker } = require('../utils/guestAccess');
 const { readDocument } = require('../utils/guestDocuments');
+const { owesBalance } = require('../utils/messaging');
 
 const router = express.Router();
 
@@ -205,6 +206,7 @@ function tripOf(b, acct) {
   const p = (u && u.property) || null;
   const nights = shownNights(b);
   const confirmed = b.status === 'confirmed';
+  const arrivalHeld = confirmed && owesBalance(b);
   return {
     id: b.id,
     ref: b.ref || null,
@@ -228,10 +230,11 @@ function tripOf(b, acct) {
     canPayBalance: !shared && confirmed && b.source === 'website' && b.amountOwingCents > 0 && payments.isOnline(),
     cancellationPolicy: (p && p.cancellationPolicy) || DEFAULT_CANCELLATION_POLICY,
     coverPhotoId: (u && u.photos && u.photos[0] && u.photos[0].id) || (p && p.photos && p.photos[0] && p.photos[0].id) || null,
-    // Practical arrival info the guest is entitled to — only once confirmed.
-    wifiName: confirmed && u ? (u.wifiName || null) : null,
-    accessCode: confirmed ? (b.accessCode || null) : null,
-    parking: (u && u.parkingNotes) || null,
+    // Practical arrival info the guest is entitled to — only once confirmed and fully paid.
+    arrivalHeld,
+    wifiName: confirmed && !arrivalHeld && u ? (u.wifiName || null) : null,
+    accessCode: confirmed && !arrivalHeld ? (b.accessCode || null) : null,
+    parking: arrivalHeld ? null : (u && u.parkingNotes) || null,
   };
 }
 

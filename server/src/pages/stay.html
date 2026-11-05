@@ -1368,6 +1368,7 @@
       if(t.accessCode) info.push('🔑 Access code: <b>'+esc(t.accessCode)+'</b>');
       if(t.wifiName) info.push('📶 Wi-Fi: <b>'+esc(t.wifiName)+'</b>');
       if(t.parking) info.push('🅿️ Parking: '+esc(t.parking));
+      if(t.arrivalHeld) info.push('🔒 Your access details appear here once the balance is paid.');
     }
     var pending=t.status==='pending'?'<div class="trip-info" style="background:#fff7e6;border-color:#f0d9a8;color:#8a5a00">This booking is awaiting payment. Once payment is received it’s confirmed and your dates are held.</div>':'';
     return '<div class="trip">'+
