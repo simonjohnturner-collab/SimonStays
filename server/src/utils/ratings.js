@@ -101,6 +101,24 @@ function inviteDueAt(b) {
   return Date.UTC(y, m - 1, d + 1, 10) - SAST_MS;
 }
 
+// A guest still staying in another booking is asked once that stay is ending: at
+// 10:00 SAST on the day it ends, rather than being asked to rate mid-stay.
+async function inviteDueFor(b, email) {
+  const due = inviteDueAt(b);
+  const others = await prisma.booking.findMany({
+    where: {
+      id: { not: b.id }, status: 'confirmed', source: { in: ['website', 'manual'] },
+      guestEmail: { equals: email, mode: 'insensitive' },
+      checkIn: { lte: new Date(due) }, checkOut: { gt: new Date(due) },
+    },
+    select: { checkIn: true, checkOut: true, dayUse: true, leavingEarly: true },
+  });
+  return others.reduce((latest, o) => {
+    const [y, m, d] = iso(shownCheckOut(o)).split('-').map(Number);
+    return Math.max(latest, Date.UTC(y, m - 1, d, 10) - SAST_MS);
+  }, due);
+}
+
 function inviteEmail(place, link) {
   const text = `How was your stay at ${place}? Please rate it here: ${link}`;
   return {
@@ -112,20 +130,22 @@ function inviteEmail(place, link) {
   };
 }
 
-// Invite guests whose stay ended yesterday. Each booking is invited once.
+// Invite guests whose stay has ended. Each booking is invited once.
 async function runRatingInvites(now = new Date()) {
   const bookings = await prisma.booking.findMany({
     where: {
       status: 'confirmed', source: { in: ['website', 'manual'] }, unitId: { not: null }, ratingInviteAt: null,
-      checkOut: { gte: new Date(now.getTime() - INVITE_CATCH_UP_MS - 3 * DAY_MS), lte: now },
+      checkOut: { gte: new Date(now.getTime() - RATING_WINDOW_MS), lte: now }, // an invitation can wait for a longer stay
       OR: [{ guestEmail: { not: null } }, { guestAccountId: { not: null } }],
     },
     include: { ...messaging.BOOKING_INCLUDE, guestAccount: { select: { email: true } } },
   });
   let sent = 0;
   for (const b of bookings) {
-    const due = inviteDueAt(b);
-    if (now.getTime() < due || now.getTime() - due > INVITE_CATCH_UP_MS || !guestEmailOf(b)) continue;
+    const email = guestEmailOf(b);
+    if (!email || now.getTime() < inviteDueAt(b)) continue;
+    const due = await inviteDueFor(b, email);
+    if (now.getTime() < due || now.getTime() - due > INVITE_CATCH_UP_MS) continue;
     const claimed = await prisma.booking.updateMany({ where: { id: b.id, ratingInviteAt: null }, data: { ratingInviteAt: now } });
     if (!claimed.count) continue;
     const place = [b.unit?.property?.name, b.unit?.name && `Unit ${b.unit.name}`].filter(Boolean).join(' · ') || 'SimonStays';
