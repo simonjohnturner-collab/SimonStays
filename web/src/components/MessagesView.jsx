@@ -498,7 +498,7 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
                 <div>
                   <b>{b.guestName || 'Guest'}</b>{b.status === 'enquiry' && <span className="msg-enquiry-tag">Enquiry</span>}{b.status === 'cancelled' && <span className="msg-enquiry-tag">Cancelled</span>}{b.ref ? <span className="muted small"> · {b.ref}</span> : null}
                   <GuestRatingChip rating={thread.guestRating} />
-                  <div className="muted small">{placeOf(b)}{b.guestEmail ? ` · ${b.guestEmail}` : ''}</div>
+                  <div className="muted small">{placeOf(b)}{b.guestEmail ? ` · ${b.guestEmail}` : ''}{b.guestPhone ? ` · ${b.guestPhone}` : ''}</div>
                   <div className="small">{b.dayUse ? `${fmtDay(b.checkIn)} · day use` : <>{fmtDay(b.checkIn)} → {fmtDay(b.checkOut)} · {b.nights} night{b.nights === 1 ? '' : 's'}</>}</div>
                 </div>
                 <div className="msg-summary-price">

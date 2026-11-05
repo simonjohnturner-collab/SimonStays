@@ -21,6 +21,7 @@ function bookingSummary(b) {
   return {
     id: b.id, status: b.status, source: b.source, ref: b.ref || null,
     guestName: b.guestName || null, guestEmail: b.guestEmail || (b.guestAccount && b.guestAccount.email) || null,
+    guestPhone: b.guestPhone || (b.guestAccount && b.guestAccount.phone) || null,
     propertyId: b.unit?.propertyId || null, propertyName: b.unit?.property?.name || null, unitName: b.unit?.name || null,
     checkIn: iso(b.checkIn), checkOut: iso(shownCheckOut(b)),
     nights: shownNights(b), dayUse: !!b.dayUse,
@@ -31,7 +32,7 @@ function bookingSummary(b) {
     reachable: !!(b.guestEmail || b.guestAccountId),
   };
 }
-const SUMMARY_INCLUDE = { unit: { include: { property: true, pricingGroup: true } }, guestAccount: { select: { email: true } } };
+const SUMMARY_INCLUDE = { unit: { include: { property: true, pricingGroup: true } }, guestAccount: { select: { email: true, phone: true } } };
 
 async function loadOwnedBooking(req, res) {
   const b = await prisma.booking.findFirst({ where: { id: req.params.bookingId, ...owned(req.hostId) }, include: SUMMARY_INCLUDE });
