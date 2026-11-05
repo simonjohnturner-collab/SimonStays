@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { api, guestDocumentFile } from '../api.js';
 import { useAuth } from '../auth.jsx';
-import { fmtR } from '../money.js';
+import { fmtR, randToCents } from '../money.js';
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString() : '—');
 const fmtDay = (d) => (d ? new Date(`${String(d).slice(0, 10)}T00:00:00`).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: '2-digit' }) : '—');
@@ -37,7 +37,7 @@ export default function AdminView({ onClose }) {
       </header>
 
       <div className="msg-tabs">
-        {[['overview', '📊 Overview'], ['hosts', '👥 Hosts'], ['guests', '🧳 Guests'], ['properties', '🏠 Properties'], ['transactions', '💳 Transactions'], ['messages', '💬 Messages']].map(([k, label]) => (
+        {[['overview', '📊 Overview'], ['hosts', '👥 Hosts'], ['guests', '🧳 Guests'], ['properties', '🏠 Properties'], ['transactions', '💳 Transactions'], ['refunds', '↩️ Refunds'], ['messages', '💬 Messages']].map(([k, label]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>
         ))}
       </div>
@@ -48,6 +48,7 @@ export default function AdminView({ onClose }) {
         {tab === 'guests' && <Guests hostFilter={hostFilter} HostPicker={HostPicker} />}
         {tab === 'properties' && <Properties hostFilter={hostFilter} HostPicker={HostPicker} />}
         {tab === 'transactions' && <Transactions hostFilter={hostFilter} HostPicker={HostPicker} />}
+        {tab === 'refunds' && <Refunds hostFilter={hostFilter} HostPicker={HostPicker} />}
         {tab === 'messages' && <Messages hostFilter={hostFilter} HostPicker={HostPicker} />}
       </div>
     </div>
@@ -573,6 +574,106 @@ function Transactions({ hostFilter, HostPicker }) {
                   </Fragment>
                 ))}
                 {data.rows.length === 0 && <tr><td colSpan={10} className="muted small" style={{ padding: 16 }}>No SimonStays bookings match.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+const refundStage = (x) => (!x.refund ? (x.due ? 'Ready to start' : 'Waiting out the 7 days') : x.refund.status === 'started' ? 'Waiting for approval' : x.refund.status === 'approved' ? 'Approved, to pay' : 'Paid');
+
+// The next step on one deposit: start it, sign off the amount, or record the payment.
+function RefundAction({ x, onDone }) {
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const [reference, setReference] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const r = x.refund;
+
+  async function run(call) {
+    setBusy(true); setErr('');
+    try { await call(); onDone(); } catch (e) { setErr(e.message); setBusy(false); }
+  }
+  const error = err && <div className="msg-warn">{err}</div>;
+
+  if (!r) {
+    if (!x.due) return <span className="muted small">Available from {fmtDay(x.dueOn)}</span>;
+    const typed = amount.trim() ? randToCents(amount) : x.refundableCents;
+    return (
+      <div className="refund-action">
+        <label className="small">Amount <input className="amt" inputMode="decimal" value={amount} placeholder={(x.refundableCents / 100).toFixed(2)} onChange={(e) => setAmount(e.target.value)} /></label>
+        {typed < x.refundableCents && <input value={note} placeholder="Why less than the deposit?" aria-label="Reason for the lower refund" onChange={(e) => setNote(e.target.value)} />}
+        <button className="mini" disabled={busy} onClick={() => run(() => api.adminStartRefund(x.bookingId, typed, note))}>Start refund</button>
+        {error}
+      </div>
+    );
+  }
+  if (r.status === 'paid') return <span className="small">{fmtWhen(r.paidAt)}<div className="muted">Ref {r.reference}</div></span>;
+  const cancel = <button className="mini danger" disabled={busy} onClick={() => window.confirm('Cancel this refund? The deposit stays held.') && run(() => api.adminCancelRefund(r.id))}>Cancel</button>;
+  if (r.status === 'started') {
+    return (
+      <div className="refund-action">
+        <label className="small">Retype the amount to approve <input className="amt" inputMode="decimal" value={amount} placeholder="0.00" onChange={(e) => setAmount(e.target.value)} /></label>
+        <button className="mini" disabled={busy || !amount.trim()} onClick={() => run(() => api.adminApproveRefund(r.id, randToCents(amount)))}>Approve</button>
+        {cancel}{error}
+      </div>
+    );
+  }
+  return (
+    <div className="refund-action">
+      <div className="small">Send {fmtR(r.amountCents)} {x.method === 'Card' ? 'in the Paygate portal' : 'by EFT'}, then record it.</div>
+      <input value={reference} placeholder={x.method === 'Card' ? 'Paygate reference' : 'Bank reference'} aria-label="Payment reference" onChange={(e) => setReference(e.target.value)} />
+      <button className="mini" disabled={busy || !reference.trim()} onClick={() => run(() => api.adminRefundPaid(r.id, reference))}>Mark as paid</button>
+      {cancel}{error}
+    </div>
+  );
+}
+
+function Refunds({ hostFilter, HostPicker }) {
+  const [data, setData] = useState(null);
+  const [msg, setMsg] = useState('');
+  const load = () => api.adminRefunds(hostFilter).then(setData).catch((e) => setMsg(e.message));
+  useEffect(() => { setData(null); load(); }, [hostFilter]);
+
+  const rows = data ? data.rows : [];
+  const held = rows.filter((x) => !x.refund || x.refund.status !== 'paid');
+  const total = (xs) => fmtR(xs.reduce((n, x) => n + (x.refund ? x.refund.amountCents : x.refundableCents), 0));
+  const ready = held.filter((x) => x.due && !x.refund);
+  const underWay = held.filter((x) => x.refund);
+  const paid = rows.filter((x) => x.refund && x.refund.status === 'paid');
+  return (
+    <>
+      <div className="admin-tools admin-filters"><HostPicker /></div>
+      {msg && <p className="small">{msg}</p>}
+      {!data ? <p className="muted small">Loading…</p> : (
+        <>
+          <div className="mk-tiles">
+            <Tile label="Deposits held" value={total(held)} sub={`${held.length} booking${held.length === 1 ? '' : 's'}`} />
+            <Tile label="Ready to start" value={ready.length} sub={total(ready)} />
+            <Tile label="Under way" value={underWay.length} sub={total(underWay)} />
+            <Tile label="Paid" value={paid.length} sub={total(paid)} />
+          </div>
+          <p className="muted small">A refund can start {data.waitDays} days after checkout. Start it, approve it by retyping the amount, send the money, then record the reference. The guest is told when it's marked as paid.</p>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead><tr><th>Guest</th><th>Stay</th><th>Host</th><th>Paid by</th><th className="num">Deposit</th><th>Stage</th><th>Next step</th></tr></thead>
+              <tbody>
+                {rows.map((x) => (
+                  <tr key={x.bookingId}>
+                    <td className="small tx-wrap">{x.guestName || '—'}<div className="muted">{x.guestEmail}{x.guestPhone ? ` · ${x.guestPhone}` : ''}</div></td>
+                    <td className="small">{place(x)}<div className="muted">{x.ref ? `${x.ref} · ` : ''}out {fmtDay(x.checkOut)}</div></td>
+                    <td className="small">{x.host}</td>
+                    <td className="small">{x.method}{x.paygateRef && <div className="muted">#{x.paygateRef}</div>}</td>
+                    <td className="num">{fmtR(x.depositCents)}{x.refund && x.refund.amountCents !== x.depositCents && <div className="muted small">refund {fmtR(x.refund.amountCents)}</div>}</td>
+                    <td className="small">{refundStage(x)}{x.refund && x.refund.note && <div className="muted tx-wrap">{x.refund.note}</div>}</td>
+                    <td><RefundAction key={x.refund ? `${x.refund.id}-${x.refund.status}` : 'new'} x={x} onDone={load} /></td>
+                  </tr>
+                ))}
+                {rows.length === 0 && <tr><td colSpan={7} className="muted small" style={{ padding: 16 }}>No deposits held.</td></tr>}
               </tbody>
             </table>
           </div>

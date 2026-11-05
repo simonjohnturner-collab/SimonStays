@@ -577,6 +577,7 @@ model Booking {
   tripInvites  TripInvite[]
   payments     Payment[]
   offers       PriceOffer[]
+  depositRefund DepositRefund?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -813,6 +814,24 @@ enum ChannelType {
   lekkeslaap
   other
   manual
+}
+
+// Paying a held deposit back, from the admin portal. One per booking.
+model DepositRefund {
+  id          String    @id @default(uuid())
+  bookingId   String    @unique
+  booking     Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amountCents Int
+  note        String? // why it's less than the deposit
+  status      String    @default("started") // started | approved | paid
+  startedBy   String
+  startedAt   DateTime  @default(now())
+  approvedBy  String?
+  approvedAt  DateTime?
+  reference   String? // the bank or Paygate reference for the payment
+  paidBy      String?
+  paidAt      DateTime?
+  updatedAt   DateTime  @updatedAt
 }
 
 enum BookingSource {

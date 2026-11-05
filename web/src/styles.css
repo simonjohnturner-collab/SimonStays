@@ -1133,3 +1133,9 @@ button[role=radio] { padding:0 3px; font-size:24px; line-height:1.2; color:#cfd4
 button[role=radio]:hover { background:none; color:#e2a100; }
 button[role=radio].on { color:#e2a100; }
 @media (max-width:760px) { .rate-card { grid-template-columns:1fr; } }
+
+/* Admin portal: the next step on a deposit refund */
+.refund-action { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 240px; max-width: 340px; white-space: normal; }
+.refund-action input { width: auto; flex: 1 1 110px; }
+.refund-action input.amt { flex: 0 0 90px; width: 90px; }
+.refund-action .msg-warn { flex-basis: 100%; }

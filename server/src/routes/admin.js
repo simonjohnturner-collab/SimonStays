@@ -190,6 +190,37 @@ router.get('/transactions', async (req, res) => {
   });
 });
 
+// ---- Refunds: paying held deposits back. Started, approved, then marked paid. ----
+const refunds = require('../utils/depositRefunds');
+const refundReply = (res, r) => (r.error ? res.status(r.status).json({ error: r.error, message: r.message }) : res.json(r));
+
+// GET /admin/refunds?hostId= — every deposit still held, and every refund under way or paid.
+router.get('/refunds', async (req, res) => {
+  const names = await hostNames();
+  const rows = await refunds.listRefunds({ hostId: req.query.hostId });
+  res.json({ waitDays: refunds.WAIT_DAYS, rows: rows.map((r) => ({ ...r, host: names[r.hostId] || '—' })) });
+});
+
+// POST /admin/refunds/booking/:bookingId/start { amountCents, note }
+router.post('/refunds/booking/:bookingId/start', async (req, res) => {
+  refundReply(res, await refunds.startRefund(req.params.bookingId, req.body || {}, req.adminHost.email));
+});
+
+// POST /admin/refunds/:id/approve { amountCents } — the amount typed again, as the sign-off.
+router.post('/refunds/:id/approve', async (req, res) => {
+  refundReply(res, await refunds.approveRefund(req.params.id, req.body || {}, req.adminHost.email));
+});
+
+// POST /admin/refunds/:id/paid { reference } — the money has been sent.
+router.post('/refunds/:id/paid', async (req, res) => {
+  refundReply(res, await refunds.markRefundPaid(req.params.id, req.body || {}, req.adminHost.email));
+});
+
+// DELETE /admin/refunds/:id — call it off before it's paid; the deposit stays held.
+router.delete('/refunds/:id', async (req, res) => {
+  refundReply(res, await refunds.cancelRefund(req.params.id));
+});
+
 // GET /admin/guests?hostId= — everyone who has dealt with SimonStays: guests with
 // an account and anyone who booked or enquired on the website/app, one row per
 // person (matched by account, then email, then phone), latest activity first.

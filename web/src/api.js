@@ -70,6 +70,11 @@ export const api = {
   adminEmailDetails: (bookingId) => req('POST', `/admin/transactions/${bookingId}/email-details`),
   adminGuests: (hostId) => req('GET', `/admin/guests${hostId ? `?hostId=${encodeURIComponent(hostId)}` : ''}`),
   adminTransactions: (f = {}) => req('GET', `/admin/transactions?${new URLSearchParams(Object.entries(f).filter(([, v]) => v))}`),
+  adminRefunds: (hostId) => req('GET', `/admin/refunds${hostId ? `?hostId=${encodeURIComponent(hostId)}` : ''}`),
+  adminStartRefund: (bookingId, amountCents, note) => req('POST', `/admin/refunds/booking/${bookingId}/start`, { amountCents, note }),
+  adminApproveRefund: (id, amountCents) => req('POST', `/admin/refunds/${id}/approve`, { amountCents }),
+  adminRefundPaid: (id, reference) => req('POST', `/admin/refunds/${id}/paid`, { reference }),
+  adminCancelRefund: (id) => req('DELETE', `/admin/refunds/${id}`),
   adminMessageThreads: (hostId) => req('GET', `/admin/messages${hostId ? `?hostId=${encodeURIComponent(hostId)}` : ''}`),
   adminMessageThread: (bookingId) => req('GET', `/admin/messages/${bookingId}`),
 
