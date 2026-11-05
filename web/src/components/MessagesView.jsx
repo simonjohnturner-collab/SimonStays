@@ -209,6 +209,19 @@ function ChangeComposer({ bookingId, booking, change, onSent, onCancel }) {
   const add = (line) => setLines((ls) => [...ls, { key: nextKey.current++, amount: '', ...line }]);
   const edit = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const remove = (key) => setLines((ls) => ls.filter((l) => l.key !== key));
+  const priced = useRef(0); // ignores a price that comes back after newer dates were picked
+  // New dates are priced from the pricing sheet. An amount the host typed stays.
+  const editDates = (l, patch) => {
+    const next = { ...l, ...patch };
+    edit(l.key, { ...patch, sheet: null });
+    const seq = ++priced.current;
+    if (!next.checkIn || !next.checkOut || next.checkOut <= next.checkIn) return;
+    if (next.checkIn === booking.checkIn && next.checkOut === booking.checkOut) return;
+    api.changeQuote(bookingId, next.checkIn, next.checkOut).then((q) => {
+      if (seq !== priced.current) return;
+      setLines((ls) => ls.map((x) => (x.key !== l.key ? x : { ...x, sheet: q, amount: x.typed || q.amountCents == null ? x.amount : (q.amountCents / 100).toFixed(2) })));
+    }).catch(() => {});
+  };
   const hasDates = lines.some((l) => l.kind === 'change');
   const totalCents = lines.reduce((n, l) => n + randToCents(l.amount), 0);
   const ready = lines.length > 0 && lines.every((l) => (l.kind === 'change' ? l.checkIn && l.checkOut && l.checkOut > l.checkIn : !!(l.description || '').trim()));
@@ -238,8 +251,8 @@ function ChangeComposer({ bookingId, booking, change, onSent, onCancel }) {
         <div key={l.key} className="msg-composer-line">
           {l.kind === 'change' ? (
             <>
-              <input type="date" aria-label="New check-in" value={l.checkIn} onChange={(e) => edit(l.key, { checkIn: e.target.value })} />
-              <input type="date" aria-label="New check-out" min={l.checkIn || undefined} value={l.checkOut} onChange={(e) => edit(l.key, { checkOut: e.target.value })} />
+              <input type="date" aria-label="New check-in" value={l.checkIn} onChange={(e) => editDates(l, { checkIn: e.target.value })} />
+              <input type="date" aria-label="New check-out" min={l.checkIn || undefined} value={l.checkOut} onChange={(e) => editDates(l, { checkOut: e.target.value })} />
             </>
           ) : (
             <>
@@ -247,11 +260,13 @@ function ChangeComposer({ bookingId, booking, change, onSent, onCancel }) {
               {l.applies === 'clean' && <input type="date" aria-label="Date of the clean" value={l.cleanDate} onChange={(e) => edit(l.key, { cleanDate: e.target.value })} />}
             </>
           )}
-          <input className="amt" value={l.amount} aria-label="Amount in rand" inputMode="decimal" placeholder="0.00" onChange={(e) => edit(l.key, { amount: e.target.value })} />
+          <input className="amt" value={l.amount} aria-label="Amount in rand" inputMode="decimal" placeholder="0.00" onChange={(e) => edit(l.key, { amount: e.target.value, typed: true })} />
           <button type="button" className="mini" aria-label={`Remove ${l.description || 'new dates'}`} onClick={() => remove(l.key)}>✕</button>
+          {l.sheet && l.sheet.amountCents != null && <div className="muted small">Pricing schedule: {l.sheet.wasNights} night{l.sheet.wasNights === 1 ? '' : 's'} {fmtR(l.sheet.currentCents)} → {l.sheet.nights} night{l.sheet.nights === 1 ? '' : 's'} {fmtR(l.sheet.newCents)}, so {l.sheet.amountCents < 0 ? `${fmtR(-l.sheet.amountCents)} back` : fmtR(l.sheet.amountCents)}.</div>}
+          {l.sheet && !l.sheet.available && <div className="msg-warn">Those dates aren’t available on this unit.</div>}
         </div>
       ))}
-      <div className="muted small">Type what the change costs. For a shorter stay, use a minus amount to refund the guest, for example -600.</div>
+      <div className="muted small">New dates fill in from the pricing schedule, and you can lower the amount before sending. For a refund, use a minus amount, for example -600.</div>
       <div className="msg-invoice-row total"><span>{totalCents < 0 ? 'Refund due' : 'Guest pays'}</span><span>{fmtR(Math.abs(totalCents))}</span></div>
       <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note to the guest (optional)" />
       {err && <div className="msg-warn">{err}</div>}

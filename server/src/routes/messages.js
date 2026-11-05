@@ -219,6 +219,16 @@ router.post('/booking/:bookingId/invoice', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /messages/booking/:bookingId/change-quote?checkIn=&checkOut= — new dates per the pricing sheet.
+router.get('/booking/:bookingId/change-quote', async (req, res, next) => {
+  try {
+    const b = await loadOwnedBooking(req, res); if (!b) return;
+    const r = await changes.changeQuote(b, req.query.checkIn, req.query.checkOut);
+    if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
+    res.json(r);
+  } catch (e) { next(e); }
+});
+
 // POST /messages/booking/:bookingId/change { lines, note } — invoice a change to a confirmed booking.
 router.post('/booking/:bookingId/change', async (req, res, next) => {
   try {

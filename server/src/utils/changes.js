@@ -9,6 +9,8 @@ const messaging = require('./messaging');
 const offers = require('./offers');
 const { alertHost } = require('./payments');
 const { checkAvailability } = require('./sync');
+const { quote } = require('./pricing');
+const { overridesFor } = require('./nightPrices');
 const { dateOnly } = require('./ical');
 const { DEFAULT_CANCELLATION_POLICY } = require('./policy');
 
@@ -111,6 +113,35 @@ async function markRefunded(b, refundCents, now = new Date()) {
   await prisma.booking.update({ where: { id: b.id }, data: { refundDueCents: refundCents, refundedAt: now } });
   if (refundCents > 0) await messaging.sendHostMessage(b.id, `Your refund of ${rand(refundCents)} has been paid.`, { bookerOnly: true, notice: 'refund' });
   return { ok: true };
+}
+
+// What the pricing sheet charges for a stay, before cleaning, fees and deposit:
+// those stay the same when only the dates move.
+async function sheetStayCents(rc, unitId, checkIn, checkOut) {
+  const q = quote(rc, { checkIn, checkOut, cleans: 1, overrides: await overridesFor(unitId, checkIn, checkOut) });
+  return q ? q.accommodationCents - q.discountCents : null;
+}
+
+// What new dates cost per the pricing sheet: new stay less current stay. Crossing
+// into a length discount can make a longer stay cost less than a shorter one, so
+// an extension bottoms out at free and a shorter stay never adds a charge.
+// amountCents is null when the sheet can't price it, and the host types the amount.
+async function changeQuote(b, checkIn, checkOut) {
+  if (!offers.validDay(checkIn) || !offers.validDay(checkOut)) return { error: 'bad_dates', status: 400, message: 'Choose the new check-in and check-out dates.' };
+  const nights = offers.nightsBetween(checkIn, checkOut);
+  if (nights < 1 || nights > 365) return { error: 'bad_dates', status: 400, message: 'Check the new dates: check-out must be after check-in.' };
+  const a = await checkAvailability(b.unitId, checkIn, checkOut, b.id);
+  const available = !a.error && !!a.available;
+  const rc = b.unit && b.unit.pricingGroupId ? await prisma.pricingGroup.findUnique({ where: { id: b.unit.pricingGroupId } }) : null;
+  if (!rc || b.dayUse) return { available, nights, amountCents: null };
+  const was = iso(b.checkIn), wasOut = iso(b.checkOut);
+  const currentCents = await sheetStayCents(rc, b.unitId, was, wasOut);
+  const newCents = await sheetStayCents(rc, b.unitId, checkIn, checkOut);
+  if (currentCents == null || newCents == null) return { available, nights, amountCents: null };
+  const wasNights = offers.nightsBetween(was, wasOut);
+  const diff = newCents - currentCents;
+  const amountCents = nights > wasNights ? Math.max(0, diff) : nights < wasNights ? Math.min(0, diff) : diff;
+  return { available, nights, wasNights, currentCents, newCents, amountCents };
 }
 
 // Why this booking can't take a change invoice, or null if it can.
@@ -254,4 +285,4 @@ async function markChangePaid(b, offerId) {
   return { ok: true };
 }
 
-module.exports = { cancelQuote, cancelBooking, markRefunded, changeBlock, sendChange, applyPaidChange, markChangePaid };
+module.exports = { cancelQuote, cancelBooking, markRefunded, changeBlock, changeQuote, sendChange, applyPaidChange, markChangePaid };

@@ -1286,11 +1286,29 @@
       }
       var ACTS={
         dates:function(){
-          actForm('<b>Which dates would you like?</b><div class="act-row"><label>Check-in<input type="date" id="actIn" value="'+esc(t.checkIn)+'"></label><label>Check-out<input type="date" id="actOut" value="'+esc(t.checkOut)+'"></label></div><p class="note">Your host will check availability and send any invoice here. Your booking stays as it is until then.</p>',function(box){
+          actForm('<b>Which dates would you like?</b><div class="act-row"><label>Check-in<input type="date" id="actIn" value="'+esc(t.checkIn)+'"></label><label>Check-out<input type="date" id="actOut" value="'+esc(t.checkOut)+'"></label></div><div id="actPrice" class="note"></div><p class="note">Your host will confirm and send any invoice here. Your booking stays as it is until then.</p>',function(box){
             var a=box.querySelector('#actIn').value, b=box.querySelector('#actOut').value;
             if(!a||!b||b<=a){ box.querySelector('#actErr').innerHTML='<div class="msg err">Please choose a check-out after your check-in.</div>'; return ''; }
             return 'I would like to change my dates to '+a+' → '+b+', please.';
           });
+          // The price of the new dates from the pricing schedule, as the guest picks them.
+          var dbox=body.querySelector('#actBox'), asked=0;
+          async function priceDates(){
+            var a=dbox.querySelector('#actIn').value, b=dbox.querySelector('#actOut').value, out=dbox.querySelector('#actPrice'), seq=++asked;
+            out.textContent='';
+            if(!a||!b||b<=a||(a===t.checkIn&&b===t.checkOut)) return;
+            try{
+              var r=await fetch(API+'/public/account/messages/'+encodeURIComponent(id)+'/change-quote?checkIn='+encodeURIComponent(a)+'&checkOut='+encodeURIComponent(b),{headers:authHeaders()});
+              if(!r.ok||seq!==asked) return;
+              var q=await r.json();
+              if(seq!==asked) return;
+              if(!q.available) out.textContent='Those dates aren’t available on this unit.';
+              else if(q.amountCents>0) out.innerHTML='Per the pricing schedule, these dates add <b>'+rand(q.amountCents)+'</b>.';
+              else if(q.amountCents===0) out.textContent='Per the pricing schedule, there is no extra charge for these dates.';
+              else if(q.amountCents<0) out.textContent='Your host will confirm whether a refund applies.';
+            }catch(e){}
+          }
+          dbox.querySelector('#actIn').onchange=priceDates; dbox.querySelector('#actOut').onchange=priceDates;
         },
         late:function(){
           actForm('<b>Ask for a late checkout?</b><p class="note">Your host will reply here, with an invoice if there is a charge.</p>',function(){ return 'I would like a late checkout on '+t.checkOut+', please.'; });

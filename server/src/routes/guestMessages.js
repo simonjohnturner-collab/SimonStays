@@ -170,6 +170,18 @@ router.post('/:bookingId/read', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /public/account/messages/:bookingId/change-quote?checkIn=&checkOut= — new dates per the pricing sheet.
+router.get('/:bookingId/change-quote', async (req, res, next) => {
+  try {
+    const acct = await accountOf(req, res); if (!acct) return;
+    const b = await ownedBooking(req, res, acct, { bookerOnly: true }); if (!b) return;
+    if (changes.changeBlock(b)) return res.status(409).json({ error: 'not_changeable', message: "This booking can't be changed here." });
+    const r = await changes.changeQuote(b, req.query.checkIn, req.query.checkOut);
+    if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
+    res.json({ available: r.available, nights: r.nights, amountCents: r.amountCents });
+  } catch (e) { next(e); }
+});
+
 // GET /public/account/messages/:bookingId/cancel — what cancelling would refund.
 router.get('/:bookingId/cancel', async (req, res, next) => {
   try {

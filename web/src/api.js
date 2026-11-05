@@ -196,6 +196,7 @@ export const api = {
   createTripInvite: (bookingId) => req('POST', `/messages/booking/${bookingId}/invite`),
   removeTraveller: (bookingId, accountId) => req('DELETE', `/messages/booking/${bookingId}/travellers/${accountId}`),
   sendInvoice: (bookingId, lines, note) => req('POST', `/messages/booking/${bookingId}/invoice`, { lines, note }),
+  changeQuote: (bookingId, checkIn, checkOut) => req('GET', `/messages/booking/${bookingId}/change-quote?${new URLSearchParams({ checkIn, checkOut })}`),
   sendChange: (bookingId, lines, note) => req('POST', `/messages/booking/${bookingId}/change`, { lines, note }),
   markChangePaid: (bookingId, offerId) => req('POST', `/messages/booking/${bookingId}/offers/${offerId}/mark-paid`),
   cancelBooking: (bookingId, refundCents) => req('POST', `/messages/booking/${bookingId}/cancel`, { refundCents }),
