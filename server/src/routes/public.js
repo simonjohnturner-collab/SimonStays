@@ -505,6 +505,7 @@ router.get('/offers/:token', async (req, res, next) => {
     res.set('Cache-Control', 'no-store').json({
       stays: staysOf(o).map((s) => ({ propertyName: s.propertyName, unitName: s.unitName, checkIn: s.checkIn, checkOut: s.checkOut, nights: s.nights, dayUse: !!s.dayUse })),
       state: offerState(o, b), kind: o.kind || 'booking', lines: o.lines, totalCents: o.totalCents, depositCents: o.depositCents || 0, expiresAt: o.expiresAt,
+      change: require('../utils/offers').changeSummary(o, b),
       ref: b.ref || null, guestName: b.guestName || null, status: b.status,
       property: p.name, unit: b.unit.name, address: p.address || null,
       checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),

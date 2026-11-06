@@ -156,6 +156,7 @@ router.get('/booking/:bookingId', async (req, res, next) => {
       },
       change: {
         blocked: changes.changeBlock(b),
+        money: offers.bookingMoney(b),
         validHours: offers.OFFER_HOURS,
         lateCents: rc ? rc.lateCheckOutCents || 0 : 0, earlyCents: rc ? rc.earlyCheckInCents || 0 : 0, cleanCents: rc ? rc.instayCleanCents || rc.cleaningCents || 0 : 0,
       },

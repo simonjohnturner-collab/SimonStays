@@ -184,10 +184,34 @@ function offerLink(offer) {
   return `${base}/invoice/${offer.token}`;
 }
 
+// The money behind a booking: what it costs now and what has been paid.
+function bookingMoney(b) {
+  const currentCents = b.totalCents != null ? b.totalCents : (b.quotedCents != null ? b.quotedCents : null);
+  if (currentCents == null) return null;
+  const paidCents = b.amountPaidCents != null ? b.amountPaidCents : (b.paid ? currentCents : 0);
+  return { currentCents, paidCents, depositCents: b.depositCents || 0 };
+}
+
+// An amendment, spelled out so the guest sees exactly what changes: the booking's
+// cost now, what's been paid, the cost with the amendment, and the difference to
+// pay for it to go live. Only while the change invoice is open: once paid, the
+// booking's own total already includes it.
+function changeSummary(offer, booking) {
+  if (!offer || offer.kind !== 'change' || !booking || offerState(offer, booking) !== 'open') return null;
+  const m = bookingMoney(booking);
+  if (!m) return null;
+  return {
+    currentCents: m.currentCents, paidCents: m.paidCents, depositCents: m.depositCents,
+    revisedCents: m.currentCents + offer.totalCents, deltaCents: offer.totalCents,
+    balanceBeforeCents: Math.max(0, m.currentCents - m.paidCents), // already owed before this change
+  };
+}
+
 function offerOut(offer, booking) {
   return {
     id: offer.id, kind: offer.kind || 'booking', lines: offer.lines, totalCents: offer.totalCents, depositCents: offer.depositCents || 0,
     expiresAt: offer.expiresAt, state: offerState(offer, booking), link: offerLink(offer),
+    change: changeSummary(offer, booking),
   };
 }
 
@@ -239,4 +263,5 @@ async function sendOffer(booking, { lines: rawLines, note }) {
   return { offer, message: sent.message };
 }
 
-module.exports = { OFFER_HOURS, MAX_LINE_CENTS, INVOICEABLE_SOURCES, fmtDay, nightsBetween, validDay, conversationCents, cleanLines, staysOf, blockOut, splitOf, firstClash, saveExtraStays, standardQuote, draftFor, invoiceBlock, offerState, offerLink, offerOut, sendOffer };
+module.exports = {
+  bookingMoney, changeSummary, OFFER_HOURS, MAX_LINE_CENTS, INVOICEABLE_SOURCES, fmtDay, nightsBetween, validDay, conversationCents, cleanLines, staysOf, blockOut, splitOf, firstClash, saveExtraStays, standardQuote, draftFor, invoiceBlock, offerState, offerLink, offerOut, sendOffer };

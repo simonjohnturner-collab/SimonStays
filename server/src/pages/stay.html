@@ -254,6 +254,9 @@
   .th-x:hover{ background:none; color:var(--red); }
   #inviteLink{ margin:6px 0; font-size:13px; }
   .confirm-note{ margin:10px 16px 0; }
+  .delta{ margin-top:10px; padding:10px 12px; background:#f3f8f4; border:1px solid #cfe6d6; border-radius:10px; }
+  .delta .inv-row.tot{ color:var(--green-d); }
+  .delta-note{ font-size:12px; color:var(--muted); margin-top:6px; }
   .trip-inv{ background:#f7efd9; color:#3b3226; border:1px solid #d8cdb0; margin-top:8px; margin-right:6px; }
   .trip-inv:hover{ background:#efe4c6; }
   .paper-wrap{ background:#eceae4; border-radius:10px; padding:10px 0; overflow-x:auto; }
@@ -1246,10 +1249,25 @@
     var safeLink=/^https?:\/\//i.test(o.link||'');
     if(o.kind==='change'&&o.totalCents<=0) state.paid='✅ Applied to your booking';
     return '<div class="inv-card"><b>'+(o.kind==='change'?'Change to your booking':'Invoice')+'</b>'+(o.lines||[]).map(function(l){ return '<div class="inv-row"><span>'+esc(l.description)+'</span><span>'+randSigned(l.amountCents)+'</span></div>'; }).join('')+
-      '<div class="inv-row tot"><span>Total</span><span>'+rand(o.totalCents)+'</span></div>'+
+      '<div class="inv-row tot"><span>'+(o.kind==='change'?'Change total':'Total')+'</span><span>'+rand(o.totalCents)+'</span></div>'+
+      (o.kind==='change'?deltaTable(o.change):'')+
       (o.state==='open'&&safeLink?'<a class="inv-pay" href="'+esc(o.link)+'">View invoice &amp; pay</a>':'<div class="inv-state">'+esc(state[o.state]||'')+'</div>')+'</div>';
   }
   function randSigned(c){ return c<0?('-'+rand(-c)):rand(c); }
+  // An amendment in four numbers: cost now, paid, cost with the change, and what to pay for it to go live.
+  function deltaTable(c){
+    if(!c||c.currentCents==null) return '';
+    var d=c.deltaCents, rows=
+      '<div class="inv-row"><span>Your booking now</span><span>'+rand(c.currentCents)+'</span></div>'+
+      '<div class="inv-row"><span>Paid so far</span><span>'+rand(c.paidCents)+'</span></div>'+
+      '<div class="inv-row"><span>Your booking with this change</span><span>'+rand(c.revisedCents)+'</span></div>'+
+      '<div class="inv-row tot"><span>'+(d>0?'To pay for this change':d<0?'Refund due to you':'Nothing extra to pay')+'</span><span>'+(d?rand(Math.abs(d)):'')+'</span></div>';
+    var notes=[];
+    if(c.depositCents) notes.push('Both totals include your refundable deposit of '+rand(c.depositCents)+'.');
+    if(d>0) notes.push('Your new dates go live as soon as this is paid.');
+    if(c.balanceBeforeCents>0) notes.push('Your booking still has a balance of '+rand(c.balanceBeforeCents)+' due as before.');
+    return '<div class="delta">'+rows+(notes.length?'<div class="delta-note">'+notes.join(' ')+'</div>':'')+'</div>';
+  }
 
   async function openInbox(focusId){
     clearInterval(INBOX_POLL);
@@ -1362,9 +1380,11 @@
               var q=await r.json();
               if(seq!==asked) return;
               if(!q.available) out.textContent='Those dates aren’t available on this unit.';
-              else if(q.amountCents>0) out.innerHTML='Per the pricing schedule, these dates add <b>'+rand(q.amountCents)+'</b>.';
-              else if(q.amountCents===0) out.textContent='Per the pricing schedule, there is no extra charge for these dates.';
+              else if(q.amountCents==null) out.textContent='Your host will confirm the price of these dates.';
               else if(q.amountCents<0) out.textContent='Your host will confirm whether a refund applies.';
+              else if(q.currentCents!=null) out.innerHTML='<div class="note">'+(q.wasNights||'')+(q.wasNights?' → ':'')+q.nights+' nights, per the pricing schedule:</div>'+deltaTable({ currentCents:q.currentCents, paidCents:q.paidCents, depositCents:q.depositCents, revisedCents:q.currentCents+q.amountCents, deltaCents:q.amountCents, balanceBeforeCents:Math.max(0,q.currentCents-q.paidCents) })+'<div class="note">Your host confirms the final amount when they send the invoice.</div>';
+              else if(q.amountCents>0) out.innerHTML='Per the pricing schedule, these dates add <b>'+rand(q.amountCents)+'</b>.';
+              else out.textContent='Per the pricing schedule, there is no extra charge for these dates.';
             }catch(e){}
           }
           dbox.querySelector('#actIn').onchange=priceDates; dbox.querySelector('#actOut').onchange=priceDates;

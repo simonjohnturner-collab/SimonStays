@@ -1213,3 +1213,6 @@ button[role=radio].on { color:#e2a100; }
 .auth-form { display: flex; flex-direction: column; gap: 10px; }
 .auth-guest { background: #e3f1e7; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
 .auth-guest p { margin: 0; }
+
+/* Amend booking: the booking before and after the change */
+.msg-delta { border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 6px; }

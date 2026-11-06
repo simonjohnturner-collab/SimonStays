@@ -225,6 +225,7 @@ function ChangeComposer({ bookingId, booking, change, onSent, onCancel }) {
   };
   const hasDates = lines.some((l) => l.kind === 'change');
   const totalCents = lines.reduce((n, l) => n + randToCents(l.amount), 0);
+  const money = change && change.money; // the booking's cost and what's been paid
   const ready = lines.length > 0 && lines.every((l) => (l.kind === 'change' ? l.checkIn && l.checkOut && l.checkOut > l.checkIn : !!(l.description || '').trim()));
 
   async function send() {
@@ -268,7 +269,15 @@ function ChangeComposer({ bookingId, booking, change, onSent, onCancel }) {
         </div>
       ))}
       <div className="muted small">New dates fill in from the pricing schedule, and you can lower the amount before sending. For a refund, use a minus amount, for example -600.</div>
-      <div className="msg-invoice-row total"><span>{totalCents < 0 ? 'Refund due' : 'Guest pays'}</span><span>{fmtR(Math.abs(totalCents))}</span></div>
+      {money && lines.length > 0 && (
+        <div className="msg-delta">
+          <div className="msg-invoice-row"><span>Booking now</span><span>{fmtR(money.currentCents)}</span></div>
+          <div className="msg-invoice-row"><span>Paid so far</span><span>{fmtR(money.paidCents)}</span></div>
+          <div className="msg-invoice-row"><span>Booking with this change</span><span>{fmtR(money.currentCents + totalCents)}</span></div>
+          {money.currentCents > money.paidCents && <div className="muted small">The guest still owes {fmtR(money.currentCents - money.paidCents)} from before. This invoice is only for the change.</div>}
+        </div>
+      )}
+      <div className="msg-invoice-row total"><span>{totalCents < 0 ? 'Refund due' : totalCents > 0 ? 'Guest pays for this change' : 'Guest pays'}</span><span>{fmtR(Math.abs(totalCents))}</span></div>
       <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note to the guest (optional)" />
       {err && <div className="msg-warn">{err}</div>}
       <div className="msg-send-row">

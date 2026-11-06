@@ -178,7 +178,8 @@ router.get('/:bookingId/change-quote', async (req, res, next) => {
     if (changes.changeBlock(b)) return res.status(409).json({ error: 'not_changeable', message: "This booking can't be changed here." });
     const r = await changes.changeQuote(b, req.query.checkIn, req.query.checkOut);
     if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
-    res.json({ available: r.available, nights: r.nights, amountCents: r.amountCents });
+    const m = require('../utils/offers').bookingMoney(b);
+    res.json({ available: r.available, nights: r.nights, wasNights: r.wasNights, amountCents: r.amountCents, currentCents: m ? m.currentCents : null, paidCents: m ? m.paidCents : null, depositCents: m ? m.depositCents : 0 });
   } catch (e) { next(e); }
 });
 

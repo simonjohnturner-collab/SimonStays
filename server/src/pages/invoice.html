@@ -54,8 +54,19 @@
       (d.ref?'<div class="muted">Ref '+esc(d.ref)+'</div>':'')+
       (stays.length===1&&!stays[0].dayUse?'<div class="muted">Check-in from '+esc(d.checkInTime)+' · checkout by '+esc(d.checkOutTime)+'</div>':'')+'</div>'+
       '<div class="card">'+d.lines.map(function(l){ return '<div class="row"><span>'+esc(l.description)+'</span><span>'+rand(l.amountCents)+'</span></div>'; }).join('')+
-      '<div class="row tot"><span>Total</span><span>'+rand(d.totalCents)+'</span></div>'+
-      (d.depositCents?'<div class="muted" style="margin-top:6px">Includes a refundable deposit of '+rand(d.depositCents)+', returned after checkout subject to no damage.</div>':'')+'</div>';
+      '<div class="row tot"><span>'+(d.kind==='change'?'Change total':'Total')+'</span><span>'+rand(d.totalCents)+'</span></div>'+
+      (d.depositCents?'<div class="muted" style="margin-top:6px">Includes a refundable deposit of '+rand(d.depositCents)+', returned after checkout subject to no damage.</div>':'')+'</div>'+
+      (d.kind==='change'&&d.change?changeCard(d.change):'');
+  }
+  // An amendment in four numbers: cost now, paid, cost with the change, what to pay for it to go live.
+  function changeCard(c){
+    var x=c.deltaCents;
+    return '<div class="card"><b>Your booking, before and after</b>'+
+      '<div class="row"><span>Your booking now</span><span>'+rand(c.currentCents)+'</span></div>'+
+      '<div class="row"><span>Paid so far</span><span>'+rand(c.paidCents)+'</span></div>'+
+      '<div class="row"><span>Your booking with this change</span><span>'+rand(c.revisedCents)+'</span></div>'+
+      '<div class="row tot"><span>'+(x>0?'To pay now for this change':x<0?'Refund due to you':'Nothing extra to pay')+'</span><span>'+(x?rand(Math.abs(x)):'')+'</span></div>'+
+      '<div class="muted" style="margin-top:6px">'+(c.depositCents?'Both totals include your refundable deposit of '+rand(c.depositCents)+'. ':'')+(x>0?'Your booking updates as soon as this is paid.':'')+(c.balanceBeforeCents>0?' A balance of '+rand(c.balanceBeforeCents)+' is still due on your booking as before.':'')+'</div></div>';
   }
   function eftBox(ref,eft,isChange,proofUrl){
     var proof=proofUrl?'<div style="margin-top:8px"><a href="'+esc(proofUrl)+'" target="_blank" rel="noreferrer"><b>📎 Upload your proof of payment</b></a></div>':'';
