@@ -22,8 +22,8 @@
   .search-bar{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:16px; box-shadow:0 2px 10px rgba(0,0,0,.04); }
   .brand{ font-weight:800; font-size:22px; color:var(--green); letter-spacing:-.5px; white-space:nowrap; }
   .brand span{ color:var(--ink); }
-  .become-host{ background:var(--green); color:#fff; border-radius:8px; padding:8px 14px; font-weight:600; font-size:14px; white-space:nowrap; }
-  .become-host:hover{ background:var(--green-d); }
+  .become-host{ background:#fff; color:var(--ink); border:1px solid #d6dbd8; border-radius:999px; padding:7px 14px; font-weight:600; font-size:14px; white-space:nowrap; }
+  .become-host:hover{ background:#f1f3f2; }
   .host-cta{ max-width:1120px; margin:30px auto 0; padding:22px; background:#eef6f0; border:1px solid #cfe6d6; border-radius:14px; text-align:center; }
   .host-cta h3{ margin:0 0 6px; }
   .host-cta p{ margin:0 0 12px; color:#374151; }
@@ -241,6 +241,7 @@
   .th-x:hover{ background:none; color:var(--red); }
   #inviteLink{ margin:6px 0; font-size:13px; }
   .confirm-note{ margin:10px 16px 0; }
+  .trip-report{ display:inline-block; margin-top:8px; margin-left:6px; font-size:14px; font-weight:600; color:#9a4b0b; }
 </style>
 </head>
 <body>
@@ -248,8 +249,8 @@
   <div class="top-in">
     <div class="brand">Simon<span>Stays</span></div>
     <div class="acct-wrap">
+      <a class="become-host" id="toHosting" href="/hosting/?signup">Switch to hosting</a>
       <div id="acctBox"></div>
-      <a class="become-host" href="__ADMIN_URL__/?signup">Sign up to become a host</a>
     </div>
   </div>
 </header>
@@ -278,7 +279,7 @@
   <div class="host-cta">
     <h3>Own a property? List it on SimonStays.</h3>
     <p>We take the bookings and payments and pay you out — you manage your own listings, prices and calendar.</p>
-    <a href="__ADMIN_URL__/?signup">Become a host ↗</a>
+    <a href="/hosting/?signup">Start hosting</a>
   </div>
 </div>
 
@@ -426,6 +427,7 @@
   // ---- Unit detail + booking (one unit per listing; no sibling navigation) ----
   var STATE={}, DMAP=null;
   async function openUnit(card){
+    setPath('/stays/'+encodeURIComponent(card.propertyId)+(card.unitId?('/'+encodeURIComponent(card.unitId)):''));
     var host=$('#detail'); host.innerHTML='<div class="overlay"><div class="sheet"><div class="sheet-body"><p class="note">Loading…</p></div></div></div>';
     host.firstChild.onclick=function(e){ if(e.target===host.firstChild) host.innerHTML=''; };
     try{
@@ -879,15 +881,19 @@
   // ---- Guest accounts: sign in / register → "My trips" ----
   var GUEST=null, GTOKEN=null, UNREAD=0, AFTER_AUTH=null;
   function loadSession(){ try{ var s=JSON.parse(localStorage.getItem('ss_guest')||'null'); if(s&&s.token){ GTOKEN=s.token; GUEST=s.account||null; } }catch(e){} }
-  function saveSession(tok,acct){ GTOKEN=tok; GUEST=acct||null; try{ localStorage.setItem('ss_guest',JSON.stringify({token:tok,account:acct})); }catch(e){} renderAcct(); }
-  function clearSession(){ GTOKEN=null; GUEST=null; UNREAD=0; try{ localStorage.removeItem('ss_guest'); }catch(e){} renderAcct(); }
+  // One account across travelling and hosting: both sessions live on this
+  // domain. Signing in here with the hosting password keeps that session too,
+  // so "Switch to hosting" goes straight in; signing out ends both.
+  function saveSession(tok,acct,hostTok){ GTOKEN=tok; GUEST=acct||null; try{ localStorage.setItem('ss_guest',JSON.stringify({token:tok,account:acct})); if(hostTok) localStorage.setItem('staysync_token',hostTok); }catch(e){} renderAcct(); }
+  function clearSession(){ GTOKEN=null; GUEST=null; UNREAD=0; try{ localStorage.removeItem('ss_guest'); localStorage.removeItem('staysync_token'); localStorage.removeItem('staysync_admin_token'); }catch(e){} renderAcct(); }
+  function hasHosting(){ try{ return !!localStorage.getItem('staysync_token'); }catch(e){ return false; } }
   function authHeaders(){ return GTOKEN?{'Authorization':'Bearer '+GTOKEN}:{}; }
 
   function renderAcct(){
     var box=$('#acctBox'); if(!box) return;
     if(GUEST){
       var who=GUEST.name?esc(GUEST.name.split(' ')[0]):'account';
-      box.innerHTML='<span class="acct-name">Hi, '+who+'</span> <button class="acct-btn" id="tripsBtn">My trips</button> <button class="acct-btn" id="inboxBtn">Messages'+(UNREAD?'<span class="dot">'+UNREAD+'</span>':'')+'</button> <button class="acct-btn" id="signoutBtn">Sign out</button>';
+      box.innerHTML='<span class="acct-name">Hi, '+who+'</span> <button class="acct-btn" id="tripsBtn">Trips</button> <button class="acct-btn" id="inboxBtn">Messages'+(UNREAD?'<span class="dot">'+UNREAD+'</span>':'')+'</button> <button class="acct-btn" id="signoutBtn">Sign out</button>';
       $('#tripsBtn').onclick=openTrips;
       $('#inboxBtn').onclick=function(){ openInbox(); };
       $('#signoutBtn').onclick=function(){ clearSession(); };
@@ -895,6 +901,7 @@
       box.innerHTML='<button class="acct-btn" id="signinBtn">Sign in</button>';
       $('#signinBtn').onclick=function(){ openAuth('login'); };
     }
+    var sw=$('#toHosting'); if(sw) sw.href=hasHosting()?'/hosting/':'/hosting/?signup';
   }
 
   // Re-check a stored token on load; drop it silently if it's expired/invalid.
@@ -954,7 +961,7 @@
         var r=await fetch(API+'/public/account/'+(login?'login':'register'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         var d=await r.json();
         if(!r.ok){ msg.innerHTML='<div class="msg err">'+esc(d.message||'Could not sign you in. Please try again.')+'</div>'; btn.disabled=false; btn.textContent=login?'Sign in':'Create account'; return; }
-        saveSession(d.token,d.account);
+        saveSession(d.token,d.account,d.hostToken);
         var next=AFTER_AUTH; AFTER_AUTH=null;
         if(next) next(); else openTrips();
         refreshUnread();
@@ -1089,7 +1096,8 @@
   }
 
   async function openTrips(){
-    if(!GTOKEN){ openAuth('login'); return; }
+    if(!GTOKEN){ AFTER_AUTH=openTrips; openAuth('login'); return; }
+    setPath('/trips');
     var host=$('#detail');
     var overlay=el('div','overlay');
     overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
@@ -1196,6 +1204,7 @@
   async function openInbox(focusId){
     clearInterval(INBOX_POLL);
     if(!GTOKEN){ AFTER_AUTH=function(){ openInbox(focusId); }; openAuth('login', null, MSG_AUTH_NOTE); return; }
+    setPath('/messages');
     var host=$('#detail');
     var overlay=el('div','overlay');
     overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
@@ -1402,9 +1411,24 @@
         pending+
         (t.canPayBalance?'<button class="trip-pay cta-btn" data-id="'+esc(t.id)+'">💳 Pay balance '+rand(t.amountOwingCents)+'</button>':'')+
         (t.status!=='cancelled'?'<button class="trip-msg" data-id="'+esc(t.id)+'">💬 Messages</button>':'')+
+        (t.status==='confirmed'&&t.unitId?'<a class="trip-report" href="/report?'+(t.hostId?('host='+encodeURIComponent(t.hostId)+'&'):'')+'unit='+encodeURIComponent(t.unitId)+(GUEST&&GUEST.name?('&name='+encodeURIComponent(GUEST.name)):'')+'">⚠️ Report damage or an issue</a>':'')+
       '</div>'+
     '</div>';
   }
+
+  // ---- Every screen has an address: / · /stays/:property/:unit · /trips · /messages ----
+  function setPath(p){ if(location.pathname!==p){ try{ history.pushState({ss:1},'',p); }catch(e){} } }
+  // Closing any screen (it empties #detail) puts the address back to the search page.
+  new MutationObserver(function(){ if(!$('#detail').children.length && location.pathname!=='/' && !/^\/(stay|book)$/.test(location.pathname)){ try{ history.pushState({ss:1},'','/'); }catch(e){} } })
+    .observe($('#detail'),{childList:true});
+  function routeFromPath(){
+    var path=location.pathname, m;
+    if((m=/^\/stays\/([^/]+)(?:\/([^/]+))?$/.exec(path))) openUnit({ propertyId:decodeURIComponent(m[1]), unitId:m[2]?decodeURIComponent(m[2]):null });
+    else if(path==='/trips'||/^\/trips\//.test(path)) openTrips();
+    else if(path==='/messages') openInbox();
+    else $('#detail').innerHTML='';
+  }
+  window.addEventListener('popstate', routeFromPath);
 
   loadSession(); renderAcct(); refreshAccount();
   refreshUnread(); setInterval(refreshUnread, 60000);
@@ -1451,6 +1475,7 @@
     if(t){ history.replaceState(null,'',location.pathname); openReset(t); } })();
   (function(){ var q=new URLSearchParams(location.search), b=q.get('booking');
     if(b && (q.get('paid') || q.get('payment')==='cancelled')) paymentReturn(b, q.get('payment')==='cancelled'); })();
+  if(location.pathname!=='/' && !location.search) routeFromPath();
   load();
 })();
 </script>

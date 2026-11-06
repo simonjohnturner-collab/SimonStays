@@ -106,13 +106,11 @@ export default function RateCardMatrix({ onClose }) {
   return (
     <div className="invoices-view">
       <header className="topbar">
-        <button className="brand linklike" onClick={onClose} title="Back to the board">Simon<span>Stays</span></button>
-        <span className="host">Pricing groups</span>
+        <span className="host">Pricing</span>
         <div className="spacer" />
         {msg && <span className="small" style={{ marginRight: 8 }}>{msg}</span>}
         <button className="ghost" onClick={newGroup}>＋ New group</button>
         <button className="ghost" onClick={saveAll} disabled={busy || !cols}>{busy ? 'Saving…' : '💾 Save all'}</button>
-        <button className="ghost" onClick={onClose}>🏠 Home</button>
       </header>
 
       <div className="matrix-wrap">

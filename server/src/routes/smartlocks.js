@@ -9,14 +9,21 @@ const RL = require('../utils/remotelock');
 
 const router = express.Router();
 
-const ADMIN_URL = (process.env.ADMIN_URL || 'https://simonstays.onrender.com').replace(/\/$/, '');
+// Back to Hosting › Listings › Smart locks. Hosting now lives at
+// simonstays.co.za/hosting; if that build is missing, the old address.
+const fs = require('fs');
+const path = require('path');
+const HOSTING_BUILT = () => fs.existsSync(path.join(__dirname, '../../hosting-dist/index.html'));
+const SITE = (process.env.SHOPFRONT_URL || 'https://simonstays.co.za').trim().replace(/\/$/, '');
+const OLD_ADMIN = (process.env.ADMIN_URL || 'https://simonstays.onrender.com').replace(/\/$/, '');
+const locksPage = () => (HOSTING_BUILT() ? `${SITE}/hosting/listings/locks` : `${OLD_ADMIN}/`);
 
 // ---- PUBLIC: OAuth callback (browser redirect back from RemoteLock) ----
 // Defined BEFORE authHost so it runs without a Bearer token; the host identity
 // is carried in the signed `state` we set when starting the flow.
 router.get('/callback', async (req, res) => {
   const { code, state, error } = req.query;
-  const back = (ok, note) => res.redirect(`${ADMIN_URL}/?smartlock=${ok ? 'connected' : 'error'}${note ? `&msg=${encodeURIComponent(note)}` : ''}`);
+  const back = (ok, note) => res.redirect(`${locksPage()}?smartlock=${ok ? 'connected' : 'error'}${note ? `&msg=${encodeURIComponent(note)}` : ''}`);
   if (error) return back(false, String(error));
   let hostId;
   try { hostId = verify(String(state)).hostId; } catch { return back(false, 'expired_link'); }

@@ -94,12 +94,11 @@ export default function UnitMonthView({ unit, propertyName, onClose, units = [],
   return (
     <div className="invoices-view">
       <header className="topbar">
-        <button className="brand linklike" onClick={onClose} title="Back to the board">Simon<span>Stays</span></button>
         <span className="host">{propertyName ? propertyName + ' · ' : ''}Unit {unit.name}</span>
         <div className="spacer" />
         {msg && <span className="small" style={{ marginRight: 8 }}>{msg}</span>}
         <button className="ghost" onClick={() => setEdit({ neww: true })}>＋ Booking</button>
-        <button className="ghost" onClick={onClose}>🏠 Home</button>
+        <button className="ghost" onClick={onClose}>← Calendar</button>
       </header>
 
       <div className="um-wrap">

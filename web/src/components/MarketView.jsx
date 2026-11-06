@@ -140,8 +140,7 @@ export default function MarketView({ onClose }) {
   return (
     <div className="invoices-view">
       <header className="topbar">
-        <button className="brand linklike" onClick={onClose} title="Back to the board">Simon<span>Stays</span></button>
-        <span className="host">Market watch · The Vantage</span>
+        <span className="host">Insights · Market watch</span>
         <div className="spacer" />
         {competitor && (
           <>
@@ -155,7 +154,6 @@ export default function MarketView({ onClose }) {
             <button className="ghost" onClick={probeNow} disabled={busy}>{busy ? 'Probing…' : '📡 Probe now'}</button>
           </>
         )}
-        <button className="ghost" onClick={onClose}>🏠 Home</button>
       </header>
 
       <div className="mk-wrap">

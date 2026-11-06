@@ -7,3 +7,4 @@ build/
 
 # local DB restore scripts (contain booking data)
 restore-bookings*.sql
+hosting-dist/

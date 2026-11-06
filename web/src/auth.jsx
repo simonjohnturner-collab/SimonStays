@@ -26,6 +26,12 @@ export function AuthProvider({ children }) {
     const r = await api.register(email, password, name);
     setToken(r.token); setHost(r.host);
   }
+  // A hosting session made elsewhere (e.g. "Start hosting with this account").
+  async function adopt(token) {
+    setToken(token);
+    const r = await api.me();
+    setHost(r.host);
+  }
   function logout() {
     localStorage.removeItem(ADMIN_TOKEN_KEY);
     setToken(null); setHost(null);
@@ -48,7 +54,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthCtx.Provider value={{ host, loading, login, register, logout, impersonating, impersonate, stopImpersonating }}>
+    <AuthCtx.Provider value={{ host, loading, login, register, adopt, logout, impersonating, impersonate, stopImpersonating }}>
       {children}
     </AuthCtx.Provider>
   );

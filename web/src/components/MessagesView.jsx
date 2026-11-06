@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { navigate } from '../router.js';
 import { api, openMessageAttachment } from '../api.js';
 import RatingsView, { GuestRatingChip } from './RatingsView.jsx';
 import { useAuth } from '../auth.jsx';
@@ -12,7 +13,9 @@ import TeachSimon from './TeachSimon.jsx';
 //   Teach Simon — answer what the Ask Simon AI couldn't, and manage what it knows
 // Guests read and reply on the shopfront (simonstays.co.za → Messages) and get an email copy.
 export default function MessagesView({ onClose, properties = [], initialBookingId = null, initialTab = 'inbox', onUnreadChange, teachCount = 0 }) {
-  const [tab, setTab] = useState(initialTab);
+  const [tab, setTabState] = useState(initialTab);
+  // Each tab has its own address (/hosting/inbox/scheduled …) so a refresh stays put.
+  const setTab = (t) => { setTabState(t); navigate(t === 'inbox' ? '/inbox' : `/inbox/${t}`, { replace: true }); };
   const [templates, setTemplates] = useState([]);
   const [shortcuts, setShortcuts] = useState([]);
 
@@ -25,10 +28,8 @@ export default function MessagesView({ onClose, properties = [], initialBookingI
   return (
     <div className="invoices-view">
       <header className="topbar">
-        <button className="brand linklike" onClick={onClose} title="Back to the board">Simon<span>Stays</span></button>
-        <span className="host">Messaging &amp; Ask Simon</span>
+        <span className="host">Inbox</span>
         <div className="spacer" />
-        <button className="ghost" onClick={onClose}>🏠 Home</button>
       </header>
 
       <div className="msg-tabs">
@@ -36,7 +37,7 @@ export default function MessagesView({ onClose, properties = [], initialBookingI
         <button className={tab === 'saved' ? 'on' : ''} onClick={() => setTab('saved')}>📝 Saved messages</button>
         <button className={tab === 'scheduled' ? 'on' : ''} onClick={() => setTab('scheduled')}>⏰ Scheduled</button>
         <button className={tab === 'teach' ? 'on' : ''} onClick={() => setTab('teach')}>🧠 Ask Simon{teachCount > 0 && <span className="msg-dot">{teachCount}</span>}</button>
-        <button className={tab === 'ratings' ? 'on' : ''} onClick={() => setTab('ratings')}>⭐ Ratings</button>
+        <button className={tab === 'ratings' ? 'on' : ''} onClick={() => setTab('ratings')}>⭐ Reviews</button>
       </div>
 
       {tab === 'inbox' && <Inbox templates={templates} shortcuts={shortcuts} properties={properties} initialBookingId={initialBookingId} onUnreadChange={onUnreadChange} onManageSaved={() => setTab('saved')} />}

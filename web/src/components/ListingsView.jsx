@@ -292,7 +292,6 @@ export default function ListingsView({ onClose }) {
   return (
     <div className="invoices-view">
       <header className="topbar">
-        <button className="brand linklike" onClick={onClose} title="Back to the board">Simon<span>Stays</span></button>
         <span className="host">Listings</span>
         <div className="spacer" />
         {dirty && <span className="unsaved-dot" title="You have unsaved changes">● Unsaved</span>}
@@ -301,7 +300,6 @@ export default function ListingsView({ onClose }) {
           const cur = properties.find((x) => x.id === selectedId) || properties[0];
           return <button className={dirty ? '' : 'secondary'} disabled={saving} onClick={() => cur && saveAll(cur)}>{saving ? 'Saving…' : '💾 Save all'}</button>;
         })()}
-        <button className="ghost" onClick={onClose}>🏠 Home</button>
       </header>
 
       {!properties ? <p className="muted small" style={{ padding: 16 }}>Loading…</p> : properties.length === 0 ? (
@@ -360,7 +358,7 @@ export default function ListingsView({ onClose }) {
                   </div>
 
                   <div className="attr-section">
-                    <div className="attr-head">Cancellation policy <span className="muted small">— shown to guests on the shopfront</span></div>
+                    <div className="attr-head">Cancellation policy <span className="muted small">— shown to guests on SimonStays</span></div>
                     <textarea className="listing-desc" rows={4}
                       value={p.cancellationPolicy != null ? p.cancellationPolicy : DEFAULT_CANCELLATION_POLICY}
                       onChange={(e) => editProp(p.id, { cancellationPolicy: e.target.value })} onBlur={() => autoSaveProp(p)} />

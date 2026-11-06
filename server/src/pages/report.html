@@ -255,6 +255,11 @@
       });
     });
     if (draftUnit) sel.value = draftUnit; // re-select the unit from the saved draft
+    // Opened from a trip ("Report damage or an issue"): that trip's unit and the guest's name.
+    var fromTrip = new URLSearchParams(location.search);
+    if (fromTrip.get('unit')) sel.value = fromTrip.get('unit');
+    var nm = document.getElementById('name');
+    if (fromTrip.get('name') && nm && !nm.value) nm.value = fromTrip.get('name');
   }).catch(function () { document.getElementById('unit').innerHTML = '<option value="">Could not load units</option>'; });
 
   // Featured properties beside the form (below it on phones): one unit per

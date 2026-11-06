@@ -77,10 +77,8 @@ export default function DocumentsView({ onClose }) {
   return (
     <div className="invoices-view">
       <header className="topbar">
-        <button className="brand linklike" onClick={onClose} title="Back to the board">Simon<span>Stays</span></button>
-        <span className="host">Documents</span>
+        <span className="host">House documents</span>
         <div className="spacer" />
-        <button className="ghost" onClick={onClose}>🏠 Home</button>
       </header>
       <div className="gb-wrap">
         <p className="muted small">

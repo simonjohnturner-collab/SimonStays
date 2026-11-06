@@ -1139,3 +1139,77 @@ button[role=radio].on { color:#e2a100; }
 .refund-action input { width: auto; flex: 1 1 110px; }
 .refund-action input.amt { flex: 0 0 90px; width: 90px; }
 .refund-action .msg-warn { flex-basis: 100%; }
+
+/* ===================== Hosting shell (one bar, five sections) ===================== */
+.host-shell { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
+.host-screen { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.host-screen .app, .host-screen .invoices-view { min-height: calc(100vh - 57px); }
+.hostnav { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: #fff; border-bottom: 1px solid var(--line); }
+.hostnav button { background: transparent; color: var(--ink); }
+.hostnav-brand { font-weight: 800; font-size: 21px; letter-spacing: -.5px; color: var(--green) !important; padding: 4px 6px !important; }
+.hostnav-brand span { color: var(--ink); }
+.hostnav-brand:hover { background: transparent !important; opacity: .85; }
+.hostnav-sections { display: flex; gap: 2px; flex: 1; justify-content: center; }
+.hostnav-sections button { padding: 8px 14px; font-weight: 600; color: var(--muted); border-radius: 999px; }
+.hostnav-sections button:hover { background: #f1f3f2; color: var(--ink); }
+.hostnav-sections button.on { background: #e3f1e7; color: var(--green-d); }
+.hostnav-right { display: flex; align-items: center; gap: 8px; }
+.hostnav-switch { font-size: 13px; font-weight: 600; border: 1px solid var(--line) !important; border-radius: 999px !important; padding: 6px 12px !important; white-space: nowrap; }
+.hostnav-switch:hover { background: #f1f3f2 !important; }
+.hostnav-acct { position: relative; }
+.hostnav-avatar { width: 34px; height: 34px; border-radius: 50% !important; padding: 0 !important; background: var(--green) !important; color: #fff !important; font-size: 13px; font-weight: 700; }
+.hostnav-menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 220px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.12); padding: 6px; display: flex; flex-direction: column; z-index: 70; }
+.hostnav-menu button { text-align: left; padding: 9px 10px; border-radius: 7px; }
+.hostnav-menu button:hover { background: #f1f3f2; }
+.hostnav-who { display: flex; flex-direction: column; padding: 8px 10px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; font-size: 13px; }
+.hostnav-who span { color: var(--muted); font-size: 12px; word-break: break-all; }
+/* The bell sits on a white bar now (it was built for the green one). */
+.hostnav .notif-bell { color: var(--ink); }
+.hostnav .notif-bell:hover { background: #f1f3f2; }
+@media (max-width: 760px) {
+  .hostnav { flex-wrap: wrap; gap: 6px; padding: 6px 10px; }
+  .hostnav-sections { order: 3; width: 100%; justify-content: space-between; }
+  .hostnav-sections button { padding: 6px 8px; font-size: 13px; }
+  .hostnav-right { margin-left: auto; }
+  .hostnav-switch { display: none; } /* it's in the account menu and on Menu */
+}
+
+/* Section tabs (Listings, Money) */
+.section-tabs { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; padding: 8px 16px; background: #fff; border-bottom: 1px solid var(--line); }
+.section-tabs button { background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 7px; font-weight: 600; font-size: 14px; }
+.section-tabs button:hover { background: #f1f3f2; color: var(--ink); }
+.section-tabs button.on { background: var(--green); color: #fff; }
+.section-tabs .section-tabs-extra { margin-left: auto; border: 1px solid var(--line); color: var(--ink); }
+
+/* Today */
+.today { max-width: 1180px; width: 100%; margin: 0 auto; padding: 22px 16px 40px; display: flex; flex-direction: column; gap: 16px; }
+.today-head h1 { margin: 0; font-size: 26px; letter-spacing: -.3px; }
+.today-head p { margin: 4px 0 0; }
+.today-attn { color: #b45309; }
+.today-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; align-items: start; }
+.today-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.today-card h2 { font-size: 15px; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+.today-card .count { background: #eef1f4; border-radius: 999px; padding: 0 8px; font-size: 12px; color: var(--muted); }
+.today-row { display: grid; grid-template-columns: minmax(90px, auto) 1fr auto; gap: 10px; align-items: center; text-align: left; background: transparent; color: var(--ink); padding: 8px; border-radius: 8px; border-bottom: 1px solid #f0f2f1; }
+.today-row:hover { background: #f5f8f6; }
+.today-unit { font-weight: 600; white-space: nowrap; }
+.today-guest { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.today-extra { font-size: 12px; white-space: nowrap; }
+.tag.warn { background: #fdecd6; color: #9a4b0b; }
+.tag.ok { background: #e3f1e7; color: var(--green-d); }
+@media (max-width: 520px) { .today-row { grid-template-columns: 1fr auto; } .today-guest { grid-column: 1 / -1; grid-row: 2; } }
+
+/* Menu */
+.menu-page { max-width: 1100px; width: 100%; margin: 0 auto; padding: 22px 16px 40px; display: flex; flex-direction: column; gap: 22px; }
+.menu-group h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
+.menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.menu-card { display: flex; gap: 12px; align-items: flex-start; text-align: left; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.menu-card:hover { background: #fff; border-color: var(--green); box-shadow: 0 4px 14px rgba(26,122,58,.08); }
+.menu-ic { font-size: 22px; line-height: 1; }
+.menu-txt { display: flex; flex-direction: column; gap: 2px; }
+.menu-txt span { color: var(--muted); font-size: 13px; }
+
+/* Hosting sign-in: start hosting with the travelling account */
+.auth-form { display: flex; flex-direction: column; gap: 10px; }
+.auth-guest { background: #e3f1e7; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.auth-guest p { margin: 0; }

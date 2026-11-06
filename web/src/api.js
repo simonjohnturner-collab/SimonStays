@@ -1,5 +1,21 @@
 // Thin fetch wrapper. Token is kept in localStorage and sent as a Bearer header.
-const BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+// Served by the API itself at /hosting → same origin. Otherwise the build-time
+// API address (old static site), or the local dev server.
+const BASE = window.location.pathname.startsWith('/hosting')
+  ? window.location.origin
+  : (import.meta.env.VITE_API_BASE || 'http://localhost:4000');
+
+// True on the live site (not a local dev server), for live-only side effects.
+export const IS_LIVE = !/^(localhost|127\.|192\.168\.)/.test(window.location.hostname);
+
+// The old host address hands its sign-in over once in the URL fragment
+// (#t=…) so hosts aren't asked to sign in again after the move. Strip it at once.
+(function takeHandoff() {
+  const m = /[#&]t=([^&]+)/.exec(window.location.hash || '');
+  if (!m) return;
+  try { localStorage.setItem('staysync_token', decodeURIComponent(m[1])); } catch { /* ignore */ }
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+})();
 
 let token = localStorage.getItem('staysync_token') || null;
 
@@ -33,8 +49,9 @@ export async function guestDocumentFile(accountId, kind) {
 
 export function photoUrl(id) { return `${BASE}/photos/${id}`; }
 
-// Public, shareable URL of a form guests/cleaners fill in.
-export function formLink(type, hostId) { return `${BASE}/${type === 'clean' ? 'clean' : type === 'repair' ? 'repair' : 'report'}?host=${encodeURIComponent(hostId)}`; }
+// Public, shareable URL of a form. Cleaners and contractors use /team/… (no
+// sign-in); guests normally report damage from their trip.
+export function formLink(type, hostId) { return `${BASE}/${type === 'clean' ? 'team/clean' : type === 'repair' ? 'team/repair' : 'report'}?host=${encodeURIComponent(hostId)}`; }
 
 async function req(method, path, body) {
   const headers = { 'Content-Type': 'application/json' };
@@ -61,6 +78,11 @@ export const api = {
   register: (email, password, name) => req('POST', '/auth/register', { email, password, name }),
   login: (email, password) => req('POST', '/auth/login', { email, password }),
   me: () => req('GET', '/auth/me'),
+  // One account: a travelling session for this host (finds or creates the guest side).
+  guestSession: () => req('POST', '/auth/guest-session'),
+  // A signed-in guest (token from the travelling side) opens a hosting account.
+  becomeHost: (guestToken) => fetch(`${BASE}/public/account/become-host`, { method: 'POST', headers: { Authorization: `Bearer ${guestToken}` } })
+    .then(async (r) => { const d = await r.json().catch(() => ({})); if (!r.ok) { const e = new Error(d.error || `HTTP ${r.status}`); e.data = d; throw e; } return d; }),
 
   // super-admin: list all hosts + sign in as one
   adminListHosts: () => req('GET', '/admin/hosts'),

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth.jsx';
-import { api } from '../api.js';
+import { api, IS_LIVE } from '../api.js';
+import { useRoute, navigate, match, BASE, GUEST_SITE } from '../router.js';
 import { today, addDays, addMonths, ymd } from '../dates.js';
 import Board from './Board.jsx';
 import BookingModal from './BookingModal.jsx';
@@ -12,7 +13,9 @@ import RateCardMatrix from './RateCardMatrix.jsx';
 import ListingsView from './ListingsView.jsx';
 import BoardSearch from './BoardSearch.jsx';
 import FormsView from './FormsView.jsx';
-import NotificationsBell from './NotificationsBell.jsx';
+import HostNav from './HostNav.jsx';
+import MenuView from './MenuView.jsx';
+import TodayView from './TodayView.jsx';
 import FormChime from './FormChime.jsx';
 import ServiceProvidersView from './ServiceProvidersView.jsx';
 import GuestBookView from './GuestBookView.jsx';
@@ -47,34 +50,37 @@ export default function Main() {
 
   const [bookingCtx, setBookingCtx] = useState(null); // { unit } | { booking, unit }
   const [panelUnit, setPanelUnit] = useState(null);
-  const [monthUnit, setMonthUnit] = useState(null); // { unit, propertyName } for the single-unit month view
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [invoices, setInvoices] = useState(null); // { initialId } when open
+  const [drawer, setDrawer] = useState(null); // 'property' | 'booking' — the properties/bookings side panel
   const [groups, setGroups] = useState([]);
   const [cleaners, setCleaners] = useState([]);
-  const [providersOpen, setProvidersOpen] = useState(false);
-  const [guestsOpen, setGuestsOpen] = useState(false);
-  const [paymentsOpen, setPaymentsOpen] = useState(false);
-  const [pricingMatrix, setPricingMatrix] = useState(false);
-  const [listings, setListings] = useState(false);
-  const [forms, setForms] = useState(false);
-  const [smartLocks, setSmartLocks] = useState(false);
-  const [account, setAccount] = useState(false);
-  const [business, setBusiness] = useState(false);
-  const [documents, setDocuments] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(false);
-  const [market, setMarket] = useState(false);
-  const [messages, setMessages] = useState(null); // { bookingId, tab } when open
+  const [switching, setSwitching] = useState(false);
   const [teachCount, setTeachCount] = useState(0); // Ask Simon questions waiting for an answer
   const loadTeachCount = useCallback(() => {
     api.teachCount().then((r) => setTeachCount(r.count)).catch(() => {});
   }, []);
   useEffect(() => { loadTeachCount(); const t = setInterval(loadTeachCount, 60000); return () => clearInterval(t); }, [loadTeachCount]);
-  const [formsInitialId, setFormsInitialId] = useState(null); // open Forms straight to this submission
   const [focus, setFocus] = useState(null); // { unitId, bookingId, key } — jump target
-  function openFormsSubmission(id) { setFormsInitialId(id || null); setForms(true); }
-  // From the bell or a new-message toast, which can fire over any screen.
-  function openMessage(bookingId) { setAdminOpen(false); setMarket(false); setMessages({ bookingId: bookingId || null }); }
+  const route = useRoute();
+  // From the bell, a toast or Today, which can fire over any screen.
+  function openFormsSubmission(id) { navigate(id ? `/reports/${encodeURIComponent(id)}` : '/reports'); }
+  function openMessage(bookingId) { navigate(bookingId ? `/inbox?booking=${encodeURIComponent(bookingId)}` : '/inbox'); }
+
+  // One account: hop to the travelling side signed in. Served at /hosting the
+  // two sides share this domain, so the guest session is handed over in
+  // localStorage; if one can't be made (a separate guest password already
+  // exists), the guest site simply asks them to sign in.
+  async function switchToTravelling() {
+    setSwitching(true);
+    if (BASE) {
+      try {
+        if (!localStorage.getItem('ss_guest')) {
+          const r = await api.guestSession();
+          localStorage.setItem('ss_guest', JSON.stringify({ token: r.token, account: r.account }));
+        }
+      } catch { /* sign in on the travelling side instead */ }
+    }
+    window.location.href = GUEST_SITE + '/';
+  }
   const [msg, setMsg] = useState('');
   // When the server/database can't be reached we leave the board exactly as it
   // was and show a red "unable to sync" notice with the last good load time.
@@ -194,10 +200,10 @@ export default function Main() {
         return a;
       }, { added: 0, updated: 0, removed: 0 });
       // On the live site, pressing Sync also checks the Airbnb mailbox for guest
-      // names. Gated to the live build (VITE_API_BASE set) so a local dev server
-      // never consumes the shared mailbox before live sees the emails.
+      // names. Gated to the live site so a local dev server never consumes the
+      // shared mailbox before live sees the emails.
       let nameMsg = '';
-      if (import.meta.env.VITE_API_BASE) {
+      if (IS_LIVE) {
         try { const p = await api.pollEmail(); if (p && p.updated) nameMsg = `, +${p.updated} guest name${p.updated > 1 ? 's' : ''}`; }
         catch { /* best-effort */ }
       }
@@ -222,11 +228,150 @@ export default function Main() {
   }
 
   const hasUnits = properties.some((p) => p.units.length);
+  const isAdmin = !!host?.isAdmin && !impersonating;
+  const allUnits = properties.flatMap((p) => p.units.map((u) => ({ ...u, label: `${p.name} · ${u.name}` })));
+  const { path, query } = route;
 
-  // Wrap every screen with the impersonation banner so the admin always has a
-  // one-click way back to their own account while signed in as another host.
-  const withChrome = (el) => (
-    <>
+  function signOut() { try { localStorage.removeItem('ss_guest'); } catch { /* ignore */ } logout(); navigate('/', { replace: true }); }
+
+  // ---- Which screen: every screen has its own address under /hosting ----
+  const section = path === '/' ? 'today'
+    : path.startsWith('/calendar') ? 'calendar'
+    : path.startsWith('/listings') ? 'listings'
+    : path.startsWith('/inbox') ? 'inbox'
+    : 'menu';
+
+  const LISTING_TABS = [['/listings', 'Listings'], ['/listings/pricing', 'Pricing'], ['/listings/documents', 'House documents'], ['/listings/locks', 'Smart locks']];
+  const MONEY_TABS = [['/money', 'Payouts'], ['/money/invoices', 'Invoices'], ['/money/billing', 'Billing details']];
+  const tabs = (items, extra) => (
+    <div className="section-tabs" role="tablist">
+      {items.map(([to, label]) => {
+        const on = to === path || (to !== items[0][0] && path.startsWith(to + '/'));
+        return <button key={to} role="tab" aria-selected={on} className={on ? 'on' : ''} onClick={() => navigate(to)}>{label}</button>;
+      })}
+      {extra}
+    </div>
+  );
+  const toCalendar = () => navigate('/calendar');
+
+  let screen;
+  let m;
+  if (path === '/') {
+    screen = <TodayView properties={properties} teachCount={teachCount} onOpenBooking={(booking, unit) => setBookingCtx({ booking, unit })} />;
+  } else if ((m = match('/calendar/unit/:unitId', path))) {
+    const p = properties.find((pp) => pp.units.some((u) => u.id === m.unitId));
+    const unit = p && p.units.find((u) => u.id === m.unitId);
+    screen = unit
+      ? <UnitMonthView key={unit.id} unit={unit} propertyName={p.name} units={allUnits} groups={groups} cleaners={cleaners} onClose={toCalendar} onBookingsChanged={() => loadBookings(properties)} />
+      : <div className="center muted">{loading ? 'Loading…' : 'That unit no longer exists.'}</div>;
+  } else if (path === '/calendar') {
+    screen = (
+      <div className="app">
+        <header className="topbar">
+          <span className="host">Calendar</span>
+          {hasUnits && <BoardSearch onJump={jumpToBooking} onJumpDate={jumpToDate} />}
+          <div className="spacer" />
+          <button className="ghost" onClick={() => setStart(addMonths(start, -1))}>‹ month</button>
+          <button className="ghost" onClick={() => setStart(addDays(start, -7))}>← week</button>
+          <button className="ghost" onClick={() => setStart(addDays(today(), -3))}>Today</button>
+          <button className="ghost" onClick={() => setStart(addDays(start, 7))}>week →</button>
+          <button className="ghost" onClick={() => setStart(addMonths(start, 1))}>month ›</button>
+          <button className="ghost" onClick={syncAll} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync channels'}</button>
+          <button className="ghost" onClick={() => setDrawer('booking')}>＋ Booking</button>
+        </header>
+        {syncFailed && <div className="banner sync-failed">⚠ Unable to sync — correct as at {fmtSyncTime(lastSynced)}</div>}
+        {msg && !syncFailed && <div className="banner">{msg}</div>}
+        <div className="body">
+          <main className="board-wrap">
+            {loading && !hasUnits ? (
+              <div className="center muted">Loading calendar…</div>
+            ) : !hasUnits ? (
+              <div className="center muted">
+                No units yet. <button className="linklike" onClick={() => setDrawer('property')}>Add a property and its units</button> to start your calendar.
+              </div>
+            ) : (
+              <Board
+                properties={properties}
+                bookingsByUnit={bookingsByUnit}
+                floatingBookings={floatingBookings}
+                start={start}
+                days={WINDOW_DAYS}
+                focus={focus}
+                onNewBooking={(unit) => setBookingCtx({ unit })}
+                onEditBooking={(booking, unit) => setBookingCtx({ booking, unit })}
+                onOpenUnit={(unit) => navigate(`/calendar/unit/${unit.id}`)}
+                onAddUnit={addUnit}
+              />
+            )}
+          </main>
+        </div>
+      </div>
+    );
+  } else if (path === '/listings') {
+    screen = <>{tabs(LISTING_TABS, <button className="section-tabs-extra" onClick={() => setDrawer('property')}>Properties &amp; units</button>)}<ListingsView onClose={toCalendar} /></>;
+  } else if (path === '/listings/pricing') {
+    screen = <>{tabs(LISTING_TABS)}<RateCardMatrix onClose={toCalendar} /></>;
+  } else if (path === '/listings/documents') {
+    screen = <>{tabs(LISTING_TABS)}<DocumentsView onClose={toCalendar} /></>;
+  } else if (path === '/listings/locks') {
+    screen = <>{tabs(LISTING_TABS)}<SmartLockView onClose={toCalendar} /></>;
+  } else if (path === '/inbox' || (m = match('/inbox/:tab', path))) {
+    const tab = (m && m.tab) || 'inbox';
+    const bookingId = query.get('booking');
+    screen = (
+      <MessagesView
+        key={bookingId || 'inbox'}
+        onClose={toCalendar}
+        properties={properties.map((p) => ({ id: p.id, name: p.name, units: p.units }))}
+        initialBookingId={bookingId}
+        teachCount={teachCount}
+        initialTab={tab}
+        onUnreadChange={loadTeachCount}
+      />
+    );
+  } else if (path === '/reports' || (m = match('/reports/:id', path))) {
+    const id = m ? m.id : null;
+    screen = <FormsView key={id || 'list'} onClose={toCalendar} properties={properties} initialSubmissionId={id} />;
+  } else if (path === '/team') {
+    screen = (
+      <ServiceProvidersView
+        onClose={toCalendar}
+        properties={properties.map((p) => ({ id: p.id, name: p.name, cleanRateCents: p.cleanRateCents }))}
+        onChanged={() => { api.listCleaners().then((c) => setCleaners(c.cleaners || [])).catch(() => {}); api.listProperties().then((r) => setProperties(r.properties || [])).catch(() => {}); }}
+      />
+    );
+  } else if (path === '/guests') {
+    screen = <GuestBookView onClose={toCalendar} />;
+  } else if (path === '/money') {
+    screen = <>{tabs(MONEY_TABS)}<PaymentHistoryView onClose={toCalendar} /></>;
+  } else if (path === '/money/invoices' || (m = match('/money/invoices/:id', path))) {
+    const id = m ? m.id : null;
+    screen = <>{tabs(MONEY_TABS)}<InvoicesView key={id || 'list'} initialInvoiceId={id} onClose={toCalendar} /></>;
+  } else if (path === '/money/billing') {
+    screen = <>{tabs(MONEY_TABS)}<PaymentHistoryView onClose={toCalendar} /><BusinessDetails onClose={() => navigate('/money')} /></>;
+  } else if (path === '/insights') {
+    screen = <MarketView onClose={toCalendar} />;
+  } else if (path === '/settings') {
+    screen = <AccountView onClose={toCalendar} />;
+  } else if (path === '/admin' && isAdmin) {
+    screen = <AdminView onClose={toCalendar} />;
+  } else if (path === '/menu') {
+    screen = (
+      <MenuView
+        isAdmin={isAdmin}
+        onPropertiesAndUnits={() => setDrawer('property')}
+        onFindBooking={() => setDrawer('booking')}
+        onSwitchToTravelling={switchToTravelling}
+        onLogout={signOut}
+      />
+    );
+  } else {
+    // An old or mistyped address: start from Today.
+    screen = <TodayView properties={properties} teachCount={teachCount} onOpenBooking={(booking, unit) => setBookingCtx({ booking, unit })} />;
+  }
+
+  return (
+    <div className="host-shell">
       <FormChime onOpen={openFormsSubmission} onOpenMessage={openMessage} />
       {impersonating && (
         <div className="imp-banner">
@@ -234,190 +379,60 @@ export default function Main() {
           <button onClick={stopImpersonating}>↩ Return to my admin account</button>
         </div>
       )}
-      {el}
-    </>
-  );
-
-  if (adminOpen) {
-    return withChrome(<AdminView onClose={() => setAdminOpen(false)} />);
-  }
-  if (market) {
-    return withChrome(<MarketView onClose={() => setMarket(false)} />);
-  }
-  if (messages) {
-    return withChrome(
-      <MessagesView
-        key={messages.bookingId || 'inbox'}
-        onClose={() => { setMessages(null); loadTeachCount(); }}
-        properties={properties.map((p) => ({ id: p.id, name: p.name, units: p.units }))}
-        initialBookingId={messages.bookingId}
-        teachCount={teachCount}
-        initialTab={messages.tab || 'inbox'}
-        onUnreadChange={loadTeachCount}
+      <HostNav
+        section={section}
+        host={host}
+        inboxCount={teachCount}
+        onSwitchToTravelling={switchToTravelling}
+        switching={switching}
+        onLogout={signOut}
+        onOpenReport={openFormsSubmission}
+        onOpenMessage={openMessage}
       />
-    );
-  }
-  if (invoices) {
-    return withChrome(<InvoicesView initialInvoiceId={invoices.initialId} onClose={() => setInvoices(null)} />);
-  }
-  if (pricingMatrix) {
-    return withChrome(<RateCardMatrix onClose={() => setPricingMatrix(false)} />);
-  }
-  if (listings) {
-    return withChrome(<ListingsView onClose={() => setListings(false)} />);
-  }
-  if (forms) {
-    return withChrome(<FormsView onClose={() => { setForms(false); setFormsInitialId(null); }} properties={properties} initialSubmissionId={formsInitialId} />);
-  }
-  if (smartLocks) {
-    return withChrome(<SmartLockView onClose={() => setSmartLocks(false)} />);
-  }
-  if (account) {
-    return withChrome(<AccountView onClose={() => setAccount(false)} />);
-  }
-  if (documents) {
-    return withChrome(<DocumentsView onClose={() => setDocuments(false)} />);
-  }
-  if (providersOpen) {
-    return withChrome(
-      <ServiceProvidersView
-        onClose={() => setProvidersOpen(false)}
-        properties={properties.map((p) => ({ id: p.id, name: p.name, cleanRateCents: p.cleanRateCents }))}
-        onChanged={() => { api.listCleaners().then((c) => setCleaners(c.cleaners || [])).catch(() => {}); api.listProperties().then((r) => setProperties(r.properties || [])).catch(() => {}); }}
-      />
-    );
-  }
-  if (guestsOpen) {
-    return withChrome(<GuestBookView onClose={() => setGuestsOpen(false)} />);
-  }
-  if (paymentsOpen) {
-    return withChrome(<PaymentHistoryView onClose={() => setPaymentsOpen(false)} />);
-  }
-  if (monthUnit) {
-    return withChrome(
-      <UnitMonthView
-        unit={monthUnit.unit}
-        propertyName={monthUnit.propertyName}
-        units={properties.flatMap((p) => p.units.map((u) => ({ ...u, label: `${p.name} · ${u.name}` })))}
-        groups={groups}
-        cleaners={cleaners}
-        onClose={() => setMonthUnit(null)}
-        onBookingsChanged={() => loadBookings(properties)}
-      />
-    );
-  }
-
-  return withChrome(
-    <div className="app">
-      <header className="topbar">
-        <button className="ghost hamburger" title={teachCount > 0 ? `Manage properties · ${teachCount} question(s) waiting in Ask Simon` : 'Manage properties'} onClick={() => setMenuOpen(true)}>
-          ☰{teachCount > 0 && <span className="msg-dot">{teachCount}</span>}
-        </button>
-        <div className="brand">Simon<span>Stays</span></div>
-        {hasUnits && <BoardSearch onJump={jumpToBooking} onJumpDate={jumpToDate} />}
-        <div className="spacer" />
-        <button className="ghost" onClick={() => setStart(addMonths(start, -1))}>‹ month</button>
-        <button className="ghost" onClick={() => setStart(addDays(start, -7))}>← week</button>
-        <button className="ghost" onClick={() => setStart(addDays(today(), -3))}>Today</button>
-        <button className="ghost" onClick={() => setStart(addDays(start, 7))}>week →</button>
-        <button className="ghost" onClick={() => setStart(addMonths(start, 1))}>month ›</button>
-        <button className="ghost" onClick={syncAll} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync channels'}</button>
-        <button className="ghost" onClick={() => setListings(true)}>🏠 Listings</button>
-        <NotificationsBell onOpen={openFormsSubmission} onOpenMessage={openMessage} />
-        <span className="host">{host.email}</span>
-        <button className="ghost" onClick={logout}>Log out</button>
-      </header>
-
-      {syncFailed && (
-        <div className="banner sync-failed">
-          ⚠ Unable to sync — correct as at {fmtSyncTime(lastSynced)}
-        </div>
-      )}
-      {msg && !syncFailed && <div className="banner">{msg}</div>}
-
-      <div className="body">
-        <main className="board-wrap">
-          {loading && !hasUnits ? (
-            <div className="center muted">Loading board…</div>
-          ) : !hasUnits ? (
-            <div className="center muted">
-              No units yet. Open <b>☰ Manage properties</b> (top left) to add a property and units.
-            </div>
-          ) : (
-            <Board
-              properties={properties}
-              bookingsByUnit={bookingsByUnit}
-              floatingBookings={floatingBookings}
-              start={start}
-              days={WINDOW_DAYS}
-              focus={focus}
-              onNewBooking={(unit) => setBookingCtx({ unit })}
-              onEditBooking={(booking, unit) => setBookingCtx({ booking, unit })}
-              onOpenUnit={(unit) => setMonthUnit({ unit, propertyName: (properties.find((p) => p.id === unit.propertyId) || {}).name })}
-              onAddUnit={addUnit}
-            />
-          )}
-        </main>
-      </div>
+      <div className="host-screen">{screen}</div>
 
       {bookingCtx && (
         <BookingModal
           unit={bookingCtx.unit || null}
           booking={bookingCtx.booking}
           floating={bookingCtx.floating}
-          units={properties.flatMap((p) => p.units.map((u) => ({ ...u, label: `${p.name} · ${u.name}` })))}
+          units={allUnits}
           groups={groups}
           cleaners={cleaners}
           onClose={() => setBookingCtx(null)}
           onSaved={async () => { setBookingCtx(null); await loadBookings(properties); }}
-          onMessage={(booking) => { setBookingCtx(null); setMessages({ bookingId: booking.id }); }}
+          onMessage={(booking) => { setBookingCtx(null); openMessage(booking.id); }}
           onInvoice={async (booking) => {
             const r = await api.createInvoice({ fromBookingId: booking.id });
             setBookingCtx(null);
-            setInvoices({ initialId: r.invoice.id });
+            navigate(`/money/invoices/${encodeURIComponent(r.invoice.id)}`);
           }}
         />
       )}
 
-      {business && <BusinessDetails onClose={() => setBusiness(false)} />}
-
-      {menuOpen && (
+      {drawer && (
         <ManageDrawer
+          key={drawer}
+          initialView={drawer}
           properties={properties}
           bookingsByUnit={bookingsByUnit}
           groups={groups}
           onAssignGroup={assignGroup}
           onCreateGroup={createGroup}
-          onClose={() => setMenuOpen(false)}
+          onClose={() => setDrawer(null)}
           onAddProperty={addProperty}
           onRenameProperty={renameProperty}
           onDeleteProperty={deleteProperty}
           onAddUnit={addUnit}
           onDeleteUnit={deleteUnit}
-          onOpenUnit={(unit) => { setMenuOpen(false); setPanelUnit(unit); }}
-          onAddBooking={(unit) => { setMenuOpen(false); setBookingCtx({ unit }); }}
-          onAddFloating={() => { setMenuOpen(false); setBookingCtx({ floating: true }); }}
-          onEditBooking={(booking, unit) => { setMenuOpen(false); setBookingCtx({ booking, unit }); }}
-          onOpenInvoices={() => { setMenuOpen(false); setInvoices({ initialId: null }); }}
-          onOpenPricing={() => { setMenuOpen(false); setPricingMatrix(true); }}
-          onOpenMarket={() => { setMenuOpen(false); setMarket(true); }}
-          onOpenListings={() => { setMenuOpen(false); setListings(true); }}
-          onOpenForms={() => { setMenuOpen(false); setForms(true); }}
-          onOpenCleaners={() => { setMenuOpen(false); setProvidersOpen(true); }}
-          onOpenGuests={() => { setMenuOpen(false); setGuestsOpen(true); }}
-          onOpenMessages={() => { setMenuOpen(false); setMessages({ bookingId: null }); }}
-          teachCount={teachCount}
-          onOpenSmartLocks={() => { setMenuOpen(false); setSmartLocks(true); }}
-          onOpenAccount={() => { setMenuOpen(false); setAccount(true); }}
-          onOpenBusiness={() => { setMenuOpen(false); setBusiness(true); }}
-          onOpenDocuments={() => { setMenuOpen(false); setDocuments(true); }}
-          onOpenPayments={() => { setMenuOpen(false); setPaymentsOpen(true); }}
-          isAdmin={host?.isAdmin && !impersonating}
-          onOpenAdmin={() => { setMenuOpen(false); setAdminOpen(true); }}
+          onOpenUnit={(unit) => { setDrawer(null); setPanelUnit(unit); }}
+          onOpenPricing={() => { setDrawer(null); navigate('/listings/pricing'); }}
+          onAddBooking={(unit) => { setDrawer(null); setBookingCtx({ unit }); }}
+          onAddFloating={() => { setDrawer(null); setBookingCtx({ floating: true }); }}
+          onEditBooking={(booking, unit) => { setDrawer(null); setBookingCtx({ booking, unit }); }}
           onReorderProperties={reorderProperties}
         />
       )}
-
 
       {panelUnit && (
         <UnitPanel

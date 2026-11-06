@@ -107,8 +107,7 @@ export default function FormsView({ onClose, properties = [], initialSubmissionI
   return (
     <div className="invoices-view">
       <header className="topbar">
-        <button className="brand linklike" onClick={onClose} title="Back to the board">Simon<span>Stays</span></button>
-        <span className="host">Forms</span>
+        <span className="host">Reports</span>
         <div className="forms-tabs">
           <button className={tab === 'submissions' ? 'active' : ''} onClick={() => setTab('submissions')}>📥 Submissions</button>
           <button className={tab === 'summary' ? 'active' : ''} onClick={() => setTab('summary')}>🧰 Damage summary</button>
@@ -116,7 +115,6 @@ export default function FormsView({ onClose, properties = [], initialSubmissionI
         </div>
         <div className="spacer" />
         {msg && <span className="small" style={{ marginRight: 8 }}>{msg}</span>}
-        <button className="ghost" onClick={onClose}>🏠 Home</button>
       </header>
 
       <FormLinks />
@@ -878,7 +876,7 @@ function DaySettlement({ sub, spentCents, onUpdate }) {
         {saving && <span className="muted small" style={{ marginLeft: 6 }}>{saving}</span>}
       </div>
       {sub.cleanerFeeCents == null && sub.propertyCleanRateCents == null && (
-        <p className="muted small" style={{ margin: '4px 0 0' }}>Tip: set this property’s per-clean rate on the Service providers tab to pre-fill the daily fee.</p>
+        <p className="muted small" style={{ margin: '4px 0 0' }}>Tip: set this property’s per-clean rate under Menu › Team to pre-fill the daily fee.</p>
       )}
     </div>
   );

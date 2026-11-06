@@ -39,12 +39,10 @@ export default function GuestBookView({ onClose }) {
   return (
     <div className="invoices-view">
       <header className="topbar">
-        <button className="brand linklike" onClick={onClose} title="Back to the board">Simon<span>Stays</span></button>
-        <span className="host">Guest contact book</span>
+        <span className="host">Guests</span>
         <div className="spacer" />
         {msg && <span className="small" style={{ marginRight: 8 }}>{msg}</span>}
         <button className="ghost" disabled={busy} onClick={importFromBookings}>{busy ? 'Importing…' : '⤵ Import from bookings'}</button>
-        <button className="ghost" onClick={onClose}>🏠 Home</button>
       </header>
 
       <div className="gb-wrap">

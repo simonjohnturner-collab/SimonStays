@@ -51,12 +51,14 @@ app.get(['/report', '/report/damage'], (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, must-revalidate'); // cleaners always get the latest form logic
   res.type('html').send(reportHtml);
 });
-app.get(['/clean', '/report/clean'], (req, res) => {
+// Cleaners and contractors: /team/clean and /team/repair (no sign-in). The
+// older /clean and /repair links already in WhatsApp groups keep working.
+app.get(['/team/clean', '/clean', '/report/clean'], (req, res) => {
   res.setHeader('Content-Security-Policy', FORMS_CSP);
   res.setHeader('Cache-Control', 'no-cache, must-revalidate');
   res.type('html').send(cleanHtml);
 });
-app.get(['/repair', '/report/repair'], (req, res) => {
+app.get(['/team/repair', '/repair', '/report/repair'], (req, res) => {
   res.setHeader('Content-Security-Policy', FORMS_CSP);
   res.setHeader('Cache-Control', 'no-cache, must-revalidate');
   res.type('html').send(repairHtml);
@@ -74,6 +76,30 @@ const STAY_CSP = "default-src 'self'; img-src 'self' data: blob: https://server.
 const RAW_ADMIN = (process.env.ADMIN_URL || 'https://simonstays.onrender.com').trim().replace(/\/$/, '');
 const ADMIN_URL = /^https?:\/\//i.test(RAW_ADMIN) ? RAW_ADMIN : ('https://' + RAW_ADMIN);
 const stayHtml = fs.readFileSync(path.join(__dirname, 'pages/stay.html'), 'utf8').replace(/__ADMIN_URL__/g, ADMIN_URL);
+
+// Hosting: the host app, built into hosting-dist (scripts/build-hosting.js) and
+// served on this domain at /hosting — same origin as the guest site, so one
+// sign-in covers both and "Switch to hosting / travelling" is instant. If the
+// build is missing, send hosts to the old address instead of a blank page.
+const HOSTING_DIR = path.join(__dirname, '../hosting-dist');
+const HOSTING_INDEX = path.join(HOSTING_DIR, 'index.html');
+const hostingBuilt = () => fs.existsSync(HOSTING_INDEX);
+const HOSTING_CSP = "default-src 'self'; img-src 'self' data: blob: https://*.arcgisonline.com; " +
+  "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'self' https://cdnjs.cloudflare.com; " +
+  "font-src 'self' data: https://cdnjs.cloudflare.com; connect-src 'self' https://nominatim.openstreetmap.org; " +
+  "frame-src 'self' blob:; object-src 'none'; base-uri 'self'";
+// Lets the old static site check the new home is live before redirecting there.
+app.get('/hosting-ready', (req, res) => res.json({ ready: hostingBuilt() }));
+app.use('/hosting', (req, res, next) => {
+  if (!hostingBuilt()) return res.redirect(302, ADMIN_URL + (req.path === '/' ? '' : req.path));
+  res.setHeader('Content-Security-Policy', HOSTING_CSP);
+  next();
+}, express.static(HOSTING_DIR, { index: false, maxAge: '1y', immutable: true }));
+app.get(['/hosting', '/hosting/*'], (req, res) => {
+  // Any in-app address (/hosting/calendar, /hosting/reports/…) gets the app shell.
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  res.sendFile(HOSTING_INDEX);
+});
 // Terms & Conditions — a plain self-contained page (no external resources).
 const TERMS_CSP = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'";
 const termsHtml = fs.readFileSync(path.join(__dirname, 'pages/terms.html'), 'utf8');
@@ -134,7 +160,9 @@ app.get(['/privacy', '/privacy.html', '/privacy-policy'], (req, res) => {
   res.type('html').send(privacyHtml);
 });
 
-app.get(['/', '/stay', '/book'], (req, res) => {
+// Travelling: the guest site. Every screen has an address of its own; the page
+// opens the matching screen from the path (/trips/:id, /stays/:unitId, …).
+app.get(['/', '/stay', '/book', '/stays/:propertyId', '/stays/:propertyId/:unitId', '/trips', '/trips/:bookingId', '/messages'], (req, res) => {
   res.setHeader('Content-Security-Policy', STAY_CSP);
   res.setHeader('Cache-Control', 'no-cache, must-revalidate'); // always serve the latest shopfront (map tiles, checkout, etc.)
   res.type('html').send(stayHtml);

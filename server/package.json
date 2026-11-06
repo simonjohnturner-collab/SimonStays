@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
-    "build": "prisma generate",
+    "build": "prisma generate && node scripts/build-hosting.js",
     "postinstall": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "smoke": "node scripts/smoke.js"

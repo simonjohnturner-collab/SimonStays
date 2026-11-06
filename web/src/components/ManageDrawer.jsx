@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { apiBaseUrl } from '../api.js';
 
-// Hamburger menu with sub-screens: main → property / booking. Invoicing opens
-// the invoices workspace directly.
+// Side panel for the two jobs that need the whole property list at hand:
+// 'property' (add, rename, reorder properties and units; pricing groups) and
+// 'booking' (find any booking, or add one). Everything else lives under
+// Hosting › Menu (MenuView).
 export default function ManageDrawer({
   properties, bookingsByUnit, onClose,
   onAddProperty, onRenameProperty, onDeleteProperty,
   onAddUnit, onDeleteUnit, onOpenUnit, onOpenPricing,
-  onAddBooking, onAddFloating, onEditBooking, onOpenInvoices, onOpenListings, onOpenForms, onOpenCleaners, onOpenGuests, onOpenMessages, teachCount = 0, onOpenSmartLocks, onOpenAccount, onOpenBusiness, onOpenDocuments, onOpenPayments, onOpenMarket,
-  isAdmin, onOpenAdmin,
+  onAddBooking, onAddFloating, onEditBooking, initialView = 'property',
   onReorderProperties,
   groups = [], onAssignGroup, onCreateGroup,
 }) {
@@ -24,7 +24,7 @@ export default function ManageDrawer({
     if (value === '__new') { const g = await onCreateGroup(); if (g) onAssignGroup(unitId, g.id); return; }
     onAssignGroup(unitId, value || null);
   }
-  const [view, setView] = useState('main'); // 'main' | 'property' | 'booking'
+  const [view, setView] = useState(initialView); // 'property' | 'booking'
   const [pickUnit, setPickUnit] = useState('');
 
   const units = properties.flatMap((p) => p.units.map((u) => ({ ...u, label: `${p.name} · ${u.name}`, propertyName: p.name })));
@@ -37,36 +37,15 @@ export default function ManageDrawer({
   }));
   bookings.sort((a, b) => (a.checkIn < b.checkIn ? -1 : 1));
 
-  const title = view === 'property' ? 'Add or edit a property' : view === 'booking' ? 'Add or edit a booking' : 'Menu';
+  const title = view === 'property' ? 'Add or edit a property' : 'Add or edit a booking';
 
   return (
     <div className="overlay right" onClick={onClose}>
       <div className="drawer" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>{view !== 'main' ? <button className="del back" onClick={() => setView('main')}>←</button> : null}{title}</h3>
+          <h3>{title}</h3>
           <button className="x" onClick={onClose}>×</button>
         </div>
-
-        {view === 'main' && (
-          <div className="menu-main">
-            <button className="wide menu-item" onClick={() => setView('booking')}>📅 Add or edit a booking</button>
-            <button className="wide menu-item" onClick={onOpenListings}>🖼️ Listings</button>
-            <button className="wide menu-item" onClick={onOpenForms}>📋 Forms</button>
-            <button className="wide menu-item" onClick={onOpenDocuments}>📁 Documents</button>
-            <button className="wide menu-item" onClick={onOpenCleaners}>🧰 Service providers</button>
-            <button className="wide menu-item" onClick={onOpenGuests}>📇 Guest contact book</button>
-            {onOpenMessages && <button className="wide menu-item" onClick={onOpenMessages}>💬 Messaging &amp; Ask Simon{teachCount > 0 && <span className="msg-dot">{teachCount}</span>}</button>}
-            <button className="wide menu-item" onClick={onOpenSmartLocks}>🔒 SmartLock dashboard</button>
-            <button className="wide menu-item" onClick={onOpenPricing}>💲 Pricing</button>
-            <button className="wide menu-item" onClick={onOpenMarket}>📈 Market watch · The Vantage</button>
-            <button className="wide menu-item" onClick={onOpenInvoices}>🧾 Invoicing</button>
-            <button className="wide menu-item" onClick={onOpenBusiness}>🏢 Business details</button>
-            <button className="wide menu-item" onClick={onOpenAccount}>👤 Account</button>
-            <button className="wide menu-item" onClick={onOpenPayments}>💰 Payment history</button>
-            <a className="wide menu-item" href={`${apiBaseUrl().replace(/\/$/, '')}/stay`} target="_blank" rel="noreferrer">🛍️ View booking shopfront ↗</a>
-            {isAdmin && <button className="wide menu-item menu-admin" onClick={onOpenAdmin}>🛡️ SimonStays admin portal</button>}
-          </div>
-        )}
 
         {view === 'property' && (
           <div>

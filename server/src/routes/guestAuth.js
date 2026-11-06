@@ -9,7 +9,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const prisma = require('../lib/prisma');
 const { shownCheckOut, shownNights } = require('../utils/ical');
-const { signGuest } = require('../lib/jwt');
+const { signGuest, sign } = require('../lib/jwt');
 const { authGuest } = require('../middleware/auth');
 const { DEFAULT_CANCELLATION_POLICY } = require('../utils/policy');
 const payments = require('../utils/payments');
@@ -51,13 +51,45 @@ router.post('/login', async (req, res, next) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'email_and_password_required' });
-    const acct = await prisma.guestAccount.findUnique({ where: { email: String(email).trim().toLowerCase() } });
+    const norm = String(email).trim().toLowerCase();
+    let acct = await prisma.guestAccount.findUnique({ where: { email: norm } });
+    // One account: a host signing in to travel for the first time gets a guest
+    // side made from their hosting login. It starts unconfirmed, so trips booked
+    // under that email stay hidden until the emailed link is clicked.
+    if (!acct) {
+      const host = await prisma.host.findUnique({ where: { email: norm } });
+      if (host && await bcrypt.compare(password, host.passwordHash)) {
+        acct = await prisma.guestAccount.create({ data: { email: norm, passwordHash: host.passwordHash, name: host.name || null, phone: host.contactPhone || null } });
+        sendConfirmation(acct).catch(() => {});
+        return res.json({ token: signGuest(acct), account: publicAcct(acct), hostToken: sign(host) });
+      }
+    }
     if (!acct) return res.status(401).json({ error: 'invalid_credentials', message: 'Incorrect email or password.' });
     const ok = await bcrypt.compare(password, acct.passwordHash);
     if (!ok) return res.status(401).json({ error: 'invalid_credentials', message: 'Incorrect email or password.' });
     // Accounts from before emails were confirmed get their link when they next sign in.
     if (!acct.emailVerifiedAt && !sentWithin(acct, VERIFY_LOGIN_RESEND_MS)) sendConfirmation(acct).catch(() => {});
-    res.json({ token: signGuest(acct), account: publicAcct(acct) });
+    // Same password on the hosting side too → hand back that session as well, so
+    // "Switch to hosting" needs no second sign-in.
+    const host = await prisma.host.findUnique({ where: { email: norm } });
+    const hostToken = host && await bcrypt.compare(password, host.passwordHash) ? sign(host) : undefined;
+    res.json({ token: signGuest(acct), account: publicAcct(acct), hostToken });
+  } catch (e) { next(e); }
+});
+
+// POST /public/account/become-host — "Switch to hosting" for a guest with no
+// hosting account yet: open one with the same email, name and password. Only
+// for a confirmed email, so nobody can claim a hosting account for an address
+// they don't own.
+router.post('/become-host', authGuest, async (req, res, next) => {
+  try {
+    const acct = await prisma.guestAccount.findUnique({ where: { id: req.guestId } });
+    if (!acct) return res.status(404).json({ error: 'not_found' });
+    const existing = await prisma.host.findUnique({ where: { email: acct.email } });
+    if (existing) return res.status(409).json({ error: 'host_exists', message: 'You already have a hosting account. Sign in with your hosting password.' });
+    if (!acct.emailVerifiedAt) return res.status(403).json({ error: 'email_unverified', message: 'Please confirm your email first. We’ve sent you a link.' });
+    const host = await prisma.host.create({ data: { email: acct.email, passwordHash: acct.passwordHash, name: acct.name || null, contactPhone: acct.phone || null } });
+    res.status(201).json({ token: sign(host), host: { id: host.id, email: host.email, name: host.name } });
   } catch (e) { next(e); }
 });
 
@@ -215,6 +247,8 @@ function tripOf(b, acct) {
     paymentStatus: b.paymentStatus || null,
     propertyName: p ? p.name : null,
     unitName: u ? u.name : null,
+    unitId: u ? u.id : null, // for "Report damage" on the trip
+    hostId: p ? p.hostId : null,
     address: p ? (p.address || null) : null,
     checkIn: iso(b.checkIn),
     checkOut: iso(shownCheckOut(b)),
@@ -276,3 +310,6 @@ router.get('/trips', authGuest, async (req, res, next) => {
 });
 
 module.exports = router;
+
+// Used by /auth/guest-session when it opens a travelling side for a host.
+router.sendConfirmation = sendConfirmation;
