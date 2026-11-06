@@ -88,6 +88,26 @@ function reshapePurchasesAndDamage(fields) {
 //   • Purchases + Damaged-items sections are rebuilt to a canonical shape and moved
 //     to the end (see reshapePurchasesAndDamage)
 // Runs on startup; safe to run repeatedly (only writes when something changed).
+// Houses with a pool (the "House" template — 12 King, 4 Protea, 20 19th): the
+// Braai / outside section gains "Is the pool clean?" right after the braai check,
+// and its photo question asks for the pool as well as the braai. Keyed on the
+// braai question's id, so only templates with that outside section change. Adds
+// once; the photo label is only rewritten while it's still the original wording.
+const POOL_ID = 'h_pool';
+const OLD_BRAAI_PHOTO_LABEL = 'Please upload photos of the braai and drip tray';
+const POOL_BRAAI_PHOTO_LABEL = 'Please upload photos of the pool, braai and drip tray';
+function addPoolCheck(fields) {
+  if (!fields.some((f) => f && f.id === 'h_braai')) return fields;
+  const hasPool = fields.some((f) => f && f.id === POOL_ID);
+  const out = [];
+  for (const f of fields) {
+    if (f && f.id === 'h_braai_photos' && f.label === OLD_BRAAI_PHOTO_LABEL) out.push({ ...f, label: POOL_BRAAI_PHOTO_LABEL });
+    else out.push(f);
+    if (f && f.id === 'h_braai' && !hasPool) out.push({ id: POOL_ID, type: 'checkbox', label: 'Is the pool clean?', required: true });
+  }
+  return out;
+}
+
 async function normaliseCleanForms() {
   let templates;
   try { templates = await prisma.formTemplate.findMany({ where: { type: 'clean' } }); }
@@ -128,7 +148,7 @@ async function normaliseCleanForms() {
 
     // Rebuild the Purchases + Damaged-items sections (idempotent: only writes when
     // the resulting fields differ from what's stored).
-    const finalFields = reshapePurchasesAndDamage(out);
+    const finalFields = addPoolCheck(reshapePurchasesAndDamage(out));
     if (dirty || JSON.stringify(finalFields) !== JSON.stringify(fields)) {
       await prisma.formTemplate.update({ where: { id: t.id }, data: { fields: finalFields } });
       changed++;
