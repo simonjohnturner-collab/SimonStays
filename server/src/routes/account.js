@@ -70,6 +70,38 @@ router.get('/payments', async (req, res) => {
   res.json({ payments, totalGrossCents, totalFeeCents, totalPaidOutCents, agencyFeePercent: AGENCY_FEE_PERCENT });
 });
 
+// GET /account/new-bookings?after=ISO — this host's bookings confirmed since
+// `after` (at most a day back), for Hosting's "ka-ching": the sound and the card.
+// SimonStays bookings come with what the host earns after the fee.
+router.get('/new-bookings', async (req, res) => {
+  const now = new Date();
+  const asked = new Date(String(req.query.after || ''));
+  const after = Number.isNaN(asked.getTime()) ? now : new Date(Math.max(asked.getTime(), now.getTime() - 864e5));
+  const bookings = await prisma.booking.findMany({
+    where: {
+      status: 'confirmed', confirmedAt: { gt: after, lte: now },
+      OR: [{ hostId: req.hostId }, { unit: { property: { hostId: req.hostId } } }],
+    },
+    include: { unit: { include: { property: { select: { name: true } } } } },
+    orderBy: { confirmedAt: 'asc' }, take: 20,
+  });
+  const iso = (d) => new Date(d).toISOString().slice(0, 10);
+  res.json({
+    now: now.toISOString(),
+    bookings: bookings.map((b) => {
+      const simonStays = b.source === 'website';
+      const grossCents = simonStays ? grossOf(b) : null;
+      return {
+        id: b.id, unitId: b.unitId, source: b.source, simonStays, confirmedAt: b.confirmedAt,
+        place: [b.unit?.property?.name, b.unit?.name && `Unit ${b.unit.name}`].filter(Boolean).join(' · '),
+        guestName: b.guestName || null, checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
+        nights: Math.max(0, Math.round((new Date(b.checkOut) - new Date(b.checkIn)) / 864e5)),
+        grossCents, earnCents: simonStays ? grossCents - feeOf(grossCents) : null,
+      };
+    }),
+  });
+});
+
 // POST /account/photo { dataBase64, contentType } — set the host's profile photo
 // (replaces any existing one). DELETE removes it.
 router.post('/photo', async (req, res) => {

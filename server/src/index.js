@@ -25,6 +25,9 @@ app.use('/feed', require('./routes/feed'));
 // Photos: GET /photos/:id is public (image bytes); mount before the auth'd
 // catch-all routers so it isn't shadowed. Its write routes auth themselves.
 app.use('/photos', require('./routes/photos'));
+// Sounds: the SimonStays booking sound (scripts/make-booking-sound.js). Public, so
+// Hosting can play it and hosts can download it as their WhatsApp tone.
+app.use('/sounds', express.static(path.join(__dirname, '../public/sounds'), { maxAge: '7d' }));
 app.use('/listings', require('./routes/listings'));
 // Public guest accounts (shopfront login → "my trips"). Mount before /public so
 // its paths are matched first (the /public router has no /account/* routes).

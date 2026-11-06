@@ -14,6 +14,7 @@ import ListingsView from './ListingsView.jsx';
 import BoardSearch from './BoardSearch.jsx';
 import FormsView from './FormsView.jsx';
 import HostNav from './HostNav.jsx';
+import BookingCelebration from './BookingCelebration.jsx';
 import MenuView from './MenuView.jsx';
 import TodayView from './TodayView.jsx';
 import FormChime from './FormChime.jsx';
@@ -373,6 +374,7 @@ export default function Main() {
   return (
     <div className="host-shell">
       <FormChime onOpen={openFormsSubmission} onOpenMessage={openMessage} />
+      <BookingCelebration hostId={host?.id} />
       {impersonating && (
         <div className="imp-banner">
           <span>👁 Viewing as <b>{host?.name || host?.email}</b> — you are signed in as this host.</span>

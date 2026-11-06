@@ -30,6 +30,15 @@ function hostAlert(b) {
   const amount = b.totalCents != null ? b.totalCents : b.quotedCents;
   const source = [SOURCE_LABEL[b.source] || b.source, b.ref || b.resCode, amount != null ? rand(amount) : null].filter(Boolean).join(' · ');
   const guest = b.guestName || 'Guest';
+  if (b.source === 'website') {
+    // A SimonStays booking: lead with what the host earns, and invite another listing.
+    const { grossOf, feeOf } = require('./fees');
+    const gross = grossOf(b);
+    const money = gross ? `${rand(gross)} booking · you earn ${rand(gross - feeOf(gross))}` : source;
+    const site = (process.env.SHOPFRONT_URL || 'https://simonstays.co.za').trim().replace(/\/$/, '');
+    const body = `💸 Ka-ching! New SimonStays booking\n🏠 ${place}\n👤 ${guest}\n📅 ${dates}\n💰 ${money}${b.ref ? `\n🔖 ${b.ref}` : ''}\n\nGot another place? List it: ${site}/hosting/listings`;
+    return { body, contentVariables: { 1: place, 2: guest, 3: dates, 4: money } };
+  }
   const body = `✅ Booking confirmed — ${place}\n👤 ${guest}\n📅 ${dates}\n💳 ${source}`;
   return { body, contentVariables: { 1: place, 2: guest, 3: dates, 4: source } };
 }

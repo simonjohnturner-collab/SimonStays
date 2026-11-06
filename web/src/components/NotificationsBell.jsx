@@ -83,6 +83,7 @@ export default function NotificationsBell({ onOpen, onOpenMessage, onCount }) {
           <div className="notif-head">
             Alerts{newCount > 0 ? <span className="muted small"> · {newCount} new</span> : ''}
             <button className="notif-mute" title="Play a test chime" onClick={testSound}>🔊 Test</button>
+            <button className="notif-mute" title="Play the sound you hear when a SimonStays booking comes in" onClick={() => window.dispatchEvent(new Event('ss:test-booking-sound'))}>💸</button>
             <button className="notif-mute" title={muted ? 'Sounds off — click to turn on' : 'Sounds on — click to mute'} onClick={toggleMute}>{muted ? '🔕' : '🔔'}</button>
           </div>
           {items.length === 0 && messages.length === 0 && <div className="notif-empty">Nothing yet. New guest messages appear here, along with reports sent from the forms links.</div>}
