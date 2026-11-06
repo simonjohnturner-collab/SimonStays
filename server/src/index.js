@@ -108,6 +108,13 @@ app.get(['/terms', '/terms.html', '/terms-and-conditions'], (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, must-revalidate');
   res.type('html').send(termsHtml);
 });
+// "Why host with SimonStays": the sales page for owners, linked from the guest site.
+const hostPitchHtml = fs.readFileSync(path.join(__dirname, 'pages/host.html'), 'utf8');
+app.get(['/host', '/why-host', '/become-a-host'], (req, res) => {
+  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'");
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  res.type('html').send(hostPitchHtml);
+});
 // A custom invoice from a conversation: guests open it from the message or email and pay.
 const offerInvoiceHtml = fs.readFileSync(path.join(__dirname, 'pages/invoice.html'), 'utf8');
 app.get('/invoice/:token', (req, res) => {

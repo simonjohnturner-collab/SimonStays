@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Host with SimonStays</title>
+<meta name="description" content="List your property on SimonStays. Synced calendars, guest payments, cleaner reports and invoicing in one place, for 10% of SimonStays bookings only." />
+<link rel="icon" href="/favicon.svg" />
+<style>
+  /* Same family as the guest site (green, system type) with a bolder sales layout:
+     hero + live calendar sketch, feature grid, fee calculator, three steps, FAQ. */
+  :root{
+    --green:#1a7a3a; --green-d:#14622f; --green-soft:#e6f2ea; --green-line:#cfe6d6;
+    --ink:#1b2129; --muted:#5f6b76; --line:#e3e7ea; --bg:#f7f8f6; --card:#fff;
+    --air:#e0565b; --bdc:#2f5fb3; --ls:#e08a1e; --ss:#1a7a3a;
+  }
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  @media (prefers-reduced-motion: reduce){ html{ scroll-behavior:auto; } *{ animation:none !important; transition:none !important; } }
+  body{ margin:0; font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); line-height:1.55; }
+  a{ color:var(--green); text-decoration:none; }
+  .in{ max-width:1120px; margin:0 auto; padding-left:max(18px, env(safe-area-inset-left)); padding-right:max(18px, env(safe-area-inset-right)); }
+  h1,h2,h3{ margin:0; line-height:1.12; text-wrap:balance; letter-spacing:-.02em; }
+
+  header.top{ background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:30; }
+  .top-in{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding-block:12px; }
+  .brand{ font-weight:800; font-size:22px; color:var(--green); letter-spacing:-.5px; }
+  .brand span{ color:var(--ink); }
+  .top-links{ display:flex; gap:8px; align-items:center; }
+  .pill{ border:1px solid #d6dbd8; border-radius:999px; padding:7px 14px; font-weight:600; font-size:14px; color:var(--ink); white-space:nowrap; }
+  .pill:hover{ background:#f1f3f2; }
+  .btn{ display:inline-flex; align-items:center; gap:8px; background:var(--green); color:#fff; border-radius:10px; padding:13px 20px; font-weight:700; font-size:16px; }
+  .btn:hover{ background:var(--green-d); }
+  .btn.alt{ background:#fff; color:var(--ink); border:1px solid #d6dbd8; }
+  .btn.alt:hover{ background:#f1f3f2; }
+  :focus-visible{ outline:3px solid #8cc9a0; outline-offset:2px; border-radius:8px; }
+
+  /* Hero */
+  .hero{ background:linear-gradient(180deg,#fff 0%, var(--bg) 100%); border-bottom:1px solid var(--line); }
+  .hero-in{ display:grid; grid-template-columns:1.05fr .95fr; gap:40px; align-items:center; padding-block:56px 60px; }
+  .eyebrow{ font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--green); }
+  .hero h1{ font-size:clamp(34px,5vw,54px); margin:10px 0 16px; }
+  .hero h1 em{ font-style:normal; color:var(--green); }
+  .lede{ font-size:19px; color:var(--muted); max-width:34em; margin:0 0 26px; }
+  .cta-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .trust{ display:flex; gap:18px; flex-wrap:wrap; margin-top:22px; font-size:14px; color:var(--muted); }
+  .trust b{ color:var(--ink); }
+
+  /* Calendar sketch: three channels feeding one board */
+  .board{ background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:0 18px 50px rgba(20,60,35,.10); padding:16px; min-width:0; }
+  .board-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .board-head b{ font-size:15px; }
+  .synced{ font-size:12px; font-weight:700; color:var(--green); background:var(--green-soft); border-radius:999px; padding:3px 10px; }
+  .synced::before{ content:""; display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green); margin-right:6px; vertical-align:1px; animation:pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse{ 50%{ opacity:.25; } }
+  .days{ display:grid; grid-template-columns:62px repeat(10,1fr); font-size:11px; color:var(--muted); text-align:center; margin-bottom:4px; }
+  .row{ display:grid; grid-template-columns:62px repeat(10,1fr); align-items:center; height:34px; border-top:1px solid #f0f2f1; position:relative; }
+  .row .u{ font-size:12px; font-weight:700; text-align:left; }
+  .bar{ position:absolute; top:6px; height:22px; border-radius:6px; color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; padding:0 8px; white-space:nowrap; overflow:hidden; }
+  .bar.air{ background:var(--air); } .bar.bdc{ background:var(--bdc); } .bar.ls{ background:var(--ls); } .bar.ss{ background:var(--ss); }
+  .legend{ display:flex; gap:12px; flex-wrap:wrap; margin-top:12px; font-size:12px; color:var(--muted); }
+  .legend i{ display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
+
+  section.band{ padding-block:64px; }
+  .sec-head{ max-width:640px; margin-bottom:30px; }
+  .sec-head h2{ font-size:clamp(28px,3.6vw,38px); margin:8px 0 10px; }
+  .sec-head p{ color:var(--muted); font-size:17px; margin:0; }
+
+  /* Features */
+  .features{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  .feat{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:22px; display:flex; flex-direction:column; gap:10px; min-width:0; }
+  .feat .ic{ width:44px; height:44px; border-radius:12px; background:var(--green-soft); color:var(--green); display:grid; place-items:center; }
+  .feat .ic svg{ width:24px; height:24px; }
+  .feat h3{ font-size:19px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .feat p{ margin:0; color:var(--muted); }
+  .feat ul{ margin:2px 0 0; padding-left:18px; color:var(--muted); font-size:15px; }
+  .soon{ font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:#9a5b00; background:#fff1d6; border-radius:999px; padding:3px 9px; }
+  .feat.wide{ grid-column:span 3; flex-direction:row; align-items:center; gap:22px; background:var(--green); color:#fff; border:0; }
+  .feat.wide .ic{ background:rgba(255,255,255,.16); color:#fff; flex:none; }
+  .feat.wide p{ color:#d9efe0; }
+  .feat.wide h3{ font-size:22px; }
+
+  /* Fee */
+  .fee{ background:#fff; border-block:1px solid var(--line); }
+  .fee-grid{ display:grid; grid-template-columns:.9fr 1.1fr; gap:40px; align-items:center; }
+  .big-pct{ font-size:clamp(84px,12vw,140px); font-weight:800; letter-spacing:-.05em; line-height:.9; color:var(--green); }
+  .big-pct small{ display:block; font-size:22px; letter-spacing:0; color:var(--ink); margin-top:10px; font-weight:700; }
+  .fee-points{ list-style:none; padding:0; margin:18px 0 0; display:flex; flex-direction:column; gap:10px; }
+  .fee-points li{ padding-left:28px; position:relative; }
+  .fee-points li::before{ content:"✓"; position:absolute; left:0; top:0; width:20px; height:20px; border-radius:50%; background:var(--green-soft); color:var(--green); font-weight:800; font-size:12px; display:grid; place-items:center; }
+  .calc{ background:var(--bg); border:1px solid var(--line); border-radius:16px; padding:22px; }
+  .calc label{ font-weight:700; display:block; margin-bottom:8px; }
+  .calc-in{ display:flex; align-items:center; gap:10px; }
+  .calc-in span{ font-weight:800; font-size:22px; }
+  .calc input[type=number]{ font:inherit; font-size:22px; font-weight:700; padding:10px 12px; border:1px solid #cfd6d2; border-radius:10px; width:100%; background:#fff; font-variant-numeric:tabular-nums; }
+  .calc input[type=range]{ width:100%; margin:16px 0 6px; accent-color:var(--green); }
+  .split{ display:flex; height:16px; border-radius:999px; overflow:hidden; margin:14px 0 16px; }
+  .split .you{ background:var(--green); flex:9; } .split .us{ background:#a8d5b6; flex:1; }
+  .calc-rows{ display:grid; gap:8px; font-variant-numeric:tabular-nums; }
+  .calc-rows div{ display:flex; justify-content:space-between; gap:12px; }
+  .calc-rows .you-get{ border-top:1px solid #d6dbd8; padding-top:10px; font-size:20px; font-weight:800; }
+  .calc-rows .you-get b{ color:var(--green); }
+  .calc .note{ font-size:13px; color:var(--muted); margin:12px 0 0; }
+
+  /* Steps */
+  .steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; counter-reset:s; }
+  .step{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:22px; }
+  .step .n{ font-size:44px; font-weight:800; color:var(--green); line-height:1; letter-spacing:-.04em; }
+  .step h3{ font-size:18px; margin:10px 0 6px; }
+  .step p{ margin:0; color:var(--muted); }
+
+  /* FAQ */
+  .faq{ display:grid; grid-template-columns:1fr 1fr; gap:12px 28px; }
+  .faq details{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .faq summary{ font-weight:700; cursor:pointer; list-style:none; display:flex; justify-content:space-between; gap:12px; }
+  .faq summary::after{ content:"+"; color:var(--green); font-weight:800; }
+  .faq details[open] summary::after{ content:"–"; }
+  .faq p{ margin:10px 0 0; color:var(--muted); }
+
+  .closing{ background:var(--green); color:#fff; text-align:center; }
+  .closing h2{ font-size:clamp(28px,4vw,42px); margin-bottom:10px; }
+  .closing p{ color:#d9efe0; font-size:18px; margin:0 auto 24px; max-width:36em; }
+  .closing .btn{ background:#fff; color:var(--green-d); }
+  .closing .btn:hover{ background:#eef6f0; }
+  .closing .btn.alt{ background:transparent; color:#fff; border-color:rgba(255,255,255,.5); }
+  .closing .btn.alt:hover{ background:rgba(255,255,255,.1); }
+  .closing .cta-row{ justify-content:center; }
+
+  footer{ padding-block:28px; color:var(--muted); font-size:14px; }
+  footer p{ margin:4px 0; }
+
+  @media (max-width:900px){
+    .hero-in, .fee-grid{ grid-template-columns:1fr; gap:30px; }
+    .features{ grid-template-columns:1fr 1fr; }
+    .feat.wide{ grid-column:span 2; }
+    .steps{ grid-template-columns:1fr; }
+    .faq{ grid-template-columns:1fr; }
+  }
+  @media (max-width:600px){
+    .hero-in{ padding-block:36px 40px; }
+    .features{ grid-template-columns:1fr; }
+    .feat.wide{ grid-column:auto; flex-direction:column; align-items:flex-start; }
+    .top-links .pill.hide-sm{ display:none; }
+    section.band{ padding-block:46px; }
+    .days, .row{ grid-template-columns:44px repeat(10,1fr); }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="in top-in">
+    <a class="brand" href="/">Simon<span>Stays</span></a>
+    <nav class="top-links" aria-label="Main">
+      <a class="pill hide-sm" href="/">Find a stay</a>
+      <a class="pill" href="/hosting/">Sign in to hosting</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="in hero-in">
+    <div>
+      <div class="eyebrow">Host with SimonStays</div>
+      <h1>Your calendar, your guests, your cleaners. <em>One place.</em></h1>
+      <p class="lede">SimonStays keeps your Airbnb, Booking.com and LekkeSlaap calendars in step, takes your guests’ payments, and keeps your cleaners accountable. You keep 90% of every SimonStays booking.</p>
+      <div class="cta-row">
+        <a class="btn" href="/hosting/?signup">Start hosting →</a>
+        <a class="btn alt" href="#features">See what’s included</a>
+      </div>
+      <div class="trust">
+        <span><b>10%</b> on SimonStays bookings only</span>
+        <span><b>No</b> monthly fee</span>
+        <span><b>Keep</b> your Airbnb listing</span>
+      </div>
+    </div>
+
+    <div class="board" aria-label="Example: bookings from three channels on one SimonStays calendar">
+      <div class="board-head"><b>Your calendar · November</b><span class="synced">Synced</span></div>
+      <div class="days"><span></span><span>10</span><span>11</span><span>12</span><span>13</span><span>14</span><span>15</span><span>16</span><span>17</span><span>18</span><span>19</span></div>
+      <div class="row"><span class="u">Unit 202</span><span class="bar air" style="left:calc(62px + (100% - 62px)*0/10); width:calc((100% - 62px)*3/10)">Airbnb</span><span class="bar ss" style="left:calc(62px + (100% - 62px)*4/10); width:calc((100% - 62px)*5/10)">SimonStays</span></div>
+      <div class="row"><span class="u">Unit 409</span><span class="bar bdc" style="left:calc(62px + (100% - 62px)*1/10); width:calc((100% - 62px)*4/10)">Booking.com</span><span class="bar air" style="left:calc(62px + (100% - 62px)*6/10); width:calc((100% - 62px)*4/10)">Airbnb</span></div>
+      <div class="row"><span class="u">Unit 505</span><span class="bar ss" style="left:calc(62px + (100% - 62px)*0/10); width:calc((100% - 62px)*2/10)">SimonStays</span><span class="bar ls" style="left:calc(62px + (100% - 62px)*3/10); width:calc((100% - 62px)*5/10)">LekkeSlaap</span></div>
+      <div class="row"><span class="u">House</span><span class="bar ss" style="left:calc(62px + (100% - 62px)*2/10); width:calc((100% - 62px)*6/10)">SimonStays · paid</span></div>
+      <div class="legend"><span><i style="background:var(--air)"></i>Airbnb</span><span><i style="background:var(--bdc)"></i>Booking.com</span><span><i style="background:var(--ls)"></i>LekkeSlaap</span><span><i style="background:var(--ss)"></i>SimonStays</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="features">
+  <div class="in">
+    <div class="sec-head">
+      <div class="eyebrow">Why host with SimonStays</div>
+      <h2>Everything a short-stay host juggles, handled</h2>
+      <p>Built by a host with apartments and houses in Johannesburg and Plettenberg Bay, for the jobs that eat your week.</p>
+    </div>
+
+    <div class="features">
+      <article class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M3 12A9 9 0 0 1 18.5 5.8"/><polyline points="18 2 18.5 5.8 14.8 6.3"/><polyline points="6 22 5.5 18.2 9.2 17.7"/></svg></div>
+        <h3>Calendar synchronisation</h3>
+        <p>Connect Airbnb, Booking.com and LekkeSlaap once. Bookings flow in, and your blocked dates flow back out, so a night sold on one channel closes on the others.</p>
+      </article>
+
+      <article class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg></div>
+        <h3>Guest payments taken for you</h3>
+        <p>Guests pay by card when they book. Dates are only held once the money is in, deposits and balances are tracked, and we pay you out.</p>
+      </article>
+
+      <article class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M6 21V10l6-6 6 6v11"/><path d="M10 21v-5h4v5"/><path d="M15 3l2 2"/></svg></div>
+        <h3>Cleaner management</h3>
+        <ul>
+          <li>A reminder to your cleaner the night before each checkout</li>
+          <li>Room-by-room checklist with photos on their phone, no app or login</li>
+          <li>Till slips read automatically, so you see what was bought and what you owe</li>
+        </ul>
+      </article>
+
+      <article class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><rect x="7" y="12" width="4" height="3" rx=".5"/></svg></div>
+        <h3>Calendar management</h3>
+        <p>Every unit on one board. Add direct bookings, move dates, set your own rates with weekend and seasonal pricing, and see today’s checkouts and check-ins at a glance.</p>
+      </article>
+
+      <article class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.5"/></svg></div>
+        <h3>Smart lock integration <span class="soon">Soon</span></h3>
+        <p>Each guest gets their own door code that only works for their stay. No key handovers, no codes left lying around.</p>
+      </article>
+
+      <article class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><polyline points="15 2 15 7 20 7"/><line x1="9" y1="13" x2="16" y2="13"/><line x1="9" y1="17" x2="14" y2="17"/></svg></div>
+        <h3>Invoicing</h3>
+        <p>Professional invoices with your company and bank details, emailed to guests in a click. Extras and date changes become a new invoice the guest can pay online.</p>
+      </article>
+
+      <article class="feat wide">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg></div>
+        <div>
+          <h3>Only 10% of each SimonStays booking</h3>
+          <p>No sign-up cost and no monthly subscription. You pay only when SimonStays brings you a paying guest. Your Airbnb and direct bookings carry no SimonStays fee.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="band fee" id="fee">
+  <div class="in fee-grid">
+    <div>
+      <div class="eyebrow">Simple pricing</div>
+      <div class="big-pct">10%<small>per booking</small></div>
+      <ul class="fee-points">
+        <li>Only on bookings guests make and pay for on SimonStays</li>
+        <li>Nothing on your Airbnb, Booking.com or direct bookings</li>
+        <li>Calendar sync, cleaner reports and invoicing included</li>
+        <li>Every payout itemised: booking, fee, what you’re paid</li>
+      </ul>
+    </div>
+    <div class="calc">
+      <label for="amt">Try it: what a guest pays for their stay</label>
+      <div class="calc-in"><span>R</span><input id="amt" type="number" min="0" step="100" value="6000" inputmode="numeric" /></div>
+      <input id="amtRange" type="range" min="500" max="50000" step="500" value="6000" aria-label="Booking amount" />
+      <div class="split" aria-hidden="true"><div class="you"></div><div class="us"></div></div>
+      <div class="calc-rows" aria-live="polite">
+        <div><span>Booking</span><span id="cBook">R6,000.00</span></div>
+        <div><span>SimonStays fee (10%)</span><span id="cFee">−R600.00</span></div>
+        <div class="you-get"><span>You keep</span><b id="cYou">R5,400.00</b></div>
+      </div>
+      <p class="note">A refundable breakage deposit isn’t a booking fee, so it isn’t included here.</p>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="how">
+  <div class="in">
+    <div class="sec-head">
+      <div class="eyebrow">Getting started</div>
+      <h2>Live in an afternoon</h2>
+    </div>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><h3>Create your account</h3><p>One login for hosting and travelling. Already booked a stay with us? Use the same account.</p></div>
+      <div class="step"><div class="n">2</div><h3>Add your place</h3><p>Photos, description and prices, then paste the calendar link from Airbnb or Booking.com so your dates are synced from day one.</p></div>
+      <div class="step"><div class="n">3</div><h3>Take bookings</h3><p>Guests book and pay on SimonStays, your cleaners get their reminders, and you see it all under Today.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="faq" style="padding-top:0">
+  <div class="in">
+    <div class="sec-head"><h2>Questions hosts ask</h2></div>
+    <div class="faq">
+      <details><summary>Do I have to leave Airbnb?</summary><p>No. Most hosts keep their Airbnb and Booking.com listings. SimonStays syncs the calendars so the same night is never sold twice, and brings you extra direct bookings on top.</p></details>
+      <details><summary>What does the 10% cover?</summary><p>Taking the guest’s card payment, holding the dates only once they’ve paid, guest messages and invoices, and your payout. The hosting tools are included.</p></details>
+      <details><summary>Do my cleaners need an app?</summary><p>No. They get a link on WhatsApp and fill in the checklist on their phone, with photos. No password to remember.</p></details>
+      <details><summary>Can I still take my own direct bookings?</summary><p>Yes. Add them to your calendar yourself and send the guest an invoice from SimonStays. There’s no SimonStays fee on those.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="band closing">
+  <div class="in">
+    <h2>Ready to host with SimonStays?</h2>
+    <p>Set up your first property today. You only pay when a SimonStays guest books.</p>
+    <div class="cta-row">
+      <a class="btn" href="/hosting/?signup">Start hosting →</a>
+      <a class="btn alt" href="/">Browse stays first</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="in">
+    <p><b>SimonStays</b> is a trading name owned, controlled and managed by <b>Catwalk Investments</b> (registration number 1999/010697/07).</p>
+    <p><a href="/privacy">Privacy Policy</a> &middot; <a href="/terms">Terms &amp; Conditions</a> &middot; Questions? <a href="mailto:support@simonstays.co.za">support@simonstays.co.za</a> &middot; 078 511 9336</p>
+  </div>
+</footer>
+
+<script>
+  (function(){
+    var FEE = 0.10;
+    var amt = document.getElementById('amt'), rng = document.getElementById('amtRange');
+    function rand(n){ return 'R' + n.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function show(v, from){
+      var n = Math.max(0, Number(v) || 0);
+      var fee = Math.round(n * FEE * 100) / 100;
+      document.getElementById('cBook').textContent = rand(n);
+      document.getElementById('cFee').textContent = '−' + rand(fee);
+      document.getElementById('cYou').textContent = rand(n - fee);
+      if (from !== 'amt') amt.value = n;
+      if (from !== 'rng') rng.value = Math.min(Number(rng.max), Math.max(Number(rng.min), n));
+    }
+    amt.addEventListener('input', function(){ show(amt.value, 'amt'); });
+    rng.addEventListener('input', function(){ show(rng.value, 'rng'); });
+    show(amt.value);
+  })();
+</script>
+</body>
+</html>

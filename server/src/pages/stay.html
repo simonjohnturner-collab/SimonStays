@@ -24,11 +24,24 @@
   .brand span{ color:var(--ink); }
   .become-host{ background:#fff; color:var(--ink); border:1px solid #d6dbd8; border-radius:999px; padding:7px 14px; font-weight:600; font-size:14px; white-space:nowrap; }
   .become-host:hover{ background:#f1f3f2; }
-  .host-cta{ max-width:1120px; margin:30px auto 0; padding:22px; background:#eef6f0; border:1px solid #cfe6d6; border-radius:14px; text-align:center; }
-  .host-cta h3{ margin:0 0 6px; }
-  .host-cta p{ margin:0 0 12px; color:#374151; }
-  .host-cta a{ display:inline-block; background:var(--green); color:#fff; border-radius:8px; padding:10px 18px; font-weight:600; }
-  .host-cta a:hover{ background:var(--green-d); }
+  .host-cta{ max-width:1120px; margin:34px auto 0; padding:26px; background:#eef6f0; border:1px solid #cfe6d6; border-radius:16px; display:flex; flex-direction:column; gap:18px; }
+  .host-cta h3{ margin:0 0 6px; font-size:24px; letter-spacing:-.3px; }
+  .host-cta p{ margin:0; color:#374151; }
+  .hc-list{ list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .hc-list li{ background:#fff; border:1px solid #d7eadd; border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:2px; }
+  .hc-list li b{ color:var(--green-d); }
+  .hc-list li em{ font-style:normal; font-size:12px; color:#9a5b00; }
+  .hc-list li span{ font-size:14px; color:#4b5563; }
+  .hc-foot{ display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+  .hc-fee{ font-size:16px; }
+  .hc-fee b{ color:var(--green-d); font-size:20px; }
+  .hc-btns{ display:flex; gap:8px; flex-wrap:wrap; }
+  .host-cta .hc-btns a{ display:inline-block; background:var(--green); color:#fff; border-radius:8px; padding:10px 18px; font-weight:600; }
+  .host-cta .hc-btns a:hover{ background:var(--green-d); }
+  .host-cta .hc-btns a.hc-more{ background:#fff; color:var(--green-d); border:1px solid #cfe6d6; }
+  .host-cta .hc-btns a.hc-more:hover{ background:#f6fbf7; }
+  @media(max-width:820px){ .hc-list{ grid-template-columns:1fr 1fr; } }
+  @media(max-width:520px){ .hc-list{ grid-template-columns:1fr; } }
   .site-foot{ border-top:1px solid var(--line); background:#fafafa; }
   .foot-in{ max-width:1120px; margin:0 auto; padding:20px 18px 40px; color:var(--muted); font-size:13px; line-height:1.6; }
   .foot-in p{ margin:0 0 6px; }
@@ -276,17 +289,30 @@
   <div id="results" class="grid"></div>
   <div id="map" style="display:none"></div>
 
-  <div class="host-cta">
-    <h3>Own a property? List it on SimonStays.</h3>
-    <p>We take the bookings and payments and pay you out — you manage your own listings, prices and calendar.</p>
-    <a href="/hosting/?signup">Start hosting</a>
-  </div>
+  <section class="host-cta" aria-labelledby="whyHost">
+    <div class="hc-head">
+      <h3 id="whyHost">Why use SimonStays for hosting?</h3>
+      <p>Own a flat or a house? We take the bookings and payments and pay you out. You get the tools to run it.</p>
+    </div>
+    <ul class="hc-list">
+      <li><b>Calendar sync</b><span>Airbnb, Booking.com and LekkeSlaap kept in step</span></li>
+      <li><b>Guest payments</b><span>Card payments taken for you; dates held once paid</span></li>
+      <li><b>Cleaner management</b><span>Reminders, photo checklists, till slips read for you</span></li>
+      <li><b>Calendar management</b><span>Every unit on one board, with your own pricing</span></li>
+      <li><b>Smart locks <em>(soon)</em></b><span>A door code for each guest’s stay</span></li>
+      <li><b>Invoicing</b><span>Invoices emailed and paid online</span></li>
+    </ul>
+    <div class="hc-foot">
+      <div class="hc-fee"><b>Only 10%</b> of each SimonStays booking. No monthly fee.</div>
+      <div class="hc-btns"><a class="hc-more" href="/host">See why hosts choose us →</a><a href="/hosting/?signup">Start hosting</a></div>
+    </div>
+  </section>
 </div>
 
 <footer class="site-foot">
   <div class="foot-in">
     <p><b>SimonStays</b> is a trading name owned, controlled and managed by <b>Catwalk Investments</b> (registration number 1999/010697/07).</p>
-    <p><a href="/privacy">Privacy Policy</a> &middot; <a href="/terms#cancellation">Cancellation &amp; Refund Policy</a> &middot; <a href="/terms">Terms &amp; Conditions</a></p>
+    <p><a href="/host">Host with SimonStays</a> &middot; <a href="/privacy">Privacy Policy</a> &middot; <a href="/terms#cancellation">Cancellation &amp; Refund Policy</a> &middot; <a href="/terms">Terms &amp; Conditions</a></p>
     <p>Contact us: <a href="mailto:support@simonstays.co.za">support@simonstays.co.za</a> &middot; <a href="tel:+27785119336">078 511 9336</a> &middot; 23 Firenza, Pam Road, Benmore Gardens</p>
   </div>
 </footer>
