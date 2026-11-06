@@ -341,8 +341,8 @@
   // dark or tiny to read — we tell them there and then to retake it. Deliberately
   // lenient (cleaners have cheap phones) and FAIL-OPEN: if the browser can't decode
   // or measure the image (some in-app webviews taint the canvas), we allow it
-  // rather than wrongly block. `strict` (invoices) demands a bit more sharpness.
-  var BLUR_MIN = 42, BLUR_MIN_STRICT = 85, MIN_SIDE = 480, DARK_MAX = 38, BRIGHT_MAX = 249;
+  // rather than wrongly block. `strict` (invoices) skips the blur test entirely.
+  var BLUR_MIN = 42, MIN_SIDE = 480, DARK_MAX = 38, BRIGHT_MAX = 249;
   function assessPhoto(file, strict) {
     return new Promise(function (resolve) {
       var img = new Image(), url = URL.createObjectURL(file), done = false;
@@ -371,7 +371,10 @@
             ls += lap; lsq += lap * lap; cnt++;
           }
           var lvar = cnt ? (lsq / cnt) - (ls / cnt) * (ls / cnt) : 0;
-          if (lvar < (strict ? BLUR_MIN_STRICT : BLUR_MIN)) return fail('too blurry');
+          // Receipts skip the blur check: the AI reader copes with soft thermal slips
+          // far better than this measure does, and an unreadable one can still be
+          // submitted (the host totals it), so blocking here only stranded cleaners.
+          if (!strict && lvar < BLUR_MIN) return fail('too blurry');
           return resolve({ ok: true });
         } catch (e) { allow(); }
       };

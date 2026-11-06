@@ -211,7 +211,9 @@ async function readReceipts(client, photoGroup) {
   // New shape: { receipts: [...] }. Tolerate the old single-object shape too.
   let list = data && Array.isArray(data.receipts) ? data.receipts
     : (data && Array.isArray(data.items) ? [data] : []);
-  list = list.filter((r) => r && Array.isArray(r.items));
+  // Drop empty "receipts" (no items, no total) — e.g. the edge of a second slip
+  // caught in the frame — so they don't show as a stray R0 receipt.
+  list = list.filter((r) => r && Array.isArray(r.items) && (r.items.length || Number(r.totalCents) > 0));
   list.forEach((r) => { if (!r.currency) r.currency = currency; });
   return { receipts: list, usageIn: resp.usage ? resp.usage.input_tokens : 0, usageOut: resp.usage ? resp.usage.output_tokens : 0 };
 }
