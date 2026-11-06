@@ -309,6 +309,21 @@ router.get('/trips', authGuest, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /public/account/trips/:bookingId/invoice — the paper invoice for this trip.
+// Only the booker sees it: friends invited to a trip never see prices.
+router.get('/trips/:bookingId/invoice', authGuest, async (req, res, next) => {
+  try {
+    const acct = await prisma.guestAccount.findUnique({ where: { id: req.guestId } });
+    if (!acct) return res.status(404).json({ error: 'not_found' });
+    const { guestInvoice } = require('../utils/paymentInvoice');
+    const r = await guestInvoice(req.params.bookingId);
+    if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
+    if (!isBooker(r.booking, acct)) return res.status(404).json({ error: 'not_found', message: 'Booking not found.' });
+    if (!['confirmed', 'cancelled'].includes(r.booking.status)) return res.status(404).json({ error: 'no_invoice', message: 'Your invoice appears here once your booking is paid.' });
+    res.json({ html: r.html, ref: r.booking.ref || null });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;
 
 // Used by /auth/guest-session when it opens a travelling side for a host.

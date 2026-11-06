@@ -254,6 +254,9 @@
   .th-x:hover{ background:none; color:var(--red); }
   #inviteLink{ margin:6px 0; font-size:13px; }
   .confirm-note{ margin:10px 16px 0; }
+  .trip-inv{ background:#f7efd9; color:#3b3226; border:1px solid #d8cdb0; margin-top:8px; margin-right:6px; }
+  .trip-inv:hover{ background:#efe4c6; }
+  .paper-wrap{ background:#eceae4; border-radius:10px; padding:10px 0; overflow-x:auto; }
   .trip-report{ display:inline-block; margin-top:8px; margin-left:6px; font-size:14px; font-weight:600; color:#9a4b0b; }
 </style>
 </head>
@@ -1149,8 +1152,29 @@
       body.querySelectorAll('.tabs button').forEach(function(b){ b.onclick=function(){ tab=b.getAttribute('data-t'); draw(); }; });
       body.querySelectorAll('.trip-msg').forEach(function(b){ b.onclick=function(){ openInbox(b.getAttribute('data-id')); }; });
       body.querySelectorAll('.trip-pay').forEach(function(b){ b.onclick=function(){ startCheckout(b.getAttribute('data-id'),'balance',b); }; });
+      body.querySelectorAll('.trip-inv').forEach(function(b){ b.onclick=function(){ openTripInvoice(b.getAttribute('data-id')); }; });
     }
     draw();
+  }
+
+  // ---- A trip's invoice: the paper invoice (same as the email and the host's
+  // copy), including paid changes such as extra nights. Back returns to Trips.
+  async function openTripInvoice(id){
+    var host=$('#detail'), overlay=el('div','overlay');
+    overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
+    overlay.innerHTML='<div class="sheet" style="max-width:700px"><div class="sheet-head"><h2>Invoice</h2><button class="x">&times;</button></div><div class="sheet-body"><p class="note">Loading your invoice…</p></div><div class="auth-toggle" style="padding:0 16px 14px"><a id="invBack">← Back to my trips</a></div></div>';
+    host.innerHTML=''; host.appendChild(overlay);
+    overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
+    overlay.querySelector('#invBack').onclick=function(){ openTrips(); };
+    var body=overlay.querySelector('.sheet-body');
+    try{
+      var r=await fetch(API+'/public/account/trips/'+encodeURIComponent(id)+'/invoice',{headers:authHeaders()});
+      if(r.status===401){ clearSession(); AFTER_AUTH=function(){ openTripInvoice(id); }; openAuth('login'); return; }
+      var d=await r.json().catch(function(){ return {}; });
+      if(!r.ok||!d.html) throw new Error(d.message||'Could not load your invoice. Please try again.');
+      // Built and escaped by the server (utils/paperInvoiceEmail.js).
+      body.innerHTML='<div class="paper-wrap">'+d.html+'</div><p class="note small" style="text-align:center">A copy was also emailed to you when you paid.</p>';
+    }catch(e){ body.innerHTML='<div class="msg err">'+esc(e.message)+'</div>'; }
   }
 
   // ---- Paygate: send the guest to pay, and handle their return ----
@@ -1436,6 +1460,7 @@
         (info.length?('<div class="trip-info">'+info.join('<br>')+'</div>'):'')+
         pending+
         (t.canPayBalance?'<button class="trip-pay cta-btn" data-id="'+esc(t.id)+'">💳 Pay balance '+rand(t.amountOwingCents)+'</button>':'')+
+        (!t.shared&&(t.status==='confirmed'||t.status==='cancelled')?'<button class="trip-inv" data-id="'+esc(t.id)+'">🧾 Invoice</button>':'')+
         (t.status!=='cancelled'?'<button class="trip-msg" data-id="'+esc(t.id)+'">💬 Messages</button>':'')+
         (t.status==='confirmed'&&t.unitId?'<a class="trip-report" href="/report?'+(t.hostId?('host='+encodeURIComponent(t.hostId)+'&'):'')+'unit='+encodeURIComponent(t.unitId)+(GUEST&&GUEST.name?('&name='+encodeURIComponent(GUEST.name)):'')+'">⚠️ Report damage or an issue</a>':'')+
       '</div>'+

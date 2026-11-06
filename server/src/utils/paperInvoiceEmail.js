@@ -49,11 +49,11 @@ function paperInvoiceEmail(i) {
     <td valign="middle" align="right"><span style="display:inline-block;padding:3px 12px;border:3px solid ${stamp.color};border-radius:6px;color:${stamp.color};font-family:${TYPE};font-size:22px;font-weight:700;letter-spacing:3px;transform:rotate(-8deg)">${stamp.text}</span></td>
   </tr></table>
 </td></tr></table>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px"><tr><td style="padding:18px 8px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;text-align:center;color:#1d2433">
+${i.link ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px"><tr><td style="padding:18px 8px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;text-align:center;color:#1d2433">
   <a href="${esc(i.link)}" style="color:#1a7a3a;font-weight:700">${LINK_TEXT}</a>
   <div style="margin-top:8px;font-size:13px;color:#6b7280">This link is private to you, so please don't share it. You can also reply to this email to reach us.</div>
   ${i.signupLink ? `<div style="margin-top:16px;font-size:15px;font-weight:700;color:#c0141a">${SIGNUP_TEXT} <a href="${esc(i.signupLink)}" style="color:#c0141a">Set up your account</a></div>` : ''}
-</td></tr></table>
+</td></tr></table>` : ''}
 </td></tr></table>
 </body></html>`;
 
@@ -72,10 +72,8 @@ function paperInvoiceEmail(i) {
     `Total: ${rand(i.totalCents)}`,
     ...(i.paidCents > 0 ? [`Paid by ${i.method}: ${rand(i.paidCents)}`] : []),
     ...(i.owingCents > 0 ? [`Balance due: ${rand(i.owingCents)}`] : []),
-    '',
-    LINK_TEXT,
-    i.link,
-    ...(i.signupLink ? ['', SIGNUP_TEXT, `Set up your account: ${i.signupLink}`] : []),
+    ...(i.link ? ['', LINK_TEXT, i.link] : []),
+    ...(i.link && i.signupLink ? ['', SIGNUP_TEXT, `Set up your account: ${i.signupLink}`] : []),
   ].join('\n');
   return { html, text };
 }

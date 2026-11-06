@@ -159,4 +159,15 @@ async function sendBookingDetails(bookingId) {
   return { ok: true, detailsEmailedAt: updated.detailsEmailedAt };
 }
 
-module.exports = { quoteLines, breakdownOf, offerLines, sendPaymentInvoice, sendBookingDetails, sendInvoicePreview };
+// The paper invoice for the guest's own Trips: the same one the admin portal and
+// their email show, with any paid changes (extra nights, late checkout) added.
+// No email footer (link: null). Answers { html } or { error }.
+async function guestInvoice(bookingId) {
+  const b = await bookingForInvoice(bookingId);
+  if (!b) return { error: 'not_found', status: 404, message: 'Booking not found.' };
+  const made = await invoiceEmailFor(b, { method: b.payments.length ? 'card' : 'EFT', link: null });
+  if (!made) return { error: 'no_invoice', status: 404, message: 'There’s no invoice for this booking yet.' };
+  return { html: made.email.html, booking: b };
+}
+
+module.exports = { quoteLines, breakdownOf, offerLines, sendPaymentInvoice, sendBookingDetails, sendInvoicePreview, guestInvoice };
