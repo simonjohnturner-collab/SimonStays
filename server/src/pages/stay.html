@@ -257,6 +257,9 @@
   .delta{ margin-top:10px; padding:10px 12px; background:#f3f8f4; border:1px solid #cfe6d6; border-radius:10px; }
   .delta .inv-row.tot{ color:var(--green-d); }
   .delta-note{ font-size:12px; color:var(--muted); margin-top:6px; }
+  .mode-note{ margin:8px 0; padding:9px 11px; border-radius:9px; background:#fff7e6; border:1px solid #f0d9a8; color:#7a5300; font-size:13px; }
+  .mode-note.ok{ background:#eef6f0; border-color:#cfe6d6; color:var(--green-d); }
+  .mode-note a{ font-weight:700; cursor:pointer; }
   .trip-inv{ background:#f7efd9; color:#3b3226; border:1px solid #d8cdb0; margin-top:8px; margin-right:6px; }
   .trip-inv:hover{ background:#efe4c6; }
   .paper-wrap{ background:#eceae4; border-radius:10px; padding:10px 0; overflow-x:auto; }
@@ -701,39 +704,63 @@
       '<label class="addon"><input type="checkbox" id="optLate"'+(STATE.late?' checked':'')+'> Late checkout <span class="muted">'+lateLbl+'</span></label>'+
       '<div class="note small" style="margin-top:4px">Early check-in and late checkout are only possible depending on the guests arriving or departing that day. Where confirmed, <b>late checkout is by 13:30</b>.</div>'+
       '</div>';
+    // How this listing books (the host's setting): instant, instant for 5-star guests, or by request.
+    var mode=(STATE.prop&&STATE.prop.bookingMode)||'instant';
+    if(mode==='rated' && GTOKEN && INSTANT==null){ loadInstant().then(renderSide); }
+    var instant = mode==='instant' || (mode==='rated' && INSTANT && INSTANT.fiveStar);
+    var modeNote='';
+    if(mode==='rated') modeNote = instant
+      ? '<div class="mode-note ok">⭐ You’re rated 5 stars by your hosts, so you can book this instantly.</div>'
+      : '<div class="mode-note">⭐ Instant booking here is for guests rated 5 stars by their previous hosts.'+(GTOKEN?'':' <a id="modeSignin">Sign in</a> if that’s you.')+' Otherwise, send a request: you only pay once the host accepts.</div>';
+    if(mode==='request') modeNote='<div class="mode-note">✋ This host approves every booking. Send a request: nothing is charged, and you pay once they accept.</div>';
     side.innerHTML=head+'<div class="qbox">'+lines+'<div class="qrow qtot"><span>Total</span><span>'+rand(q.totalCents)+'</span></div></div>'+
-      addons+depoNote+
-      '<button id="contBtn" class="cta-btn">Continue to payment →</button>'+ENQ;
+      addons+depoNote+modeNote+
+      (instant?'<button id="contBtn" class="cta-btn">Continue to payment →</button>':'<button id="reqBtn" class="cta-btn">Request to book →</button>')+ENQ;
     bindEnq();
     var oe=$('#optEarly'); if(oe) oe.onchange=function(){ STATE.early=oe.checked; getQuote(); };
     var ol=$('#optLate'); if(ol) ol.onchange=function(){ STATE.late=ol.checked; getQuote(); };
-    $('#contBtn').onclick=openCheckout;
+    if($('#contBtn')) $('#contBtn').onclick=openCheckout;
+    if($('#reqBtn')) $('#reqBtn').onclick=function(){ openEnquiry(true); };
+    var ms=$('#modeSignin'); if(ms) ms.onclick=function(){ AFTER_AUTH=function(){ INSTANT=null; renderDetail(); }; openAuth('login'); };
+  }
+  // The signed-in guest's rating from hosts (for listings set to "5-star guests"). Cached per session.
+  var INSTANT=null;
+  async function loadInstant(){
+    if(!GTOKEN){ INSTANT={ fiveStar:false }; return INSTANT; }
+    try{ var r=await fetch(API+'/public/account/instant',{headers:authHeaders()}); INSTANT=r.ok?await r.json():{ fiveStar:false }; }
+    catch(e){ INSTANT={ fiveStar:false }; }
+    return INSTANT;
   }
 
   // ---- Ask the host about these dates before booking (needs an account, so the reply has somewhere to go) ----
   var ENQ_AUTH_NOTE='Sign in or create an account to message the host. Their reply and any invoice will appear in your Messages.';
-  function openEnquiry(){
-    if(!GTOKEN){ AFTER_AUTH=function(){ openEnquiry(); }; openAuth('login', null, ENQ_AUTH_NOTE); return; }
+  var REQ_AUTH_NOTE='Sign in or create an account to request this booking. The host’s reply and invoice will appear in your Messages.';
+  function openEnquiry(asRequest){
+    asRequest = asRequest===true;
+    if(!GTOKEN){ AFTER_AUTH=function(){ openEnquiry(asRequest); }; openAuth('login', null, asRequest?REQ_AUTH_NOTE:ENQ_AUTH_NOTE); return; }
     var p=STATE.prop, u=STATE.unit, q=STATE.quote, ci=STATE.ciSel, co=STATE.coSel, hostEl=$('#detail');
     if(!p||!u||!ci||!co) return;
     var overlay=el('div','overlay');
-    overlay.innerHTML='<div class="sheet" style="max-width:520px"><div class="sheet-head"><button class="co-back">‹ Back</button><h2>Message the host</h2><button class="x">&times;</button></div>'+
+    overlay.innerHTML='<div class="sheet" style="max-width:520px"><div class="sheet-head"><button class="co-back">‹ Back</button><h2>'+(asRequest?'Request to book':'Message the host')+'</h2><button class="x">&times;</button></div>'+
       '<div class="sheet-body"><div class="th-head"><div><div class="trip-nm">'+esc(p.name)+' · Unit '+esc(u.name)+'</div><div class="trip-sub">📅 '+esc(fmtShort(ci))+' → '+esc(fmtShort(co))+(q?(' · '+q.nights+' night'+(q.nights===1?'':'s')):'')+'</div></div>'+(q?'<div class="th-amt">'+rand(q.totalCents)+'</div>':'')+'</div>'+
-      '<div class="frm"><input id="enqGuests" type="number" min="1" placeholder="Number of guests" /><textarea id="enqTxt" rows="4" placeholder="What would you like to ask? You can also ask about the price."></textarea></div>'+
-      '<p class="note small">This doesn’t hold the dates or charge you. If the host sends you an invoice, you can pay it from the message.</p>'+
-      '<div id="enqMsg"></div><button id="enqSend" class="cta-btn">Send message</button></div></div>';
+      '<div class="frm"><input id="enqGuests" type="number" min="1" placeholder="Number of guests" /><textarea id="enqTxt" rows="4" placeholder="'+(asRequest?'Introduce yourself and your trip (optional).':'What would you like to ask? You can also ask about the price.')+'"></textarea></div>'+
+      (asRequest
+        ?'<p class="note small">Nothing is charged and the dates aren’t held yet. When the host accepts, they send your invoice in Messages and your booking is confirmed once you pay it.</p>'
+        :'<p class="note small">This doesn’t hold the dates or charge you. If the host sends you an invoice, you can pay it from the message.</p>')+
+      '<div id="enqMsg"></div><button id="enqSend" class="cta-btn">'+(asRequest?'Send request':'Send message')+'</button></div></div>';
     hostEl.innerHTML=''; hostEl.appendChild(overlay);
     overlay.querySelector('.co-back').onclick=function(){ renderDetail(); };
     overlay.querySelector('.x').onclick=function(){ hostEl.innerHTML=''; };
     if($('#g')&&$('#g').value) overlay.querySelector('#enqGuests').value=$('#g').value;
     overlay.querySelector('#enqSend').onclick=async function(){
       var btn=this, txt=(overlay.querySelector('#enqTxt').value||'').trim(), box=overlay.querySelector('#enqMsg');
-      if(!txt){ box.innerHTML='<div class="msg err">Please type your message.</div>'; return; }
+      if(!txt && !asRequest){ box.innerHTML='<div class="msg err">Please type your message.</div>'; return; }
+      if(asRequest){ var extras=[STATE.early&&'early check-in',STATE.late&&'late checkout'].filter(Boolean); if(extras.length) txt=(txt?txt+'\n\n':'')+'I would also like '+extras.join(' and ')+', please.'; }
       btn.disabled=true; btn.textContent='Sending…'; box.innerHTML='';
       try{
-        var r=await fetch(API+'/public/account/messages/enquiry',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({unitId:u.id,checkIn:ci,checkOut:co,guests:overlay.querySelector('#enqGuests').value||undefined,body:txt})});
+        var r=await fetch(API+'/public/account/messages/enquiry',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({unitId:u.id,checkIn:ci,checkOut:co,guests:overlay.querySelector('#enqGuests').value||undefined,body:txt,request:asRequest})});
         var d=await r.json().catch(function(){ return {}; });
-        if(r.status===401){ clearSession(); AFTER_AUTH=function(){ openEnquiry(); }; openAuth('login', null, ENQ_AUTH_NOTE); return; }
+        if(r.status===401){ clearSession(); AFTER_AUTH=function(){ openEnquiry(asRequest); }; openAuth('login', null, asRequest?REQ_AUTH_NOTE:ENQ_AUTH_NOTE); return; }
         if(!r.ok) throw new Error(d.message||'Could not send your message. Please try again.');
         openInbox(d.bookingId);
       }catch(e){ btn.disabled=false; btn.textContent='Send message'; box.innerHTML='<div class="msg err">'+esc(e.message)+'</div>'; }

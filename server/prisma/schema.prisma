@@ -274,6 +274,7 @@ model Property {
   parkingNotes String? // where they are
   cancellationPolicy String? // shown on the shopfront; falls back to the standard policy
   cleanRateCents Int?    // what a cleaner is paid per checkout clean here (the day's fee), in cents
+  bookingMode    String  @default("instant") // instant | rated (instant for guests rated 5 stars by hosts, else a request) | request (host approves every booking)
   sortOrder   Int      @default(0) // manual order on the board (lower = higher up)
   createdAt   DateTime @default(now())
   units       Unit[]

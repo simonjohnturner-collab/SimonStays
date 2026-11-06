@@ -163,6 +163,7 @@ export default function ListingsView({ onClose }) {
       name: p.name, address: p.address || '', description: p.description || '',
       latitude: p.latitude ?? null, longitude: p.longitude ?? null,
       cancellationPolicy: p.cancellationPolicy ?? '',
+      bookingMode: p.bookingMode || 'instant',
     });
     if (!quiet) flash('Saved.');
   }
@@ -355,6 +356,23 @@ export default function ListingsView({ onClose }) {
                         : <span className="muted small">No pin dropped yet — click the map above.</span>}
                     </div>
                     <button className="ghost save" style={{ marginTop: 10 }} onClick={() => saveProp(p)}>💾 Save location</button>
+                  </div>
+
+                  <div className="attr-section">
+                    <div className="attr-head">How guests book <span className="muted small">— for bookings made on SimonStays</span></div>
+                    <div className="book-modes" role="radiogroup" aria-label="How guests book">
+                      {[
+                        ['instant', '⚡ Instant booking', 'Guests book and pay straight away. No approval needed.'],
+                        ['rated', '⭐ Instant for 5-star guests', 'Guests rated 5 stars by their previous hosts book instantly. Everyone else, including new guests, sends a request.'],
+                        ['request', '✋ Request to book', 'Every booking is a request. You approve it by sending the invoice, and dates are only held once the guest pays.'],
+                      ].map(([mode, label, hint]) => (
+                        <label key={mode} className={`book-mode ${(p.bookingMode || 'instant') === mode ? 'on' : ''}`}>
+                          <input type="radio" name={`bm-${p.id}`} checked={(p.bookingMode || 'instant') === mode}
+                            onChange={() => { const np = { ...p, bookingMode: mode }; editProp(p.id, { bookingMode: mode }); autoSaveProp(np); }} />
+                          <span><b>{label}</b><span className="muted small">{hint}</span></span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="attr-section">

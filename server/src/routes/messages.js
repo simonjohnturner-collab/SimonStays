@@ -20,6 +20,7 @@ const owned = (hostId) => ({ OR: [{ hostId }, { unit: { property: { hostId } } }
 function bookingSummary(b) {
   return {
     id: b.id, status: b.status, source: b.source, ref: b.ref || null,
+    isRequest: require('../utils/bookingMode').isRequest(b), // a guest's "Request to book" 
     guestName: b.guestName || null, guestEmail: b.guestEmail || (b.guestAccount && b.guestAccount.email) || null,
     guestPhone: b.guestPhone || (b.guestAccount && b.guestAccount.phone) || null,
     propertyId: b.unit?.propertyId || null, propertyName: b.unit?.property?.name || null, unitName: b.unit?.name || null,

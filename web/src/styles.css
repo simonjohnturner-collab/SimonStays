@@ -1216,3 +1216,13 @@ button[role=radio].on { color:#e2a100; }
 
 /* Amend booking: the booking before and after the change */
 .msg-delta { border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 6px; }
+
+/* Listings: how guests book */
+.book-modes { display: flex; flex-direction: column; gap: 6px; }
+.book-mode { display: flex; gap: 10px; align-items: flex-start; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; background: #fff; cursor: pointer; }
+.book-mode.on { border-color: var(--green); background: #f1f8f3; }
+.book-mode input { width: auto; margin-top: 3px; }
+.book-mode > span { display: flex; flex-direction: column; gap: 2px; }
+/* Inbox: a guest's request to book */
+.msg-enquiry-tag.request { background: #fdecd6; color: #9a4b0b; }
+.msg-request-note { width: 100%; font-size: 13px; background: #fff7e6; border: 1px solid #f0d9a8; border-radius: 8px; padding: 8px 10px; }

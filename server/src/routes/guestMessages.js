@@ -14,6 +14,7 @@ const changes = require('../utils/changes');
 const { nextRef } = require('../utils/bookingRef');
 const { createInvite, acceptInvite } = require('../utils/tripInvites');
 const { ownTrips, onTrip, isBooker } = require('../utils/guestAccess');
+const { REQUEST_PREFIX } = require('../utils/bookingMode');
 
 // What this conversation costs: its invoices, else the booking.
 function amountOf(b) {
@@ -115,7 +116,8 @@ router.post('/enquiry', async (req, res, next) => {
     // They couldn't read the reply, and the reply goes to an address nobody has proved.
     if (!acct.emailVerifiedAt) return res.status(403).json({ error: 'email_unverified', message: 'Please confirm your email first, using the link we sent you. You can send it again from My trips.' });
     const { unitId, checkIn, checkOut, guests } = req.body || {};
-    const text = String((req.body || {}).body || '').trim().slice(0, 4000);
+    const asRequest = !!(req.body || {}).request; // "Request to book" rather than a question
+    const text = (String((req.body || {}).body || '').trim() || (asRequest ? 'I would like to book these dates, please.' : '')).slice(0, 4000);
     if (!unitId || !YMD.test(checkIn || '') || !YMD.test(checkOut || '')) return res.status(400).json({ error: 'unitId_dates_required', message: 'Please choose your dates first.' });
     if (!text) return res.status(400).json({ error: 'empty', message: 'Type a message first.' });
     if (checkOut <= checkIn || checkIn < iso(new Date())) return res.status(400).json({ error: 'invalid_dates', message: 'Please choose valid future dates.' });
@@ -129,7 +131,11 @@ router.post('/enquiry', async (req, res, next) => {
     const existing = await prisma.booking.findFirst({
       where: { unitId: unit.id, status: 'enquiry', guestAccountId: acct.id, checkIn: dateOnly(checkIn), checkOut: dateOnly(checkOut) },
     });
-    if (existing) { await send(existing.id); return res.status(201).json({ bookingId: existing.id }); }
+    if (existing) {
+      if (asRequest && !String(existing.comments || '').startsWith(REQUEST_PREFIX)) await prisma.booking.update({ where: { id: existing.id }, data: { comments: `${REQUEST_PREFIX} ${existing.ref || ''}`.trim() } });
+      await send(existing.id);
+      return res.status(201).json({ bookingId: existing.id });
+    }
     const open = await prisma.booking.count({ where: { guestAccountId: acct.id, status: 'enquiry', checkOut: { gte: new Date() } } });
     if (open >= MAX_OPEN_ENQUIRIES) return res.status(429).json({ error: 'too_many', message: 'You have several open enquiries. Please continue one of those in Messages.' });
 
@@ -144,12 +150,12 @@ router.post('/enquiry', async (req, res, next) => {
         guestName: acct.name || acct.email, guestEmail: acct.email, guestPhone: acct.phone || null, guestAccountId: acct.id,
         checkIn: dateOnly(checkIn), checkOut: dateOnly(checkOut), paymentStatus: 'unpaid',
         totalCents: q ? q.totalCents : null, depositCents: q && q.depositCents ? q.depositCents : null,
-        comments: `Enquiry ${ref}${count}`,
+        comments: `${asRequest ? REQUEST_PREFIX : 'Enquiry'} ${ref}${count}`,
       },
     });
     await send(booking.id);
     const place = [unit.property.name, unit.name && `Unit ${unit.name}`].filter(Boolean).join(' · ');
-    alertHost(booking, `💬 New enquiry: ${place}\n👤 ${booking.guestName}${count}\n📅 ${checkIn} → ${checkOut}${q ? `\nStandard price R${(q.totalCents / 100).toFixed(2)}` : ''}\n\n${text.slice(0, 300)}`);
+    alertHost(booking, `${asRequest ? '📩 Booking request — approve by sending the invoice' : '💬 New enquiry'}: ${place}\n👤 ${booking.guestName}${count}\n📅 ${checkIn} → ${checkOut}${q ? `\nStandard price R${(q.totalCents / 100).toFixed(2)}` : ''}\n\n${text.slice(0, 300)}`);
     res.status(201).json({ bookingId: booking.id, ref });
   } catch (e) { next(e); }
 });

@@ -507,7 +507,7 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
           <p className="muted small">No conversations yet. Start one with ＋ New message, or set up ⏰ Scheduled messages.</p>
         ) : threads.map((t) => (
           <button key={t.booking.id} className={`msg-item${t.booking.id === activeId ? ' on' : ''}`} onClick={() => setActiveId(t.booking.id)}>
-            <span className="msg-item-top"><b>{t.booking.guestName || 'Guest'}</b>{t.booking.status === 'enquiry' && <span className="msg-enquiry-tag">Enquiry</span>}{t.booking.status === 'cancelled' && <span className="msg-enquiry-tag">Cancelled</span>}{t.unread > 0 && <span className="msg-dot">{t.unread}</span>}</span>
+            <span className="msg-item-top"><b>{t.booking.guestName || 'Guest'}</b>{t.booking.status === 'enquiry' && <span className={`msg-enquiry-tag${t.booking.isRequest ? ' request' : ''}`}>{t.booking.isRequest ? 'Booking request' : 'Enquiry'}</span>}{t.booking.status === 'cancelled' && <span className="msg-enquiry-tag">Cancelled</span>}{t.unread > 0 && <span className="msg-dot">{t.unread}</span>}</span>
             <span className="muted small">{placeOf(t.booking)} · {fmtDay(t.booking.checkIn)} → {fmtDay(t.booking.checkOut)}</span>
             <span className="msg-snippet small">{t.last.sender === 'host' ? 'You: ' : ''}{t.last.body}</span>
           </button>
@@ -521,7 +521,7 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
               <button className="secondary msg-back" onClick={() => setActiveId(null)}>←</button>
               <div className="msg-summary">
                 <div>
-                  <b>{b.guestName || 'Guest'}</b>{b.status === 'enquiry' && <span className="msg-enquiry-tag">Enquiry</span>}{b.status === 'cancelled' && <span className="msg-enquiry-tag">Cancelled</span>}{b.ref ? <span className="muted small"> · {b.ref}</span> : null}
+                  <b>{b.guestName || 'Guest'}</b>{b.status === 'enquiry' && <span className={`msg-enquiry-tag${b.isRequest ? ' request' : ''}`}>{b.isRequest ? 'Booking request' : 'Enquiry'}</span>}{b.status === 'cancelled' && <span className="msg-enquiry-tag">Cancelled</span>}{b.ref ? <span className="muted small"> · {b.ref}</span> : null}
                   <GuestRatingChip rating={thread.guestRating} />
                   <div className="muted small">{placeOf(b)}{b.guestEmail ? ` · ${b.guestEmail}` : ''}{b.guestPhone ? ` · ${b.guestPhone}` : ''}</div>
                   <div className="small">{b.dayUse ? `${fmtDay(b.checkIn)} · day use` : <>{fmtDay(b.checkIn)} → {fmtDay(b.checkOut)} · {b.nights} night{b.nights === 1 ? '' : 's'}</>}</div>
@@ -569,8 +569,9 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
             <div className="msg-compose">
               {thread.invoice && !thread.invoice.blocked && (
                 <div className="msg-invoice-actions">
-                  <button className="secondary" onClick={() => setInvoicing(true)}>🧾 Send an invoice</button>
-                  {b.status === 'enquiry' && <button className="secondary" onClick={closeEnquiry}>Close enquiry</button>}
+                  {b.isRequest && <div className="msg-request-note">📩 <b>Booking request.</b> Approve it by sending the invoice (it’s filled in at your normal price). The dates are held once the guest pays. Decline to close it.</div>}
+                  <button className={b.isRequest ? '' : 'secondary'} onClick={() => setInvoicing(true)}>{b.isRequest ? '✅ Approve: send invoice' : '🧾 Send an invoice'}</button>
+                  {b.status === 'enquiry' && <button className="secondary" onClick={closeEnquiry}>{b.isRequest ? 'Decline request' : 'Close enquiry'}</button>}
                 </div>
               )}
               {(!thread.change.blocked || !thread.cancel.blocked) && (

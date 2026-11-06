@@ -180,6 +180,7 @@ router.get('/properties/:id', async (req, res, next) => {
         rating: await require('../utils/ratings').propertyRatingOf(p.id),
         latitude: p.latitude ?? null, longitude: p.longitude ?? null,
         cancellationPolicy: p.cancellationPolicy || DEFAULT_CANCELLATION_POLICY,
+        bookingMode: require('../utils/bookingMode').modeOf(p), // instant | rated | request
         photos: p.photos.map((ph) => ({ id: ph.id })),
         units: p.units.map((u) => ({
           id: u.id, name: u.name, capacity: u.capacity, description: u.description || null,
@@ -294,6 +295,9 @@ router.post('/book', optionalGuest, async (req, res, next) => {
     const unit = await prisma.unit.findFirst({ where: { id: b.unitId }, include: { pricingGroup: true, property: true } });
     if (!unit) return res.status(404).json({ error: 'not_found' });
     if (!unit.pricingGroup) return res.status(400).json({ error: 'no_pricing', message: 'This unit has no online pricing — please call to book.' });
+    // The host's booking setting: some listings only take requests they approve.
+    const allowed = await require('../utils/bookingMode').instantAllowed(unit.property, req.guestId);
+    if (!allowed.ok) return res.status(409).json({ error: 'request_required', mode: allowed.mode, message: `${allowed.reason} You can send the request on simonstays.co.za.` });
 
     const avail = await checkAvailability(unit.id, iso(b.checkIn), iso(b.checkOut), null);
     if (avail.error) return res.status(400).json({ error: avail.error });

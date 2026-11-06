@@ -211,6 +211,16 @@ router.post('/change-password', authGuest, async (req, res, next) => {
 });
 
 // GET /public/account/me
+// GET /public/account/instant — the guest's rating from hosts, and whether it
+// opens instant booking on listings set to "5-star guests".
+router.get('/instant', authGuest, async (req, res, next) => {
+  try {
+    const bm = require('../utils/bookingMode');
+    const rating = await bm.ratingForAccount(req.guestId);
+    res.json({ fiveStar: bm.isFiveStar(rating), rating: rating ? { average: rating.average, count: rating.count } : null });
+  } catch (e) { next(e); }
+});
+
 router.get('/me', authGuest, async (req, res, next) => {
   try {
     const acct = await prisma.guestAccount.findUnique({ where: { id: req.guestId } });
