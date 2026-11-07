@@ -146,6 +146,7 @@ export default function AccountView({ onClose, onEmailChanged }) {
                   {waResult.message && <div>{waResult.message}</div>}
                   {waResult.hint && <div>{waResult.hint}</div>}
                   {!waResult.ok && waResult.error && <div className="muted small">Twilio said: {waResult.errorCode ? `${waResult.errorCode} · ` : ''}{waResult.error}</div>}
+                  {waResult.templateUsed && <div className="muted small">Template code used: {waResult.templateUsed}</div>}
                 </div>
               )}
             </section>

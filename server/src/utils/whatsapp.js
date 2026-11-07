@@ -41,13 +41,13 @@ function sendWhatsApp({ to, body, contentSid, contentVariables }) {
 
     const sid = process.env.TWILIO_ACCOUNT_SID;
     const token = process.env.TWILIO_AUTH_TOKEN;
-    const fromRaw = process.env.TWILIO_WHATSAPP_FROM;
+    const fromRaw = String(process.env.TWILIO_WHATSAPP_FROM).trim(); // a pasted value often carries a stray space
     const from = fromRaw.startsWith('whatsapp:') ? fromRaw : 'whatsapp:' + fromRaw;
 
     const form = new URLSearchParams();
     form.set('To', 'whatsapp:' + e164);
     form.set('From', from);
-    const useSid = contentSid !== undefined ? contentSid : process.env.TWILIO_WHATSAPP_CONTENT_SID;
+    const useSid = String((contentSid !== undefined ? contentSid : process.env.TWILIO_WHATSAPP_CONTENT_SID) || '').trim() || null;
     if (useSid) {
       form.set('ContentSid', useSid);
       if (contentVariables) form.set('ContentVariables', JSON.stringify(contentVariables));
@@ -72,7 +72,7 @@ function sendWhatsApp({ to, body, contentSid, contentVariables }) {
       res.on('end', () => {
         let json = null; try { json = JSON.parse(data); } catch (e) { /* non-JSON */ }
         if (res.statusCode >= 200 && res.statusCode < 300) resolve({ ok: true, sid: json && json.sid, to: e164 });
-        else resolve({ ok: false, status: res.statusCode, error: (json && json.message) || data, to: e164 });
+        else resolve({ ok: false, status: res.statusCode, code: json && json.code, error: (json && json.message) || data, to: e164, contentSid: useSid });
       });
     });
     req.on('error', (e) => resolve({ ok: false, error: e.message }));

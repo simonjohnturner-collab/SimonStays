@@ -133,8 +133,14 @@ router.post('/test-whatsapp', async (req, res) => {
   const sent = await wa.sendWhatsApp({ to: phone, body: sample.body, contentSid: templateSid || null, contentVariables: sample.vars });
   const masked = sent.to ? sent.to.replace(/^(\+\d{4})\d+(\d{3})$/, '$1••••$2') : phone;
   if (!sent.ok) {
-    const code = sent.status === 401 ? 20003 : null;
-    return res.json({ ok: false, to: masked, template: !!templateSid, setup, status: 'rejected', error: sent.error || sent.skipped, hint: WA_HINTS[code] || null });
+    const code = sent.status === 401 ? 20003 : sent.code;
+    const used = sent.contentSid || null;
+    const badSid = used && !/^HX[0-9a-f]{32}$/i.test(used);
+    return res.json({
+      ok: false, to: masked, template: !!templateSid, templateUsed: used, setup, status: 'rejected', errorCode: code || null, error: sent.error || sent.skipped,
+      hint: WA_HINTS[code] || (badSid ? `The template code in Render doesn’t look right: “${used}”. It should be HX followed by 32 letters and numbers, copied from the template in Twilio.`
+        : code === 21655 || code === 20404 || code === 21656 ? 'Twilio can’t use that template code. Check the HX code in Render matches the template in Twilio exactly.' : null),
+    });
   }
   let st = null;
   for (let i = 0; i < 6; i++) { // up to ~12 s for Twilio to report delivery or failure
@@ -144,7 +150,7 @@ router.post('/test-whatsapp', async (req, res) => {
   }
   const failed = st && ['failed', 'undelivered'].includes(st.status);
   res.json({
-    ok: !failed, to: masked, template: !!templateSid, setup, status: st ? st.status : 'sent',
+    ok: !failed, to: masked, template: !!templateSid, templateUsed: templateSid ? templateSid.trim() : null, setup, status: st ? st.status : 'sent',
     errorCode: st && st.errorCode, error: st && st.errorMessage,
     hint: failed ? (WA_HINTS[st.errorCode] || `Twilio error ${st.errorCode}. Send me the code and I’ll look it up.`) : (templateSid ? null : 'Sent without a template, so it only arrives because you messaged this number in the last 24 hours. Add the template’s HX code in Render for it to always arrive.'),
   });
