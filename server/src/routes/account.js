@@ -102,6 +102,54 @@ router.get('/new-bookings', async (req, res) => {
   });
 });
 
+// POST /account/test-whatsapp { kind: 'booking' | 'alert' } — send this host a
+// sample "ka-ching" or booking-update WhatsApp and report what Twilio says,
+// waiting a few seconds for delivery so a failure (e.g. a template that isn't
+// approved yet) shows its reason.
+const WA_HINTS = {
+  63016: 'WhatsApp needs an approved template for this. Check the template shows a green tick for "WhatsApp business initiated" in Twilio, and that its HX code is in Render.',
+  63112: 'Meta has paused this WhatsApp number or business. Check the sender in Twilio.',
+  63024: 'That phone number can’t receive WhatsApp. Check the number in your Settings.',
+  21211: 'That phone number isn’t valid. Check the number in your Settings.',
+  20003: 'Twilio rejected the Account SID or Auth Token. Check both in Render.',
+  21606: 'The WhatsApp “from” number isn’t a sender on this Twilio account. Check TWILIO_WHATSAPP_FROM in Render.',
+  63007: 'The WhatsApp “from” number isn’t a sender on this Twilio account. Check TWILIO_WHATSAPP_FROM in Render.',
+};
+router.post('/test-whatsapp', async (req, res) => {
+  const wa = require('../utils/whatsapp');
+  const kind = (req.body || {}).kind === 'alert' ? 'alert' : 'booking';
+  const templateSid = kind === 'alert' ? process.env.TWILIO_WHATSAPP_ALERT_CONTENT_SID : process.env.TWILIO_WHATSAPP_BOOKING_CONTENT_SID;
+  const setup = {
+    credentials: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN), from: process.env.TWILIO_WHATSAPP_FROM || null,
+    bookingTemplate: !!process.env.TWILIO_WHATSAPP_BOOKING_CONTENT_SID, alertTemplate: !!process.env.TWILIO_WHATSAPP_ALERT_CONTENT_SID, cleanerTemplate: !!process.env.TWILIO_WHATSAPP_CONTENT_SID,
+  };
+  if (!wa.enabled()) return res.status(400).json({ error: 'not_configured', setup, message: 'WhatsApp isn’t set up on the server yet: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_WHATSAPP_FROM are needed in Render.' });
+  const host = await prisma.host.findUnique({ where: { id: req.hostId }, select: { contactPhone: true, biller: { select: { phone: true } } } });
+  const phone = host && (host.contactPhone || (host.biller && host.biller.phone));
+  if (!phone) return res.status(400).json({ error: 'no_phone', setup, message: 'Add your contact number under Payout details first. That’s where alerts are sent.' });
+  const sample = kind === 'alert'
+    ? { body: '🔔 SimonStays update (test)\n\n✏️ Booking changed: Vantage · Unit 409\n\n👤 Matt Easton · New dates: Sat 7 Nov → Mon 9 Nov · R2 600 received', vars: { 1: '✏️ Booking changed: Vantage · Unit 409 (test)', 2: '👤 Matt Easton · New dates: Sat 7 Nov → Mon 9 Nov · R2 600 received' } }
+    : { body: '💸 Ka-ching! New SimonStays booking (test)\n🏠 Vantage · Unit 409\n👤 Matt Easton\n📅 Sat, 07 Nov → Mon, 09 Nov (2 nights)\n💰 R3 200 booking · you earn R2 880', vars: { 1: 'Vantage · Unit 409 (test)', 2: 'Matt Easton', 3: 'Sat, 07 Nov → Mon, 09 Nov (2 nights)', 4: 'R3 200 booking · you earn R2 880' } };
+  const sent = await wa.sendWhatsApp({ to: phone, body: sample.body, contentSid: templateSid || null, contentVariables: sample.vars });
+  const masked = sent.to ? sent.to.replace(/^(\+\d{4})\d+(\d{3})$/, '$1••••$2') : phone;
+  if (!sent.ok) {
+    const code = sent.status === 401 ? 20003 : null;
+    return res.json({ ok: false, to: masked, template: !!templateSid, setup, status: 'rejected', error: sent.error || sent.skipped, hint: WA_HINTS[code] || null });
+  }
+  let st = null;
+  for (let i = 0; i < 6; i++) { // up to ~12 s for Twilio to report delivery or failure
+    await new Promise((r) => setTimeout(r, 2000));
+    st = await wa.getMessage(sent.sid);
+    if (st && ['delivered', 'read', 'failed', 'undelivered'].includes(st.status)) break;
+  }
+  const failed = st && ['failed', 'undelivered'].includes(st.status);
+  res.json({
+    ok: !failed, to: masked, template: !!templateSid, setup, status: st ? st.status : 'sent',
+    errorCode: st && st.errorCode, error: st && st.errorMessage,
+    hint: failed ? (WA_HINTS[st.errorCode] || `Twilio error ${st.errorCode}. Send me the code and I’ll look it up.`) : (templateSid ? null : 'Sent without a template, so it only arrives because you messaged this number in the last 24 hours. Add the template’s HX code in Render for it to always arrive.'),
+  });
+});
+
 // POST /account/photo { dataBase64, contentType } — set the host's profile photo
 // (replaces any existing one). DELETE removes it.
 router.post('/photo', async (req, res) => {

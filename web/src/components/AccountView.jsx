@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, photoUrl } from '../api.js';
+import { api, photoUrl, apiBaseUrl, getToken } from '../api.js';
 
 // Downscale a picked image to a small square-ish JPEG for the profile photo.
 function toDataUrl(file, maxDim = 600, quality = 0.85) {
@@ -80,6 +80,17 @@ export default function AccountView({ onClose, onEmailChanged }) {
     catch (e) { setMsg(e.message); } finally { setPwBusy(false); }
   }
 
+  // Send a sample WhatsApp alert to this host and show what Twilio reports.
+  const [waBusy, setWaBusy] = useState(''); const [waResult, setWaResult] = useState(null);
+  async function testWhatsApp(kind) {
+    setWaBusy(kind); setWaResult(null);
+    try {
+      const r = await fetch(`${apiBaseUrl().replace(/\/$/, '')}/account/test-whatsapp`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` }, body: JSON.stringify({ kind }) });
+      setWaResult(await r.json());
+    } catch (e) { setWaResult({ ok: false, error: e.message }); } finally { setWaBusy(''); }
+  }
+  const WA_STATUS = { delivered: '✅ Delivered to your WhatsApp', read: '✅ Delivered and read', sent: '📤 Sent. Twilio hasn’t confirmed delivery yet, so check your phone', queued: '📤 Queued at Twilio', failed: '❌ Not delivered', undelivered: '❌ Not delivered', rejected: '❌ Twilio refused it' };
+
   return (
     <div className="invoices-view">
       <header className="topbar">
@@ -120,6 +131,23 @@ export default function AccountView({ onClose, onEmailChanged }) {
               </div>
               <label>Notes for payouts <span className="muted small">(optional)</span><input value={acct.payoutNotes || ''} onChange={(e) => set('payoutNotes', e.target.value)} placeholder="e.g. reference to use, split arrangements" /></label>
               <button disabled={savingP} onClick={savePayout}>{savingP ? 'Saving…' : '💾 Save payout details'}</button>
+            </section>
+
+            <section className="acct-card">
+              <h3>📲 WhatsApp alerts</h3>
+              <p className="muted small">New bookings, changes, cancellations, requests and payments are sent to <b>{acct.contactPhone || 'your contact number (add it above)'}</b> on WhatsApp. Send yourself a test to check it all works.</p>
+              <div className="two">
+                <button className="secondary" disabled={!!waBusy} onClick={() => testWhatsApp('booking')}>{waBusy === 'booking' ? 'Sending… (checking delivery)' : '💸 Test: new booking'}</button>
+                <button className="secondary" disabled={!!waBusy} onClick={() => testWhatsApp('alert')}>{waBusy === 'alert' ? 'Sending… (checking delivery)' : '🔔 Test: booking update'}</button>
+              </div>
+              {waResult && (
+                <div className={`wa-result ${waResult.ok ? 'ok' : 'bad'}`}>
+                  <b>{WA_STATUS[waResult.status] || (waResult.ok ? 'Sent' : 'Not sent')}</b>{waResult.to ? ` · to ${waResult.to}` : ''}{waResult.template === false ? ' · without a template' : ''}
+                  {waResult.message && <div>{waResult.message}</div>}
+                  {waResult.hint && <div>{waResult.hint}</div>}
+                  {!waResult.ok && waResult.error && <div className="muted small">Twilio said: {waResult.errorCode ? `${waResult.errorCode} · ` : ''}{waResult.error}</div>}
+                </div>
+              )}
             </section>
 
             <section className="acct-card">

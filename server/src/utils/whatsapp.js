@@ -81,4 +81,20 @@ function sendWhatsApp({ to, body, contentSid, contentVariables }) {
   });
 }
 
-module.exports = { enabled, toE164, sendWhatsApp };
+// Look up a sent message's delivery status (queued/sent/delivered/read/failed/undelivered)
+// and Twilio's error code if it failed, e.g. 63016 = no approved template / outside 24h.
+function getMessage(msgSid) {
+  return new Promise((resolve) => {
+    if (!enabled() || !msgSid) return resolve(null);
+    const sid = process.env.TWILIO_ACCOUNT_SID, token = process.env.TWILIO_AUTH_TOKEN;
+    https.get({
+      hostname: 'api.twilio.com', path: `/2010-04-01/Accounts/${encodeURIComponent(sid)}/Messages/${encodeURIComponent(msgSid)}.json`,
+      headers: { Authorization: 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64') },
+    }, (res) => {
+      let data = ''; res.on('data', (c) => { data += c; });
+      res.on('end', () => { try { const j = JSON.parse(data); resolve({ status: j.status, errorCode: j.error_code, errorMessage: j.error_message }); } catch (e) { resolve(null); } });
+    }).on('error', () => resolve(null));
+  });
+}
+
+module.exports = { enabled, toE164, sendWhatsApp, getMessage };

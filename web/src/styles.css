@@ -1250,3 +1250,8 @@ button[role=radio].on { color:#e2a100; }
   background: hsl(calc(var(--i) * 37), 85%, 65%); opacity: 0; animation: kaching-fall 1.6s ease-in calc(var(--i) * 45ms) 1 both; }
 @keyframes kaching-fall { 0% { opacity: 1; transform: translateY(0) rotate(0); } 100% { opacity: 0; transform: translateY(220px) rotate(calc(var(--i) * 47deg)); } }
 @media (prefers-reduced-motion: reduce) { .kaching, .kaching-confetti i { animation: none; } .kaching-confetti { display: none; } }
+
+/* Settings: WhatsApp test result */
+.wa-result { margin-top: 10px; padding: 10px 12px; border-radius: 9px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.wa-result.ok { background: #e3f1e7; color: #14622f; }
+.wa-result.bad { background: #fdecea; color: #9b1c1c; }
