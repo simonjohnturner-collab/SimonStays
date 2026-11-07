@@ -129,7 +129,7 @@ router.post('/test-whatsapp', async (req, res) => {
   if (!phone) return res.status(400).json({ error: 'no_phone', setup, message: 'Add your contact number under Payout details first. That’s where alerts are sent.' });
   const sample = kind === 'alert'
     ? { body: '🔔 SimonStays update (test)\n\n✏️ Booking changed: Vantage · Unit 409\n\n👤 Matt Easton · New dates: Sat 7 Nov → Mon 9 Nov · R2 600 received', vars: { 1: '✏️ Booking changed: Vantage · Unit 409 (test)', 2: '👤 Matt Easton · New dates: Sat 7 Nov → Mon 9 Nov · R2 600 received' } }
-    : { body: '💸 Ka-ching! New SimonStays booking (test)\n🏠 Vantage · Unit 409\n👤 Matt Easton\n📅 Sat, 07 Nov → Mon, 09 Nov (2 nights)\n💰 R3 200 booking · you earn R2 880', vars: { 1: 'Vantage · Unit 409 (test)', 2: 'Matt Easton', 3: 'Sat, 07 Nov → Mon, 09 Nov (2 nights)', 4: 'R3 200 booking · you earn R2 880' } };
+    : { body: '🎉 Congratulations, you have a new booking on SimonStays! (test)\n\n🏠 Vantage · Unit 409\n👤 Matt Easton\n📅 Sat, 07 Nov → Mon, 09 Nov (2 nights)\n💰 R3 200 booking · you earn R2 880\n\nSee it in your SimonStays calendar.', vars: { 1: 'Vantage · Unit 409 (test)', 2: 'Matt Easton', 3: 'Sat, 07 Nov → Mon, 09 Nov (2 nights)', 4: 'R3 200 booking · you earn R2 880' } };
   const sent = await wa.sendWhatsApp({ to: phone, body: sample.body, contentSid: templateSid || null, contentVariables: sample.vars });
   const masked = sent.to ? sent.to.replace(/^(\+\d{4})\d+(\d{3})$/, '$1••••$2') : phone;
   if (!sent.ok) {

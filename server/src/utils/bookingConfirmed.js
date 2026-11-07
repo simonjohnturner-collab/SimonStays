@@ -31,12 +31,12 @@ function hostAlert(b) {
   const source = [SOURCE_LABEL[b.source] || b.source, b.ref || b.resCode, amount != null ? rand(amount) : null].filter(Boolean).join(' · ');
   const guest = b.guestName || 'Guest';
   if (b.source === 'website') {
-    // A SimonStays booking: lead with what the host earns, and invite another listing.
+    // A SimonStays booking: congratulate the host and show what they earn. Matches
+    // the approved WhatsApp template (TWILIO_WHATSAPP_BOOKING_CONTENT_SID).
     const { grossOf, feeOf } = require('./fees');
     const gross = grossOf(b);
     const money = gross ? `${rand(gross)} booking · you earn ${rand(gross - feeOf(gross))}` : source;
-    const site = (process.env.SHOPFRONT_URL || 'https://simonstays.co.za').trim().replace(/\/$/, '');
-    const body = `💸 Ka-ching! New SimonStays booking\n🏠 ${place}\n👤 ${guest}\n📅 ${dates}\n💰 ${money}${b.ref ? `\n🔖 ${b.ref}` : ''}\n\nGot another place? List it: ${site}/hosting/listings`;
+    const body = `🎉 Congratulations, you have a new booking on SimonStays!\n\n🏠 ${place}\n👤 ${guest}\n📅 ${dates}\n💰 ${money}\n\nSee it in your SimonStays calendar.`;
     return { body, contentVariables: { 1: place, 2: guest, 3: dates, 4: money } };
   }
   const body = `✅ Booking confirmed — ${place}\n👤 ${guest}\n📅 ${dates}\n💳 ${source}`;
