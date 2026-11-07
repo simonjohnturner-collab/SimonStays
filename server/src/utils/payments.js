@@ -262,7 +262,15 @@ async function expireAbandoned({ hours = 24, now = new Date() } = {}) {
   return stale.length;
 }
 
-// WhatsApp the host about a payment event (best-effort).
+// A WhatsApp template variable can't hold line breaks, tabs or long runs of spaces.
+const oneLine = (s, max) => String(s || '').replace(/\s*\n+\s*/g, ' · ').replace(/[\t ]{2,}/g, ' ').trim().slice(0, max) || '—';
+
+// WhatsApp the host about something on a booking: amended, cancelled, a new
+// enquiry or booking request, a guest reply, a payment (best-effort).
+// In production WhatsApp needs an approved template to message the host first:
+// TWILIO_WHATSAPP_ALERT_CONTENT_SID ("simonstays_host_update"),
+//   {{1}} the first line (what happened, where) · {{2}} the rest, on one line.
+// Without it a plain message is sent, which only arrives inside the 24-hour window.
 async function alertHost(booking, body) {
   try {
     const wa = require('./whatsapp');
@@ -270,7 +278,13 @@ async function alertHost(booking, body) {
     const hostId = booking.hostId || booking.unit?.property?.hostId;
     const host = hostId && await prisma.host.findUnique({ where: { id: hostId }, select: { contactPhone: true, biller: { select: { phone: true } } } });
     const phone = host && (host.contactPhone || host.biller?.phone);
-    if (phone) await wa.sendWhatsApp({ to: phone, body, contentSid: null });
+    if (!phone) return;
+    const [first, ...rest] = String(body).split('\n');
+    await wa.sendWhatsApp({
+      to: phone, body,
+      contentSid: process.env.TWILIO_WHATSAPP_ALERT_CONTENT_SID || null,
+      contentVariables: { 1: oneLine(first, 200), 2: oneLine(rest.join('\n'), 700) },
+    });
   } catch (e) { console.error('[payments] host alert failed', e.message); }
 }
 

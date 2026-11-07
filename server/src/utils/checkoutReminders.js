@@ -59,7 +59,9 @@ async function remindForBooking(booking, { force = false } = {}) {
   // Template variables (used only if TWILIO_WHATSAPP_CONTENT_SID is set):
   // {{1}} cleaner first name · {{2}} place · {{3}} date · {{4}} checkout notes
   const contentVariables = {
-    1: firstName(b.cleaner), 2: placeOf(b), 3: fmtDate(b.checkOut), 4: (b.checkoutNotes || '').trim() || '—',
+    1: firstName(b.cleaner), 2: placeOf(b), 3: fmtDate(b.checkOut),
+    // A template variable can't hold line breaks, so multi-line notes go on one line.
+    4: (b.checkoutNotes || '').replace(/\s*\n+\s*/g, ' · ').replace(/[\t ]{2,}/g, ' ').trim().slice(0, 700) || '—',
   };
   const res = await wa.sendWhatsApp({ to: phone, body, contentVariables });
   if (res.ok) await prisma.booking.update({ where: { id: b.id }, data: { checkoutReminderAt: new Date() } }).catch(() => {});
