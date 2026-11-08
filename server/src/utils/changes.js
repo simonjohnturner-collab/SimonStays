@@ -99,6 +99,7 @@ async function cancelBooking(b, { by, refundCents = null, now = new Date() }) {
   const money = !q.paidCents ? '' : refund == null ? ' Your host will confirm your refund.' : refund > 0 ? ` A refund of ${rand(refund)} is due in line with the cancellation policy. Your host will pay it back and let you know.` : ' Under the cancellation policy, no refund is due.';
   await messaging.sendHostMessage(b.id, `This booking has been cancelled: ${q.places.join(', ')}.`, { notice: 'cancelled' });
   if (money) await messaging.sendHostMessage(b.id, money.trim(), { bookerOnly: true, notice: 'refund' });
+  require('./bookingConfirmed').notifyGuestUpdate(b, by === 'guest' ? '❌ Your booking is cancelled, as you asked' : '❌ Your booking has been cancelled', (money || ' Your dates have been released.').trim()).catch(() => {});
   alertHost(b, `❌ Booking cancelled by ${by === 'guest' ? 'the guest' : 'you'}: ${q.places.join(', ')}\n👤 ${b.guestName || 'Guest'}${b.ref ? ` · ${b.ref}` : ''}\n${refund == null ? 'Refund: for you to decide' : `Refund due: ${rand(refund)}`}`);
   return { ok: true, refundCents: refund, places: q.places };
 }
@@ -250,6 +251,7 @@ async function applyChange(offer, b, receivedCents) {
   const refund = offer.totalCents < 0 ? ` A refund of ${rand(-offer.totalCents)} is due. Your host will pay it back and let you know.` : '';
   await messaging.sendHostMessage(b.id, clash ? 'Payment received, thanks. Those dates have since been taken, so your host will contact you to sort this out.' : `Your booking has been updated: ${what}.`, clash ? {} : { notice: 'changed' });
   if (refund && !clash) await messaging.sendHostMessage(b.id, refund.trim(), { bookerOnly: true, notice: 'refund' });
+  if (!clash) require('./bookingConfirmed').notifyGuestUpdate(b, '✏️ Your booking has been changed', `${what}${receivedCents ? ` · ${rand(receivedCents)} received, thank you` : ''}${refund ? ` ·${refund}` : ''}`).catch(() => {});
   alertHost(b, clash
     ? `⚠ Change PAID but dates taken: ${placeOf(b)}\n👤 ${b.guestName || 'Guest'}${b.ref ? ` · ${b.ref}` : ''}\nRefund or move them.`
     : `✏️ Booking changed: ${placeOf(b)}\n👤 ${b.guestName || 'Guest'}${b.ref ? ` · ${b.ref}` : ''}\n${what}${receivedCents ? `\n${rand(receivedCents)} received` : ''}`);

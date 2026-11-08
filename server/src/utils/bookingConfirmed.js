@@ -141,4 +141,38 @@ async function sendGuestConfirmation(bookingId, { dryRun = false } = {}) {
   return { ok: !failed, to: e164, status: st ? st.status : 'sent', errorCode: st && st.errorCode, message: st && st.errorMessage };
 }
 
-module.exports = { onBookingConfirmed, hostAlert, guestConfirmation, sendGuestConfirmation };
+// Tell the guest on WhatsApp that their booking was amended or cancelled.
+// Template TWILIO_WHATSAPP_GUEST_UPDATE_CONTENT_SID ("simonstays_guest_update"):
+//   {{1}} first name · {{2}} what happened, and where · {{3}} the details, one line.
+// Only for direct bookings (SimonStays or manual) with a guest phone; channel
+// guests hear from the channel. Never throws.
+const oneLine = (s, max) => String(s || '').replace(/\s*\n+\s*/g, ' · ').replace(/[\t ]{2,}/g, ' ').trim().slice(0, max) || '—';
+function guestUpdate(b, headline, details) {
+  const name = String(b.guestName || '').trim().split(/\s+/)[0] || 'there';
+  const place = [b.unit?.property?.name, b.unit?.name && `Unit ${b.unit.name}`].filter(Boolean).join(' · ') || 'your stay';
+  const h = oneLine(`${headline}: ${place}`, 200);
+  const d = oneLine(`${details}${b.ref ? ` · Booking ref ${b.ref}` : ''}`, 600);
+  const body = `Hi ${name}, there's an update to your SimonStays booking.\n\n${h}\n\n${d}\n\nSee the details under Trips on simonstays.co.za.`;
+  return { body, contentVariables: { 1: name, 2: h, 3: d } };
+}
+async function notifyGuestUpdate(b, headline, details) {
+  try {
+    const template = String(process.env.TWILIO_WHATSAPP_GUEST_UPDATE_CONTENT_SID || '').trim();
+    if (!wa.enabled() || !template) return { ok: false, skipped: 'no_template' };
+    if (!['website', 'manual'].includes(b.source)) return { ok: false, skipped: 'channel' };
+    let phone = b.guestPhone || (b.guestAccount && b.guestAccount.phone);
+    if (!phone && b.guestAccountId) {
+      const a = await prisma.guestAccount.findUnique({ where: { id: b.guestAccountId }, select: { phone: true } });
+      phone = a && a.phone;
+    }
+    if (!phone) return { ok: false, skipped: 'no_guest_phone' };
+    let full = b;
+    if (!b.unit || !b.unit.property) full = await prisma.booking.findUnique({ where: { id: b.id }, include: { unit: { include: { property: true } } } }) || b;
+    const { body, contentVariables } = guestUpdate(full, headline, details);
+    const r = await wa.sendWhatsApp({ to: phone, body, contentSid: template, contentVariables });
+    if (!r.ok) console.warn('[guest-update] WhatsApp not sent', b.id, r.error || r.skipped);
+    return r;
+  } catch (e) { console.error('[guest-update] failed', b.id, e.message); return { ok: false, error: e.message }; }
+}
+
+module.exports = { onBookingConfirmed, hostAlert, guestConfirmation, sendGuestConfirmation, guestUpdate, notifyGuestUpdate };
