@@ -117,17 +117,23 @@ const WA_HINTS = {
 };
 router.post('/test-whatsapp', async (req, res) => {
   const wa = require('../utils/whatsapp');
-  const kind = (req.body || {}).kind === 'alert' ? 'alert' : 'booking';
-  const templateSid = kind === 'alert' ? process.env.TWILIO_WHATSAPP_ALERT_CONTENT_SID : process.env.TWILIO_WHATSAPP_BOOKING_CONTENT_SID;
+  const kind = ['alert', 'guest'].includes((req.body || {}).kind) ? req.body.kind : 'booking';
+  const templateSid = kind === 'alert' ? process.env.TWILIO_WHATSAPP_ALERT_CONTENT_SID
+    : kind === 'guest' ? process.env.TWILIO_WHATSAPP_GUEST_CONTENT_SID : process.env.TWILIO_WHATSAPP_BOOKING_CONTENT_SID;
   const setup = {
     credentials: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN), from: process.env.TWILIO_WHATSAPP_FROM || null,
-    bookingTemplate: !!process.env.TWILIO_WHATSAPP_BOOKING_CONTENT_SID, alertTemplate: !!process.env.TWILIO_WHATSAPP_ALERT_CONTENT_SID, cleanerTemplate: !!process.env.TWILIO_WHATSAPP_CONTENT_SID,
+    bookingTemplate: !!process.env.TWILIO_WHATSAPP_BOOKING_CONTENT_SID, guestTemplate: !!process.env.TWILIO_WHATSAPP_GUEST_CONTENT_SID, alertTemplate: !!process.env.TWILIO_WHATSAPP_ALERT_CONTENT_SID, cleanerTemplate: !!process.env.TWILIO_WHATSAPP_CONTENT_SID,
   };
   if (!wa.enabled()) return res.status(400).json({ error: 'not_configured', setup, message: 'WhatsApp isn’t set up on the server yet: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_WHATSAPP_FROM are needed in Render.' });
   const host = await prisma.host.findUnique({ where: { id: req.hostId }, select: { contactPhone: true, biller: { select: { phone: true } } } });
   const phone = host && (host.contactPhone || (host.biller && host.biller.phone));
   if (!phone) return res.status(400).json({ error: 'no_phone', setup, message: 'Add your contact number under Payout details first. That’s where alerts are sent.' });
-  const sample = kind === 'alert'
+  if (kind === 'guest' && !String(templateSid || '').trim()) return res.json({ ok: false, status: 'rejected', setup, error: 'no template', hint: 'Guest confirmations only go out once TWILIO_WHATSAPP_GUEST_CONTENT_SID (the HX code of simonstays_guest_confirmed) is set in Render.' });
+  const guestSample = kind === 'guest' ? require('../utils/bookingConfirmed').guestConfirmation({
+    guestName: 'Matt Easton', ref: 'SS1042 (test)', checkIn: new Date('2026-11-07T12:00:00Z'), checkOut: new Date('2026-11-09T12:00:00Z'),
+    unit: { name: '409', checkInTime: '15:00', checkOutTime: '10:00', property: { name: 'Vantage' } },
+  }) : null;
+  const sample = guestSample ? { body: guestSample.body, vars: guestSample.contentVariables } : kind === 'alert'
     ? { body: '🔔 SimonStays update (test)\n\n✏️ Booking changed: Vantage · Unit 409\n\n👤 Matt Easton · New dates: Sat 7 Nov → Mon 9 Nov · R2 600 received', vars: { 1: '✏️ Booking changed: Vantage · Unit 409 (test)', 2: '👤 Matt Easton · New dates: Sat 7 Nov → Mon 9 Nov · R2 600 received' } }
     : { body: '🎉 Congratulations, you have a new booking on SimonStays! (test)\n\n🏠 Vantage · Unit 409\n👤 Matt Easton\n📅 Sat, 07 Nov → Mon, 09 Nov (2 nights)\n💰 R3 200 booking · you earn R2 880\n\nSee it in your SimonStays calendar.', vars: { 1: 'Vantage · Unit 409 (test)', 2: 'Matt Easton', 3: 'Sat, 07 Nov → Mon, 09 Nov (2 nights)', 4: 'R3 200 booking · you earn R2 880' } };
   const sent = await wa.sendWhatsApp({ to: phone, body: sample.body, contentSid: templateSid || null, contentVariables: sample.vars });
