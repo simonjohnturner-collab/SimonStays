@@ -1255,3 +1255,10 @@ button[role=radio].on { color:#e2a100; }
 .wa-result { margin-top: 10px; padding: 10px 12px; border-radius: 9px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
 .wa-result.ok { background: #e3f1e7; color: #14622f; }
 .wa-result.bad { background: #fdecea; color: #9b1c1c; }
+
+/* Booking modal: WhatsApp the guest their confirmation (preview, then send) */
+.wa-confirm { display: flex; flex-direction: column; gap: 8px; margin: 2px 0 10px; }
+.wa-confirm > button { align-self: flex-start; }
+.wa-preview { display: flex; flex-direction: column; gap: 8px; background: #efeae2; border-radius: 10px; padding: 10px; }
+.wa-bubble { margin: 0; white-space: pre-wrap; font-family: inherit; font-size: 13.5px; line-height: 1.45; background: #fff; border-radius: 8px; padding: 9px 11px; box-shadow: 0 1px 1px rgba(0,0,0,.08); max-width: 420px; }
+.wa-preview-btns { display: flex; gap: 8px; }

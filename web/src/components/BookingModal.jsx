@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api } from '../api.js';
+import { api, apiBaseUrl, getToken } from '../api.js';
 import { fmtR, centsToRand, randToCents } from '../money.js';
 import { GuestRatingChip } from './RatingsView.jsx';
 
@@ -158,6 +158,28 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
     } finally { setBusy(false); }
   }
 
+  // The guest's WhatsApp confirmation, sent by hand: preview first, then send.
+  const [waPreview, setWaPreview] = useState(null); // { preview, to } | { result } | { error }
+  const waCall = async (method) => {
+    const r = await fetch(`${apiBaseUrl().replace(/\/$/, '')}/bookings/${booking.id}/whatsapp-confirmation`, { method, headers: { Authorization: `Bearer ${getToken()}` } });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.message || `HTTP ${r.status}`);
+    return d;
+  };
+  async function previewGuestWhatsApp() {
+    setBusy(true); setWaPreview(null);
+    try {
+      if ((booking.guestPhone || '') !== guestPhone.trim()) await api.updateBooking(booking.id, { guestPhone: guestPhone.trim() || null });
+      setWaPreview(await waCall('GET'));
+    } catch (e) { setWaPreview({ error: e.message }); } finally { setBusy(false); }
+  }
+  async function sendGuestWhatsApp() {
+    setBusy(true);
+    try { const r = await waCall('POST'); setWaPreview((p) => ({ ...p, result: r })); }
+    catch (e) { setWaPreview((p) => ({ ...p, result: { ok: false, message: e.message } })); } finally { setBusy(false); }
+  }
+  const WA_DONE = { delivered: '✅ Delivered to the guest’s WhatsApp', read: '✅ Delivered and read', sent: '📤 Sent. WhatsApp hasn’t confirmed delivery yet', queued: '📤 Queued', failed: '❌ Not delivered', undelivered: '❌ Not delivered', rejected: '❌ Twilio refused it' };
+
   const title = `${editing ? 'Edit' : 'New'} ${isFloating ? 'floating booking' : 'booking'}${unit ? ` · ${unit.name}` : ''}`;
 
   return (
@@ -185,6 +207,30 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
             <input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} placeholder="guest@example.com" /></label>
           <label>Guest phone<input value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} placeholder="e.g. 082 123 4567" /></label>
         </div>
+        {editing && booking.status === 'confirmed' && (
+          <div className="wa-confirm">
+            <button type="button" className="secondary" disabled={busy || !guestPhone.trim()} onClick={previewGuestWhatsApp}>📲 WhatsApp the guest their confirmation…</button>
+            {!guestPhone.trim() && <span className="muted small">Add the guest’s phone first.</span>}
+            {waPreview && waPreview.error && <div className="wa-result bad">{waPreview.error}</div>}
+            {waPreview && waPreview.preview && (
+              <div className="wa-preview">
+                <div className="muted small">This is exactly what <b>{waPreview.to}</b> will get:</div>
+                <pre className="wa-bubble">{waPreview.preview}</pre>
+                {!waPreview.result ? (
+                  <div className="wa-preview-btns">
+                    <button type="button" disabled={busy} onClick={sendGuestWhatsApp}>{busy ? 'Sending… (checking delivery)' : 'Send it'}</button>
+                    <button type="button" className="secondary" disabled={busy} onClick={() => setWaPreview(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <div className={`wa-result ${waPreview.result.ok ? 'ok' : 'bad'}`}>
+                    <b>{WA_DONE[waPreview.result.status] || (waPreview.result.ok ? 'Sent' : 'Not sent')}</b>
+                    {!waPreview.result.ok && waPreview.result.message && <div className="muted small">{waPreview.result.errorCode ? `${waPreview.result.errorCode} · ` : ''}{waPreview.result.message}{waPreview.result.errorCode === 63016 ? ' — the guest template isn’t approved by WhatsApp yet.' : ''}</div>}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="row2">
           <label>Check-in<input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} /></label>

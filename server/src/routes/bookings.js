@@ -249,6 +249,21 @@ router.post('/bookings/:id/remind-cleaner', async (req, res) => {
   res.json({ ok: true, ...result });
 });
 
+// GET /bookings/:id/whatsapp-confirmation — preview the guest's WhatsApp confirmation;
+// POST sends it (for a booking confirmed before guest WhatsApps were on).
+router.get('/bookings/:id/whatsapp-confirmation', async (req, res) => {
+  const booking = await loadOwned(req, res); if (!booking) return;
+  const r = await require('../utils/bookingConfirmed').sendGuestConfirmation(booking.id, { dryRun: true });
+  if (r.error) return res.status(r.status).json(r);
+  res.json(r);
+});
+router.post('/bookings/:id/whatsapp-confirmation', async (req, res) => {
+  const booking = await loadOwned(req, res); if (!booking) return;
+  const r = await require('../utils/bookingConfirmed').sendGuestConfirmation(booking.id);
+  if (r.error) return res.status(r.status).json(r);
+  res.json(r);
+});
+
 // GET /bookings/:id/quote — price this booking from its unit's rate card.
 router.get('/bookings/:id/quote', async (req, res) => {
   const booking = await loadOwnedWithCleans(req, res); if (!booking) return;

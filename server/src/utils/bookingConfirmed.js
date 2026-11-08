@@ -113,4 +113,32 @@ async function onBookingConfirmed(bookingId, { invoiceFollows = false } = {}) {
   }
 }
 
-module.exports = { onBookingConfirmed, hostAlert, guestConfirmation };
+// The host sends (or previews) the guest's WhatsApp confirmation by hand, e.g.
+// for a booking confirmed before guest WhatsApps were switched on.
+// dryRun → { preview, to }; otherwise sends and waits up to ~12 s for delivery.
+async function sendGuestConfirmation(bookingId, { dryRun = false } = {}) {
+  const b = await prisma.booking.findUnique({ where: { id: bookingId }, include: { ...messaging.BOOKING_INCLUDE, guestAccount: { select: { email: true, phone: true } } } });
+  if (!b) return { error: 'not_found', status: 404, message: 'Booking not found.' };
+  if (b.status !== 'confirmed') return { error: 'not_confirmed', status: 400, message: 'Only a confirmed booking gets a confirmation.' };
+  const phone = b.guestPhone || (b.guestAccount && b.guestAccount.phone);
+  if (!phone) return { error: 'no_phone', status: 400, message: 'This booking has no guest phone number. Add it under Guest phone and save first.' };
+  const e164 = wa.toE164(phone);
+  if (!e164) return { error: 'bad_phone', status: 400, message: `“${phone}” doesn’t look like a phone number.` };
+  const { body, contentVariables } = guestConfirmation(b);
+  if (dryRun) return { preview: body, to: e164 };
+  const template = String(process.env.TWILIO_WHATSAPP_GUEST_CONTENT_SID || '').trim();
+  if (!wa.enabled()) return { error: 'no_whatsapp', status: 400, message: 'WhatsApp isn’t set up on the server (Twilio settings in Render).' };
+  if (!template) return { error: 'no_template', status: 400, message: 'Add TWILIO_WHATSAPP_GUEST_CONTENT_SID (the HX code of the guest template) in Render first.' };
+  const sent = await wa.sendWhatsApp({ to: e164, body, contentSid: template, contentVariables });
+  if (!sent.ok) return { ok: false, to: e164, status: 'rejected', errorCode: sent.code || null, message: sent.error || sent.skipped };
+  let st = null;
+  for (let i = 0; i < 6; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    st = await wa.getMessage(sent.sid);
+    if (st && ['delivered', 'read', 'failed', 'undelivered'].includes(st.status)) break;
+  }
+  const failed = st && ['failed', 'undelivered'].includes(st.status);
+  return { ok: !failed, to: e164, status: st ? st.status : 'sent', errorCode: st && st.errorCode, message: st && st.errorMessage };
+}
+
+module.exports = { onBookingConfirmed, hostAlert, guestConfirmation, sendGuestConfirmation };
