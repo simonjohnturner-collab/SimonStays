@@ -1305,3 +1305,23 @@ button[role=radio].on { color:#e2a100; }
 .rate-card.compact { border: 0; padding: 8px 0 0; background: transparent; box-shadow: none; }
 .rate-comment { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; font-size: 13px; font-weight: 600; }
 .rate-quote { margin-top: 4px; font-style: italic; color: var(--ink); }
+
+/* Traffic: follow-ups, visitors, journeys */
+.tr-follow { display: flex; flex-direction: column; gap: 8px; }
+.tr-person { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 12px; border-radius: 9px; background: #f7f8f6; border-left: 4px solid #d6dbd8; }
+.tr-person.checkout { border-left-color: #e08a1e; background: #fffaf0; }
+.tr-person.browsed { border-left-color: var(--green); }
+.tr-person-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tr-person-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.tr-btn { font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px; background: #eef1f4; color: var(--ink); }
+.tr-btn.wa { background: #25d366; color: #fff; }
+.tr-step-pill { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #eef1f4; white-space: nowrap; }
+.tr-step-pill.s-booked { background: #e3f1e7; color: var(--green-d); }
+.tr-step-pill.s-started { background: #fdecd6; color: #9a4b0b; }
+.tr-step-pill.s-opened, .tr-step-pill.s-asked { background: #e5ecf8; color: #2f5fb3; }
+.tr-journey { max-width: 560px; }
+.tr-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; font-size: 13px; }
+.tr-timeline li { display: flex; gap: 10px; padding: 4px 0; border-bottom: 1px dashed #eef1f4; }
+.tr-timeline .tr-t { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 42px; }
+.tr-timeline .tr-gap { justify-content: center; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 0; padding-top: 10px; }
+.tr-step-pill.s-booking { background: #fdecd6; color: #9a4b0b; }

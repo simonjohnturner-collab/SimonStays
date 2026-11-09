@@ -885,7 +885,7 @@
       var d=await r.json();
       if(!r.ok){ cm.innerHTML='<div class="msg err">'+esc(d.message||'Could not create the booking.')+'</div>'; btn.disabled=false; btn.textContent='Confirm booking'; return; }
       STATE.ref=d.ref||null;
-      if(window.ssTrack) ssTrack('booking_placed',{unitId:STATE.unit&&STATE.unit.id,propertyId:STATE.prop&&STATE.prop.id,meta:{totalCents:STATE.quote&&STATE.quote.totalCents}});
+      if(window.ssTrack) ssTrack('booking_placed',{unitId:STATE.unit&&STATE.unit.id,propertyId:STATE.prop&&STATE.prop.id,meta:{bookingId:d.bookingId||null,totalCents:STATE.quote&&STATE.quote.totalCents}});
       if(d.payment && d.payment.mode==='eft'){ STATE.eftPay=d.payment; showDone({ property:d.property, unit:d.unit, booking:{ id:d.bookingId, checkIn:STATE.ciSel, checkOut:STATE.coSel } }); return; }
       if(d.payment && d.payment.mode==='form'){ btn.textContent='Taking you to secure payment…'; goToGateway(d.payment); return; }
       if(d.payment && d.payment.mode==='redirect'){ window.location=d.payment.url; return; }

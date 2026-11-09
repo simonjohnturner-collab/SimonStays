@@ -1,5 +1,7 @@
 // SimonStays first-party analytics: what visitors look at and do, stored in our
 // own database (POST /public/track). No cookies, no third parties, no IP kept.
+// Once a visitor signs in, their browsing (including earlier visits from this
+// browser) is linked to their guest account; a booking links it to the booking.
 // A visitor is an anonymous random id in localStorage; a session ends after 30
 // minutes of no activity. Bots are skipped. Hosts browsing the site (signed in to
 // hosting on this browser) are flagged so the admin can leave them out.
@@ -33,7 +35,8 @@
   function flush() {
     if (!queue.length) return;
     var s = sessionId();
-    var body = JSON.stringify({ v: vid, s: s.id, src: s.src || '', d: device, h: isHost(), events: queue.splice(0, 25) });
+    var g = null; try { var gs = JSON.parse(localStorage.getItem('ss_guest') || 'null'); g = gs && gs.token; } catch (e) { /* ignore */ }
+    var body = JSON.stringify({ v: vid, s: s.id, src: s.src || '', d: device, h: isHost(), g: g || undefined, events: queue.splice(0, 25) });
     try {
       if (navigator.sendBeacon && navigator.sendBeacon('/public/track', new Blob([body], { type: 'application/json' }))) return;
     } catch (e) { /* fall through */ }

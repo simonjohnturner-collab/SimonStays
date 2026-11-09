@@ -84,4 +84,85 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+// Who a visitor is, where we know: their guest account, or the booking they placed.
+async function whoIs(accountIds, bookingIds) {
+  const [accts, bookings] = await Promise.all([
+    accountIds.length ? prisma.guestAccount.findMany({ where: { id: { in: accountIds } }, select: { id: true, name: true, email: true, phone: true } }) : [],
+    bookingIds.length ? prisma.booking.findMany({ where: { id: { in: bookingIds } }, select: { id: true, guestName: true, guestEmail: true, guestPhone: true, status: true, paid: true } }) : [],
+  ]);
+  return { acct: Object.fromEntries(accts.map((a) => [a.id, a])), booking: Object.fromEntries(bookings.map((b) => [b.id, b])) };
+}
+const placeName = (u) => (u ? [u.property && u.property.name, u.name && `Unit ${u.name}`].filter(Boolean).join(' · ') : null);
+
+// GET /admin/traffic/visitors?days=7 — recent visitors, newest first: who (when
+// known), where from, how far they got, and the listings they opened. Plus the
+// people worth following up: checkouts never paid, and known visitors who looked
+// or started checkout without booking.
+router.get('/visitors', async (req, res, next) => {
+  try {
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 7));
+    const since = new Date(Date.now() - days * 864e5);
+    const hostCond = req.query.hosts === '1' ? '' : 'AND "isHost" = false';
+    const rows = await prisma.$queryRawUnsafe(`SELECT "visitorId",
+        MIN("at") AS first, MAX("at") AS last, COUNT(DISTINCT "sessionId") AS sessions,
+        COUNT(*) FILTER (WHERE type = 'pageview') AS pageviews,
+        BOOL_OR(type = 'search') AS searched, BOOL_OR(type = 'view_listing') AS viewed,
+        BOOL_OR(type = 'start_checkout') AS checkout, BOOL_OR(type IN ('booking_placed', 'booked', 'request_sent')) AS booked,
+        BOOL_OR(type = 'enquiry_sent') AS asked,
+        MAX("guestAccountId") AS account, ARRAY_AGG(DISTINCT "bookingId") FILTER (WHERE "bookingId" IS NOT NULL) AS bookings,
+        ARRAY_AGG(DISTINCT "unitId") FILTER (WHERE type = 'view_listing' AND "unitId" IS NOT NULL) AS units,
+        MAX(device) AS device, MAX(NULLIF(source, '')) AS source
+      FROM "PageEvent" WHERE "at" >= ($1::timestamptz AT TIME ZONE 'UTC') ${hostCond}
+      GROUP BY "visitorId" ORDER BY MAX("at") DESC LIMIT 150`, since);
+    const unitIds = [...new Set(rows.flatMap((r) => r.units || []))];
+    const units = unitIds.length ? await prisma.unit.findMany({ where: { id: { in: unitIds } }, select: { id: true, name: true, property: { select: { name: true } } } }) : [];
+    const unitName = Object.fromEntries(units.map((u) => [u.id, placeName(u)]));
+    const who = await whoIs([...new Set(rows.map((r) => r.account).filter(Boolean))], [...new Set(rows.flatMap((r) => r.bookings || []))]);
+
+    const visitors = rows.map((r) => {
+      const a = r.account && who.acct[r.account];
+      const bk = (r.bookings || []).map((id) => who.booking[id]).find(Boolean);
+      const person = a ? { name: a.name, email: a.email, phone: a.phone } : bk ? { name: bk.guestName, email: bk.guestEmail, phone: bk.guestPhone } : null;
+      const unpaid = bk && !bk.paid && bk.status !== 'confirmed';
+      const step = r.booked ? (unpaid ? 'Booking not paid' : 'Booked or requested') : r.checkout ? 'Started checkout' : r.asked ? 'Asked a question' : r.viewed ? 'Opened a listing' : r.searched ? 'Searched' : 'Looked around';
+      return {
+        id: r.visitorId, person, first: r.first, last: r.last, sessions: Number(r.sessions), pageviews: Number(r.pageviews),
+        step, device: r.device, source: r.source || null, listings: (r.units || []).map((id) => unitName[id]).filter(Boolean),
+        bookingPaid: bk ? !!bk.paid || bk.status === 'confirmed' : null,
+      };
+    });
+
+    // People to follow up.
+    const abandoned = await prisma.booking.findMany({
+      where: { source: 'website', createdAt: { gte: since }, paid: false, OR: [{ status: 'pending' }, { status: 'cancelled', comments: { contains: 'payment not completed' } }] },
+      include: { unit: { select: { name: true, property: { select: { name: true } } } } }, orderBy: { createdAt: 'desc' }, take: 50,
+    });
+    const iso = (d) => new Date(d).toISOString().slice(0, 10);
+    const followUps = [
+      ...abandoned.map((b) => ({
+        kind: 'checkout', why: b.status === 'pending' ? 'Started a booking, hasn’t paid' : 'Booking lapsed: card payment never completed',
+        name: b.guestName, email: b.guestEmail, phone: b.guestPhone, place: placeName(b.unit), dates: `${iso(b.checkIn)} → ${iso(b.checkOut)}`,
+        amountCents: b.totalCents, at: b.createdAt,
+      })),
+      ...visitors.filter((v) => v.person && !v.step.startsWith('Booked') && (v.step === 'Started checkout' || v.step === 'Opened a listing' || v.step === 'Asked a question'))
+        .filter((v) => !abandoned.some((b) => b.guestEmail && v.person.email && b.guestEmail.toLowerCase() === v.person.email.toLowerCase()))
+        .map((v) => ({ kind: 'browsed', why: v.step === 'Started checkout' ? 'Started checkout, didn’t book' : v.step === 'Asked a question' ? 'Asked a question, hasn’t booked' : `Looked at ${v.listings.slice(0, 2).join(', ') || 'listings'}, didn’t book`, name: v.person.name, email: v.person.email, phone: v.person.phone, place: v.listings[0] || null, at: v.last, visitorId: v.id })),
+    ];
+    res.json({ days, visitors, followUps });
+  } catch (e) {
+    if (/relation "PageEvent" does not exist|column .* does not exist/i.test(e.message)) return res.json({ days: 0, visitors: [], followUps: [], empty: true });
+    next(e);
+  }
+});
+
+// GET /admin/traffic/visitors/:id — one visitor's journey, oldest first.
+router.get('/visitors/:id', async (req, res, next) => {
+  try {
+    const events = await prisma.pageEvent.findMany({ where: { visitorId: String(req.params.id) }, orderBy: { at: 'asc' }, take: 400 });
+    const units = [...new Set(events.map((e) => e.unitId).filter(Boolean))];
+    const names = units.length ? Object.fromEntries((await prisma.unit.findMany({ where: { id: { in: units } }, select: { id: true, name: true, property: { select: { name: true } } } })).map((u) => [u.id, placeName(u)])) : {};
+    res.json({ events: events.map((e) => ({ at: e.at, type: e.type, path: e.path, label: e.label, place: e.unitId ? names[e.unitId] || null : null, session: e.sessionId, device: e.device, source: e.source })) });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

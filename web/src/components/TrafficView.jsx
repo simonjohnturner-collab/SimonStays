@@ -57,6 +57,87 @@ function TopList({ title, rows, keyLabel, empty }) {
   );
 }
 
+
+const when = (d) => new Date(d).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const waLink = (phone) => { const d = String(phone || '').replace(/\D/g, ''); if (!d) return null; return `https://wa.me/${d.startsWith('0') ? '27' + d.slice(1) : d}`; };
+const EVENT_TEXT = {
+  pageview: (e) => `Opened ${e.path === '/' ? 'the home page' : e.path}`,
+  search: (e) => `Searched “${e.label || 'any area'}”`,
+  impression: (e) => `Saw ${e.place || 'a listing'} in the results`,
+  view_listing: (e) => `Opened ${e.place || e.label || 'a listing'}`,
+  click: (e) => `Clicked “${e.label}”`,
+  start_checkout: (e) => `Started checkout${e.place ? ` for ${e.place}` : ''}`,
+  booking_placed: (e) => `Placed a booking${e.place ? ` for ${e.place}` : ''}`,
+  booked: () => 'Paid: booking confirmed 🎉',
+  request_sent: (e) => `Sent a booking request${e.place ? ` for ${e.place}` : ''}`,
+  enquiry_sent: (e) => `Asked the host a question${e.place ? ` about ${e.place}` : ''}`,
+  signup: () => 'Created an account', signin: () => 'Signed in',
+};
+
+function Journey({ visitor, onClose }) {
+  const [events, setEvents] = useState(null);
+  useEffect(() => {
+    fetch(`${apiBaseUrl().replace(/\/$/, '')}/admin/traffic/visitors/${encodeURIComponent(visitor.id)}`, { headers: { Authorization: `Bearer ${getToken()}` } })
+      .then((r) => r.json()).then((d) => setEvents(d.events || [])).catch(() => setEvents([]));
+  }, [visitor.id]);
+  // Impressions are noisy in a timeline: fold runs of them into one line.
+  const lines = [];
+  (events || []).forEach((e, i) => {
+    const prev = events[i - 1];
+    if (prev && prev.session !== e.session) lines.push({ gap: true, at: e.at });
+    if (e.type === 'impression' && lines.length && lines[lines.length - 1].type === 'impression') { lines[lines.length - 1].n += 1; return; }
+    lines.push({ ...e, n: 1 });
+  });
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal tr-journey" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head"><h3>{visitor.person ? visitor.person.name || visitor.person.email : 'Anonymous visitor'}</h3><button className="x" onClick={onClose}>×</button></div>
+        <p className="muted small">{[visitor.device, visitor.source ? `from ${visitor.source}` : 'came direct', `${visitor.sessions} visit${visitor.sessions === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}</p>
+        {!events ? <p className="muted small">Loading…</p> : (
+          <ol className="tr-timeline">{lines.map((l, i) => (l.gap
+            ? <li key={i} className="tr-gap">New visit · {when(l.at)}</li>
+            : <li key={i}><span className="tr-t">{new Date(l.at).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}</span>{l.type === 'impression' && l.n > 1 ? `Scrolled past ${l.n} listings` : (EVENT_TEXT[l.type] || (() => l.type))(l)}</li>))}
+          </ol>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FollowUps({ items }) {
+  if (!items.length) return <p className="muted small">Nobody to follow up right now. People appear here when they start a booking without paying, or when someone who’s signed in looks at listings or starts checkout without booking.</p>;
+  return (
+    <div className="tr-follow">{items.map((f, i) => (
+      <div key={i} className={`tr-person ${f.kind}`}>
+        <div className="tr-person-main"><b>{f.name || f.email || 'Guest'}</b><span className="muted small">{f.why}{f.place ? ` · ${f.place}` : ''}{f.dates ? ` · ${f.dates}` : ''}{f.amountCents ? ` · R${Math.round(f.amountCents / 100).toLocaleString('en-ZA')}` : ''} · {when(f.at)}</span></div>
+        <div className="tr-person-actions">
+          {waLink(f.phone) && <a className="tr-btn wa" href={waLink(f.phone)} target="_blank" rel="noreferrer">WhatsApp {f.phone}</a>}
+          {f.email && <a className="tr-btn" href={`mailto:${f.email}`}>{f.email}</a>}
+        </div>
+      </div>
+    ))}</div>
+  );
+}
+
+function Visitors({ list, onOpen }) {
+  if (!list.length) return <p className="muted small">No visitors in this period yet.</p>;
+  return (
+    <div className="tr-scroll"><table className="tr-table tr-visitors">
+      <thead><tr><th>Who</th><th>Last seen</th><th>From</th><th>Got as far as</th><th>Listings opened</th><th></th></tr></thead>
+      <tbody>{list.map((v) => (
+        <tr key={v.id}>
+          <td>{v.person ? <><b>{v.person.name || v.person.email}</b>{v.person.phone && <div className="muted small">{v.person.phone}</div>}</> : <span className="muted">Anonymous · {v.device || 'device?'}</span>}</td>
+          <td className="small">{when(v.last)}{v.sessions > 1 && <div className="muted">{v.sessions} visits</div>}</td>
+          <td className="small">{v.source || 'Direct'}</td>
+          <td className="small"><span className={`tr-step-pill s-${v.step.split(' ')[0].toLowerCase()}`}>{v.step}</span></td>
+          <td className="small">{v.listings.join(', ') || '—'}</td>
+          <td><button className="mini" onClick={() => onOpen(v)}>See journey</button></td>
+        </tr>
+      ))}</tbody>
+    </table></div>
+  );
+}
+
 export default function TrafficView() {
   const [days, setDays] = useState(30);
   const [hosts, setHosts] = useState(false);
@@ -70,6 +151,14 @@ export default function TrafficView() {
     return () => { live = false; };
   }, [days, hosts]);
 
+  const [people, setPeople] = useState(null);
+  const [open, setOpen] = useState(null);
+  useEffect(() => {
+    let live = true;
+    fetch(`${apiBaseUrl().replace(/\/$/, '')}/admin/traffic/visitors?days=${Math.max(days, 7)}${hosts ? '&hosts=1' : ''}`, { headers: { Authorization: `Bearer ${getToken()}` } })
+      .then((r) => r.json()).then((j) => { if (live) setPeople(j); }).catch(() => {});
+    return () => { live = false; };
+  }, [days, hosts]);
   const t = (d && d.totals) || {};
   return (
     <div className="tr-wrap">
@@ -87,6 +176,8 @@ export default function TrafficView() {
             <Tile label="Listing views" value={num(t.listing_views)} sub={`${num(t.impressions)} listings seen in results · ${pct(t.listing_views, t.impressions)} opened`} />
             <Tile label="Bookings & requests" value={num(t.booked + t.requests)} sub={`${num(t.checkouts)} checkouts started · ${num(t.enquiries)} questions sent · ${num(t.signups)} sign-ups`} />
           </div>
+
+          <section className="tr-card tr-follow-card"><h4>📞 People to follow up</h4>{!people ? <p className="muted small">Loading…</p> : <FollowUps items={people.followUps || []} />}</section>
 
           <section className="tr-card"><h4>Visitors per day <span className="muted small">(dark: visitors · light: page views)</span></h4><DailyChart daily={d.daily} /></section>
 
@@ -116,6 +207,8 @@ export default function TrafficView() {
             <TopList title="Pages visited" rows={d.pages} keyLabel="Page" empty="No page views yet." />
             <TopList title="Devices" rows={d.devices} keyLabel="Device" empty="No visits yet." />
           </div>
+          <section className="tr-card"><h4>Recent visitors <span className="muted small">(named once they sign in or book; their earlier visits from the same browser are linked too)</span></h4>{!people ? <p className="muted small">Loading…</p> : <Visitors list={people.visitors || []} onOpen={setOpen} />}</section>
+          {open && <Journey visitor={open} onClose={() => setOpen(null)} />}
           <p className="muted small">Counted on simonstays.co.za without cookies or IP addresses. Search engine bots are left out{hosts ? '' : ', and so are hosts browsing while signed in'}.</p>
         </>
       )}

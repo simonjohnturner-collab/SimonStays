@@ -933,7 +933,11 @@ model PageEvent {
   device     String? // mobile | tablet | desktop
   source     String? // utm_source or the referring site
   isHost     Boolean  @default(false) // a host browsing while signed in to hosting
+  guestAccountId String? // set once the visitor signs in (their earlier visits from this browser too)
+  bookingId      String? // the booking they placed (its contact details)
   @@index([at])
+  @@index([visitorId])
+  @@index([guestAccountId])
   @@index([type, at])
   @@index([unitId])
 }
