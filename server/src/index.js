@@ -29,6 +29,9 @@ app.use('/photos', require('./routes/photos'));
 // Hosting can play it and hosts can download it as their WhatsApp tone.
 app.use('/sounds', express.static(path.join(__dirname, '../public/sounds'), { maxAge: '7d' }));
 app.use('/listings', require('./routes/listings'));
+// Analytics: the tracker script and its events (first-party, no cookies).
+app.get('/assets/track.js', (req, res) => { res.set('Cache-Control', 'public, max-age=300'); res.type('application/javascript').sendFile(path.join(__dirname, 'pages/track.js')); });
+app.use('/public/track', require('./routes/track'));
 // Public guest accounts (shopfront login → "my trips"). Mount before /public so
 // its paths are matched first (the /public router has no /account/* routes).
 app.use('/public/account/messages', require('./routes/guestMessages'));
@@ -179,6 +182,7 @@ app.get(['/', '/stay', '/book', '/stays/:propertyId', '/stays/:propertyId/:unitI
 });
 
 app.use('/auth', require('./routes/auth'));
+app.use('/admin/traffic', require('./routes/adminTraffic'));
 app.use('/admin', require('./routes/admin'));
 app.use('/account', require('./routes/account'));
 app.use('/email', require('./routes/email'));

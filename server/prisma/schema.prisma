@@ -915,3 +915,24 @@ model MarketSnapshot {
   @@index([competitorId, stayDate])
   @@index([competitorId, capturedDate])
 }
+
+// Site analytics: one row per thing a visitor did on simonstays.co.za (routes/track.js).
+// First-party, no cookies, no IP. visitorId/sessionId are anonymous random ids.
+model PageEvent {
+  id         String   @id @default(uuid())
+  at         DateTime @default(now())
+  visitorId  String
+  sessionId  String
+  type       String // pageview | impression | view_listing | search | click | start_checkout | booking_placed | booked | request_sent | enquiry_sent | signup | signin
+  path       String?
+  label      String? // what was clicked or searched, or the listing name
+  unitId     String?
+  propertyId String?
+  meta       Json?
+  device     String? // mobile | tablet | desktop
+  source     String? // utm_source or the referring site
+  isHost     Boolean  @default(false) // a host browsing while signed in to hosting
+  @@index([at])
+  @@index([type, at])
+  @@index([unitId])
+}

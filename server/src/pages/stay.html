@@ -330,6 +330,7 @@
 <div id="lightbox"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/assets/track.js"></script>
 <script>
 (function(){
   var API=''; // same origin (served by the API)
@@ -383,6 +384,11 @@
   function unitTitle(u){ return esc(u.propertyName)+' · Unit '+esc(u.unitName); }
   function unitSub(u){ var m=[]; if(u.capacity)m.push('sleeps '+u.capacity); if(u.bedrooms)m.push(u.bedrooms+' bed'); if(u.bathrooms)m.push(u.bathrooms+' bath'); return (u.address?esc(u.address):'')+(m.length?(' · '+m.join(' · ')):''); }
 
+  // Analytics: a listing counts as seen (an impression) once half of its card is on screen.
+  var IMPR_SEEN={}, IMPR_OBS=('IntersectionObserver' in window)?new IntersectionObserver(function(entries){
+    entries.forEach(function(en){ if(!en.isIntersecting) return; var u=en.target._u; IMPR_OBS.unobserve(en.target);
+      if(u && !IMPR_SEEN[u.unitId]){ IMPR_SEEN[u.unitId]=1; if(window.ssTrack) ssTrack('impression',{unitId:u.unitId,propertyId:u.propertyId}); } });
+  },{threshold:0.5}):null;
   function render(){
     var list=filtered();
     $('#count').textContent=list.length+' '+(list.length===1?'stay':'stays')+(GEO?(' within '+radiusKm()+' km of '+shortLabel(GEO.label)):'')+(($('#ci').value&&$('#co').value)?' available for your dates':'');
@@ -394,6 +400,7 @@
       c.innerHTML='<div class="ph" style="'+img+'"></div><div class="body"><div class="nm">'+unitTitle(u)+'</div>'+
         '<div class="sub">'+unitSub(u)+'</div>'+ratingLabel(u.rating)+priceLabel(u)+'</div>';
       c.onclick=function(){ openUnit(u); };
+      c._u=u; if(IMPR_OBS) IMPR_OBS.observe(c);
       box.appendChild(c);
     });
     if(VIEW==='map') drawMap(list);
@@ -445,6 +452,7 @@
   // is within the chosen distance, then (re)load for the dates.
   async function doSearch(){
     var q=$('#q').value.trim(); GEO=null;
+    if(window.ssTrack) ssTrack('search',{label:q||'(any area)',meta:{checkIn:$('#ci').value||null,checkOut:$('#co').value||null,guests:$('#g').value||null}});
     if(q){
       $('#count').textContent='Searching…';
       try{ var r=await fetch('/public/geocode?q='+encodeURIComponent(q)); var d=await r.json(); if(d&&d.result) GEO=d.result; }catch(e){}
@@ -469,6 +477,7 @@
       var r=await fetch(API+'/public/properties/'+card.propertyId); var d=await r.json(); var p=d.property;
       HOST=Object.assign({},HOST,p.host); // whose name and bank details to show: this property's host
       var unit=(p.units||[]).find(function(x){return x.id===card.unitId;}) || (p.units||[])[0];
+      if(unit) if(window.ssTrack) ssTrack('view_listing',{unitId:unit.id,propertyId:p.id,label:p.name+' · '+(unit.name||'')});
       STATE={ prop:p, unit:unit, month:startMonth(), booked:[], ciSel:null, coSel:null, quote:null };
       renderDetail();
       loadCal();
@@ -762,6 +771,7 @@
         var d=await r.json().catch(function(){ return {}; });
         if(r.status===401){ clearSession(); AFTER_AUTH=function(){ openEnquiry(asRequest); }; openAuth('login', null, asRequest?REQ_AUTH_NOTE:ENQ_AUTH_NOTE); return; }
         if(!r.ok) throw new Error(d.message||'Could not send your message. Please try again.');
+        if(window.ssTrack) ssTrack(asRequest?'request_sent':'enquiry_sent',{unitId:u.id,propertyId:p.id});
         openInbox(d.bookingId);
       }catch(e){ btn.disabled=false; btn.textContent='Send message'; box.innerHTML='<div class="msg err">'+esc(e.message)+'</div>'; }
     };
@@ -782,6 +792,7 @@
   // ---- Checkout screen: cover photo, full breakdown, details, payment options ----
   function openCheckout(){
     var p=STATE.prop, u=STATE.unit, q=STATE.quote; if(!q) return;
+    if(window.ssTrack) ssTrack('start_checkout',{unitId:u.id,propertyId:p.id,meta:{nights:q.nights,totalCents:q.totalCents}});
     var host=$('#detail');
     var cover=(u.photos&&u.photos.length)?u.photos[0].id:((p.photos&&p.photos.length)?p.photos[0].id:null);
     var ci=u.checkInTime||'15:00', co=u.checkOutTime||'10:00';
@@ -862,6 +873,7 @@
       var d=await r.json();
       if(!r.ok){ cm.innerHTML='<div class="msg err">'+esc(d.message||'Could not create the booking.')+'</div>'; btn.disabled=false; btn.textContent='Confirm booking'; return; }
       STATE.ref=d.ref||null;
+      if(window.ssTrack) ssTrack('booking_placed',{unitId:STATE.unit&&STATE.unit.id,propertyId:STATE.prop&&STATE.prop.id,meta:{totalCents:STATE.quote&&STATE.quote.totalCents}});
       if(d.payment && d.payment.mode==='eft'){ STATE.eftPay=d.payment; showDone({ property:d.property, unit:d.unit, booking:{ id:d.bookingId, checkIn:STATE.ciSel, checkOut:STATE.coSel } }); return; }
       if(d.payment && d.payment.mode==='form'){ btn.textContent='Taking you to secure payment…'; goToGateway(d.payment); return; }
       if(d.payment && d.payment.mode==='redirect'){ window.location=d.payment.url; return; }
@@ -1021,6 +1033,7 @@
         var d=await r.json();
         if(!r.ok){ msg.innerHTML='<div class="msg err">'+esc(d.message||'Could not sign you in. Please try again.')+'</div>'; btn.disabled=false; btn.textContent=login?'Sign in':'Create account'; return; }
         saveSession(d.token,d.account,d.hostToken);
+        if(window.ssTrack) ssTrack(login?'signin':'signup');
         var next=AFTER_AUTH; AFTER_AUTH=null;
         if(next) next(); else openTrips();
         refreshUnread();
@@ -1246,6 +1259,7 @@
     for(var i=0; i<30 && s.status!=='confirmed'; i++){ await new Promise(function(r){ setTimeout(r,2000); }); try{ s=await status(); }catch(e){} }
     if(s.status==='confirmed'){
       head.textContent='Booking confirmed';
+      if(window.ssTrack) ssTrack('booked',{label:s.ref||null});
       body.innerHTML='<div class="done"><div class="big">✅</div><h3>Payment received — you’re booked!</h3>'+summary(s)+
         (s.amountOwingCents?'<p class="note">Balance of <b>'+rand(s.amountOwingCents)+'</b> is due at least 3 days before check-in — you can pay it from <b>My trips</b>.</p>':'')+
         '<p class="note">'+(s.guestEmail?'Your invoice was emailed to <b>'+esc(s.guestEmail)+'</b>. ':'')+(GUEST?'Find this trip under <b>My trips</b>.':'Create an account with the same email to see this trip and message your host.')+'</p>'+
@@ -1515,7 +1529,7 @@
   }
 
   // ---- Every screen has an address: / · /stays/:property/:unit · /trips · /messages ----
-  function setPath(p){ if(location.pathname!==p){ try{ history.pushState({ss:1},'',p); }catch(e){} } }
+  function setPath(p){ if(location.pathname!==p){ try{ history.pushState({ss:1},'',p); }catch(e){} if(window.ssTrack) ssTrack('pageview'); } }
   // Closing any screen (it empties #detail) puts the address back to the search page.
   new MutationObserver(function(){ if(!$('#detail').children.length && location.pathname!=='/' && !/^\/(stay|book)$/.test(location.pathname)){ try{ history.pushState({ss:1},'','/'); }catch(e){} } })
     .observe($('#detail'),{childList:true});
