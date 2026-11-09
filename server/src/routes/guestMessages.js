@@ -62,13 +62,18 @@ router.get('/', async (req, res, next) => {
       include: {
         unit: { include: { property: true } }, messages: { where: { unsentAt: null }, orderBy: { createdAt: 'asc' }, include: { offer: true } },
         tripGuests: { orderBy: { createdAt: 'asc' }, select: { account: { select: { id: true, name: true, email: true } } } },
+        ratings: { select: { kind: true } },
       },
     });
+    const { ratingBlock } = require('../utils/ratings');
+    const { rateLink } = require('../utils/guestThread');
     const threads = bookings.map((b) => {
       const booker = isBooker(b, acct);
       const seen = booker ? b.messages : b.messages.filter(seenByFriends);
       return {
       bookingId: b.id, ref: b.ref || null, status: b.status, isBooker: booker,
+      // The stay is over and the booker hasn't rated it yet: show "How was your stay?".
+      rateUrl: booker && !ratingBlock({ ...b, guestEmail: b.guestEmail || acct.email }) && !b.ratings.some((r) => r.kind === 'host') ? rateLink(b.id) : null,
       // Friends' email addresses are only for the booker, who invited them.
       people: b.tripGuests.map(({ account: a }) => ({ id: a.id, name: a.name || (booker ? a.email : 'Guest'), me: a.id === acct.id })),
       propertyName: b.unit?.property?.name || null, unitName: b.unit?.name || null,

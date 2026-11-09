@@ -35,7 +35,7 @@ router.get('/:token', async (req, res, next) => {
 router.post('/:token', async (req, res, next) => {
   try {
     const b = await bookingOf(req, res); if (!b) return;
-    const r = await saveRating(b, 'host', (req.body || {}).scores);
+    const r = await saveRating(b, 'host', (req.body || {}).scores, (req.body || {}).comment);
     if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
     res.status(201).json({ ok: true });
   } catch (e) { next(e); }

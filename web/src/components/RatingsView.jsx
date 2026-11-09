@@ -35,25 +35,28 @@ function StarPicker({ label, value, onChange }) {
   );
 }
 
-function RateGuest({ stay, categories, onDone }) {
+export function RateGuest({ stay, categories, onDone, compact = false }) {
   const [scores, setScores] = useState({});
+  const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const ready = categories.every((c) => scores[c.key]);
   async function save() {
     setBusy(true); setErr('');
-    try { await api.rateGuest(stay.bookingId, scores); onDone(); }
+    try { await api.rateGuest(stay.bookingId, scores, comment); onDone(); }
     catch (e) { setErr((e.data && e.data.message) || e.message); setBusy(false); }
   }
   return (
-    <section className="sp-card rate-card">
-      <div className="rate-guest">
+    <section className={`sp-card rate-card${compact ? ' compact' : ''}`}>
+      {!compact && <div className="rate-guest">
         <b>{stay.guestName || 'Guest'}</b>{stay.ref ? <span className="muted small"> · {stay.ref}</span> : null}
         <div className="muted small">{placeOf(stay)}, {fmtDay(stay.checkIn)} to {fmtDay(stay.checkOut)}</div>
         <GuestRatingChip rating={stay.guestRating} />
-      </div>
+      </div>}
       <div>
         {categories.map((c) => <StarPicker key={c.key} label={c.label} value={scores[c.key] || 0} onChange={(n) => setScores({ ...scores, [c.key]: n })} />)}
+        <label className="rate-comment">Tell other hosts about this guest <span className="muted small">(optional)</span>
+          <textarea rows={3} maxLength={1000} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="e.g. Left the place spotless and communicated well." /></label>
         {err && <div className="msg-warn">{err}</div>}
         <button type="button" disabled={!ready || busy} onClick={save}>{busy ? 'Saving…' : 'Save rating'}</button>
       </div>
@@ -82,9 +85,9 @@ export default function RatingsView() {
       {data.received.length > 0 && (
         <div className="admin-table-wrap">
           <table className="admin-table">
-            <thead><tr><th>Stay</th><th>Guest</th><th>Scores</th><th className="num">Overall</th></tr></thead>
+            <thead><tr><th>Stay</th><th>Guest</th><th>Scores &amp; review</th><th className="num">Overall</th></tr></thead>
             <tbody>{data.received.map((r) => (
-              <tr key={r.id}><td className="small">{placeOf(r)}<div className="muted">{fmtDay(r.checkIn)} to {fmtDay(r.checkOut)}</div></td><td className="small">{r.guestName || 'Guest'}</td><td className="small tx-wrap">{catLine(data.hostCategories, r.scores)}</td><td className="num">★ {r.average.toFixed(1)}</td></tr>
+              <tr key={r.id}><td className="small">{placeOf(r)}<div className="muted">{fmtDay(r.checkIn)} to {fmtDay(r.checkOut)}</div></td><td className="small">{r.guestName || 'Guest'}</td><td className="small tx-wrap">{catLine(data.hostCategories, r.scores)}{r.comment && <div className="rate-quote">“{r.comment}”</div>}</td><td className="num">★ {r.average.toFixed(1)}</td></tr>
             ))}</tbody>
           </table>
         </div>
@@ -95,9 +98,9 @@ export default function RatingsView() {
           <h3>Guests you’ve rated</h3>
           <div className="admin-table-wrap">
             <table className="admin-table">
-              <thead><tr><th>Guest</th><th>Stay</th><th>Scores</th><th className="num">Overall</th></tr></thead>
+              <thead><tr><th>Guest</th><th>Stay</th><th>Scores &amp; review</th><th className="num">Overall</th></tr></thead>
               <tbody>{data.given.map((r) => (
-                <tr key={r.id}><td className="small">{r.guestName || 'Guest'}<div className="muted">{r.guestEmail}</div></td><td className="small">{placeOf(r)}<div className="muted">{fmtDay(r.checkIn)} to {fmtDay(r.checkOut)}</div></td><td className="small tx-wrap">{catLine(data.guestCategories, r.scores)}</td><td className="num">★ {r.average.toFixed(1)}</td></tr>
+                <tr key={r.id}><td className="small">{r.guestName || 'Guest'}<div className="muted">{r.guestEmail}</div></td><td className="small">{placeOf(r)}<div className="muted">{fmtDay(r.checkIn)} to {fmtDay(r.checkOut)}</div></td><td className="small tx-wrap">{catLine(data.guestCategories, r.scores)}{r.comment && <div className="rate-quote">“{r.comment}”</div>}</td><td className="num">★ {r.average.toFixed(1)}</td></tr>
               ))}</tbody>
             </table>
           </div>

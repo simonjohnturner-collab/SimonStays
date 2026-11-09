@@ -46,6 +46,24 @@ const guestRatingOf = async (email) => (email ? summarise(await allOf({ guestEma
 const propertyRatingOf = async (propertyId) => summarise(await allOf({ propertyId }, 'host'), 'host');
 const hostRatingOf = async (hostId) => summarise(await allOf({ hostId }, 'host'), 'host');
 
+// The latest written reviews of a property, for its listing page: first name and
+// month only, never the guest's full name or email.
+async function propertyReviews(propertyId, take = 6) {
+  const rows = await prisma.rating.findMany({
+    where: { propertyId, kind: 'host', comment: { not: null } }, orderBy: { createdAt: 'desc' }, take,
+    select: { average: true, comment: true, createdAt: true, booking: { select: { guestName: true } } },
+  });
+  return rows.map((r) => ({ average: r.average, comment: r.comment, name: String((r.booking && r.booking.guestName) || 'A guest').trim().split(/\s+/)[0], at: r.createdAt }));
+}
+
+// guestEmail -> average stars from hosts, for many guests at once (inbox list).
+async function guestStarsByEmail(emails) {
+  const list = [...new Set(emails.filter(Boolean))];
+  if (!list.length) return {};
+  const rows = await prisma.rating.groupBy({ by: ['guestEmail'], where: { kind: 'guest', guestEmail: { in: list } }, _avg: { average: true }, _count: true });
+  return Object.fromEntries(rows.map((r) => [r.guestEmail, { average: round1(r._avg.average), count: r._count }]));
+}
+
 // propertyId -> { average, count }, for the shopfront's listings.
 async function ratingsByProperty() {
   const rows = await prisma.rating.groupBy({ by: ['propertyId'], where: { kind: 'host' }, _avg: { average: true }, _count: true });
@@ -75,7 +93,10 @@ function ratingBlock(b, now = Date.now()) {
 }
 
 // Save a rating. `b` needs its unit and property. Answers { rating } or { error, status, message }.
-async function saveRating(b, kind, rawScores) {
+// A written review alongside the stars: optional, trimmed, up to 1000 characters.
+const cleanComment = (c) => String(c || '').replace(/\r/g, '').trim().slice(0, 1000) || null;
+
+async function saveRating(b, kind, rawScores, comment) {
   const blocked = ratingBlock(b);
   if (blocked) return { error: 'not_ratable', status: 400, message: blocked };
   const scores = cleanScores(kind, rawScores);
@@ -85,7 +106,7 @@ async function saveRating(b, kind, rawScores) {
     const rating = await prisma.rating.create({
       data: {
         bookingId: b.id, kind, hostId: hostOf(b), propertyId: b.unit.propertyId, guestEmail: guestEmailOf(b),
-        scores, average: values.reduce((n, v) => n + v, 0) / values.length,
+        scores, average: values.reduce((n, v) => n + v, 0) / values.length, comment: cleanComment(comment),
       },
     });
     return { rating };
@@ -159,5 +180,5 @@ async function runRatingInvites(now = new Date()) {
 
 module.exports = {
   HOST_CATEGORIES, GUEST_CATEGORIES, categoriesOf, guestEmailOf, summarise, guestRatingOf, propertyRatingOf, hostRatingOf,
-  ratingsByProperty, ratingBlock, saveRating, runRatingInvites, inviteDueAt, RATING_WINDOW_MS,
+  ratingsByProperty, ratingBlock, saveRating, runRatingInvites, inviteDueAt, RATING_WINDOW_MS, propertyReviews, guestStarsByEmail, cleanComment,
 };

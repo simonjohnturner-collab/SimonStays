@@ -60,6 +60,11 @@
       }
       fs.appendChild(s); f.appendChild(fs);
     });
+    var cl = el('label', 'comment-l', 'Tell us more (optional)'), ta = el('textarea');
+    ta.rows = 4; ta.maxLength = 1000; ta.placeholder = 'What did you love? Anything the host could do better?';
+    ta.style.cssText = 'width:100%;font:inherit;padding:10px;border:1px solid #d6dbd8;border-radius:8px;margin:6px 0 14px;box-sizing:border-box';
+    cl.style.cssText = 'display:block;font-weight:600;margin-top:6px';
+    f.appendChild(cl); f.appendChild(ta);
     var b = el('button', null, 'Send my rating'), e = el('div', 'err');
     f.appendChild(b); f.appendChild(e); app.appendChild(f);
     f.onsubmit = async function(ev){
@@ -68,7 +73,7 @@
       d.categories.forEach(function(c){ var x = f.querySelector('input[name="' + c.key + '"]:checked'); if (x) scores[c.key] = Number(x.value); });
       b.disabled = true; e.textContent = '';
       try {
-        var r = await fetch(api, { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ scores:scores }) });
+        var r = await fetch(api, { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ scores:scores, comment:ta.value }) });
         var o = await r.json();
         if (!r.ok) throw new Error(o.message || 'Could not save your rating.');
         done('Thank you!', 'Your rating has been saved, and it helps other guests choose.');

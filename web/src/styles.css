@@ -1295,3 +1295,13 @@ button[role=radio].on { color:#e2a100; }
 .tr-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .tr-table td { padding: 6px 8px; border-bottom: 1px solid #f0f2f1; overflow-wrap: anywhere; }
 .tr-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Reviews: inbox prompts and written reviews */
+.msg-review-pill { align-self: flex-start; margin-top: 4px; font-size: 12px; font-weight: 600; background: #fffaf0; border: 1px solid #f3dfb3; color: #7a5300; border-radius: 999px; padding: 2px 10px; }
+.msg-stars { margin-left: 6px; font-size: 12px; font-weight: 700; color: #b7791f; }
+.msg-review-banner { margin: 8px 12px; border: 1px solid #f3dfb3; background: #fffaf0; border-radius: 10px; padding: 8px 12px; }
+.msg-review-banner summary { cursor: pointer; font-size: 14px; }
+.msg-review-banner summary b { color: var(--green-d); margin-left: 4px; }
+.rate-card.compact { border: 0; padding: 8px 0 0; background: transparent; box-shadow: none; }
+.rate-comment { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; font-size: 13px; font-weight: 600; }
+.rate-quote { margin-top: 4px; font-style: italic; color: var(--ink); }

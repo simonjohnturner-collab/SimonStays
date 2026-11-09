@@ -40,9 +40,9 @@ router.get('/', async (req, res, next) => {
       guestCategories: GUEST_CATEGORIES,
       overall: summarise(received, 'host'),
       properties: Object.values(byProperty).map((rows) => ({ propertyId: rows[0].propertyId, name: rows[0].booking.unit?.property?.name || 'Property', rating: summarise(rows, 'host') })),
-      received: received.slice(0, 100).map((r) => ({ id: r.id, average: r.average, scores: r.scores, createdAt: r.createdAt, ...stayOf(r.booking) })),
+      received: received.slice(0, 100).map((r) => ({ id: r.id, average: r.average, scores: r.scores, comment: r.comment || null, createdAt: r.createdAt, ...stayOf(r.booking) })),
       toRate,
-      given: given.map((r) => ({ id: r.id, average: r.average, scores: r.scores, createdAt: r.createdAt, ...stayOf(r.booking) })),
+      given: given.map((r) => ({ id: r.id, average: r.average, scores: r.scores, comment: r.comment || null, createdAt: r.createdAt, ...stayOf(r.booking) })),
     });
   } catch (e) { next(e); }
 });
@@ -65,7 +65,7 @@ router.get('/booking/:bookingId/guest', async (req, res, next) => {
 router.post('/booking/:bookingId', async (req, res, next) => {
   try {
     const b = await ownedBooking(req, res); if (!b) return;
-    const r = await saveRating(b, 'guest', (req.body || {}).scores);
+    const r = await saveRating(b, 'guest', (req.body || {}).scores, (req.body || {}).comment);
     if (r.error) return res.status(r.status).json({ error: r.error, message: r.message });
     res.status(201).json({ ok: true });
   } catch (e) { next(e); }

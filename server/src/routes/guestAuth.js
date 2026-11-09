@@ -258,6 +258,9 @@ function tripOf(b, acct) {
     propertyName: p ? p.name : null,
     unitName: u ? u.name : null,
     unitId: u ? u.id : null, // for "Report damage" on the trip
+    // The stay is over and the booker hasn't rated it yet.
+    rateUrl: !shared && Array.isArray(b.ratings) && !require('../utils/ratings').ratingBlock({ ...b, guestEmail: b.guestEmail || acct.email }) && !b.ratings.some((r) => r.kind === 'host')
+      ? require('../utils/guestThread').rateLink(b.id) : null,
     hostId: p ? p.hostId : null,
     address: p ? (p.address || null) : null,
     checkIn: iso(b.checkIn),
@@ -301,6 +304,7 @@ router.get('/trips', authGuest, async (req, res, next) => {
             photos: { orderBy: { sort: 'asc' }, take: 1, select: { id: true } },
           },
         },
+        ratings: { select: { kind: true } },
       },
       orderBy: { checkIn: 'desc' },
     });

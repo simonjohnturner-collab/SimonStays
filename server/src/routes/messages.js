@@ -97,11 +97,17 @@ router.get('/threads', async (req, res, next) => {
         ...SUMMARY_INCLUDE,
         messages: { where: { unsentAt: null }, orderBy: { createdAt: 'desc' }, take: 1 },
         _count: { select: { messages: { where: { sender: 'guest', readAt: null } } } },
+        ratings: { select: { kind: true } },
       },
       take: 300,
     });
+    const R = require('../utils/ratings');
+    const stars = await R.guestStarsByEmail(bookings.map((b) => R.guestEmailOf(b)));
     const threads = bookings.map((b) => ({
       booking: bookingSummary(b),
+      // Airbnb-style prompt: the stay has ended and the host hasn't rated the guest yet.
+      reviewDue: !R.ratingBlock(b) && !b.ratings.some((r) => r.kind === 'guest'),
+      guestStars: stars[R.guestEmailOf(b)] || null,
       last: b.messages[0] ? { body: b.messages[0].body, sender: b.messages[0].sender, createdAt: b.messages[0].createdAt } : null,
       unread: b._count.messages,
     })).sort((a, b) => new Date(b.last.createdAt) - new Date(a.last.createdAt));
@@ -164,6 +170,10 @@ router.get('/booking/:bookingId', async (req, res, next) => {
       cancel: await changes.cancelQuote(b, 'host'),
       travellers: await tripGuestsOf(b.id),
       guestRating: await require('../utils/ratings').guestRatingOf(require('../utils/ratings').guestEmailOf(b)),
+      review: {
+        due: !require('../utils/ratings').ratingBlock(b) && !(await prisma.rating.findFirst({ where: { bookingId: b.id, kind: 'guest' }, select: { id: true } })),
+        categories: require('../utils/ratings').GUEST_CATEGORIES,
+      },
       messages: messages.map((m) => ({
         id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt, readAt: m.readAt, authorName: m.authorName || null, scheduleId: m.scheduleId || null,
         emailedAt: m.emailedAt, scheduleName: m.schedule ? m.schedule.name : (m.scheduleId ? 'Scheduled message' : null),

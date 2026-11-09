@@ -260,6 +260,17 @@
   .mode-note{ margin:8px 0; padding:9px 11px; border-radius:9px; background:#fff7e6; border:1px solid #f0d9a8; color:#7a5300; font-size:13px; }
   .mode-note.ok{ background:#eef6f0; border-color:#cfe6d6; color:var(--green-d); }
   .mode-note a{ font-weight:700; cursor:pointer; }
+  .rate-prompt{ display:flex; align-items:center; gap:12px; margin:0 0 10px; padding:12px 14px; border-radius:12px; background:#fffaf0; border:1px solid #f3dfb3; color:var(--ink); }
+  .rate-prompt>span:first-child{ font-size:22px; }
+  .rate-prompt b{ display:block; } .rate-prompt small{ color:var(--muted); }
+  .rate-prompt .rp-go{ margin-left:auto; font-weight:700; color:var(--green); white-space:nowrap; }
+  .trip-rate{ display:inline-block; margin-top:8px; margin-right:6px; padding:8px 14px; border-radius:8px; background:#fffaf0; border:1px solid #f3dfb3; color:#7a5300; font-weight:700; font-size:14px; }
+  .reviews{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; margin-top:12px; }
+  .review{ margin:0; padding:12px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+  .rv-head{ display:flex; gap:10px; align-items:center; margin-bottom:6px; }
+  .rv-head b{ display:block; } .rv-head small{ color:var(--muted); }
+  .rv-av{ width:34px; height:34px; border-radius:50%; background:#e3f1e7; color:var(--green-d); display:grid; place-items:center; font-weight:700; }
+  .review blockquote{ margin:0; color:#374151; font-size:14px; line-height:1.5; white-space:pre-wrap; }
   .trip-inv{ background:#f7efd9; color:#3b3226; border:1px solid #d8cdb0; margin-top:8px; margin-right:6px; }
   .trip-inv:hover{ background:#efe4c6; }
   .paper-wrap{ background:#eceae4; border-radius:10px; padding:10px 0; overflow-x:auto; }
@@ -580,7 +591,8 @@
     var pr=p.rating, hr=p.host&&p.host.rating;
     var ratingBlock=(pr&&pr.count)?('<div class="ratings"><h3>★ '+pr.average.toFixed(1)+' · '+pr.count+(pr.count===1?' rating':' ratings')+' from guests</h3>'+
       pr.categories.map(function(c){ return '<div class="rating-row"><span>'+esc(c.label)+'</span><b>'+c.average.toFixed(1)+'</b></div>'; }).join('')+
-      ((hr&&hr.count)?'<div class="rating-host">Host rating across all their stays: <b>★ '+hr.average.toFixed(1)+'</b> ('+hr.count+')</div>':'')+'</div>'):'';
+      ((hr&&hr.count)?'<div class="rating-host">Host rating across all their stays: <b>★ '+hr.average.toFixed(1)+'</b> ('+hr.count+')</div>':'')+
+      ((p.reviews&&p.reviews.length)?'<div class="reviews">'+p.reviews.map(function(rv){ return '<figure class="review"><div class="rv-head"><span class="rv-av">'+esc((rv.name||'G').charAt(0))+'</span><span><b>'+esc(rv.name)+'</b><small>'+esc(new Date(rv.at).toLocaleDateString('en-ZA',{month:'long',year:'numeric'}))+' · ★ '+rv.average.toFixed(1)+'</small></span></div><blockquote>'+esc(rv.comment)+'</blockquote></figure>'; }).join('')+'</div>':'')+'</div>'):'';
     overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>'+esc(p.name)+' · Unit '+esc(u.name||'')+'</h2><button class="x">&times;</button></div>'+
       '<div class="sheet-body">'+gal+
       '<div class="note">📍 '+esc(p.address||'Location shared on booking')+'</div>'+
@@ -1333,7 +1345,9 @@
     function place(t){ return esc(t.propertyName||'Stay')+(t.unitName?(' · Unit '+esc(t.unitName)):''); }
     function list(){
       if(!threads.length){ body.innerHTML='<div class="empty">No messages yet. Messages from your host about upcoming stays will appear here.</div>'; return; }
-      body.innerHTML=threads.map(function(t){
+      var due=threads.filter(function(t){ return t.rateUrl; });
+      var prompts=due.map(function(t){ return '<a class="rate-prompt" href="'+esc(t.rateUrl)+'"><span>⭐</span><span><b>How was your stay at '+place(t)+'?</b><small>Rate it and tell the next guests about it</small></span><span class="rp-go">Rate →</span></a>'; }).join('');
+      body.innerHTML=prompts+threads.map(function(t){
         var last=t.messages[t.messages.length-1];
         return '<button class="th-item" data-id="'+esc(t.bookingId)+'"><div class="th-top"><span>'+place(t)+'</span>'+(t.unread?'<span class="badge pending">'+t.unread+' new</span>':'')+'</div>'+
           '<div class="trip-sub">📅 '+(t.dayUse?esc(fmtShort(t.checkIn))+' · day use':esc(fmtShort(t.checkIn))+' → '+esc(fmtShort(t.checkOut)))+(t.ref?(' · Ref '+esc(t.ref)):'')+'</div>'+
@@ -1522,6 +1536,7 @@
         pending+
         (t.canPayBalance?'<button class="trip-pay cta-btn" data-id="'+esc(t.id)+'">💳 Pay balance '+rand(t.amountOwingCents)+'</button>':'')+
         (!t.shared&&(t.status==='confirmed'||t.status==='cancelled')?'<button class="trip-inv" data-id="'+esc(t.id)+'">🧾 Invoice</button>':'')+
+        (t.rateUrl?'<a class="trip-rate" href="'+esc(t.rateUrl)+'">⭐ Rate your stay</a>':'')+
         (t.status!=='cancelled'?'<button class="trip-msg" data-id="'+esc(t.id)+'">💬 Messages</button>':'')+
         (t.status==='confirmed'&&t.unitId?'<a class="trip-report" href="/report?'+(t.hostId?('host='+encodeURIComponent(t.hostId)+'&'):'')+'unit='+encodeURIComponent(t.unitId)+(GUEST&&GUEST.name?('&name='+encodeURIComponent(GUEST.name)):'')+'">⚠️ Report damage or an issue</a>':'')+
       '</div>'+

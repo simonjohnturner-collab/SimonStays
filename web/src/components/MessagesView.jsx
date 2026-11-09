@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { navigate } from '../router.js';
 import { api, openMessageAttachment } from '../api.js';
-import RatingsView, { GuestRatingChip } from './RatingsView.jsx';
+import RatingsView, { GuestRatingChip, RateGuest } from './RatingsView.jsx';
 import { useAuth } from '../auth.jsx';
 import { fmtR, randToCents } from '../money.js';
 import TeachSimon from './TeachSimon.jsx';
@@ -507,9 +507,10 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
           <p className="muted small">No conversations yet. Start one with ＋ New message, or set up ⏰ Scheduled messages.</p>
         ) : threads.map((t) => (
           <button key={t.booking.id} className={`msg-item${t.booking.id === activeId ? ' on' : ''}`} onClick={() => setActiveId(t.booking.id)}>
-            <span className="msg-item-top"><b>{t.booking.guestName || 'Guest'}</b>{t.booking.status === 'enquiry' && <span className={`msg-enquiry-tag${t.booking.isRequest ? ' request' : ''}`}>{t.booking.isRequest ? 'Booking request' : 'Enquiry'}</span>}{t.booking.status === 'cancelled' && <span className="msg-enquiry-tag">Cancelled</span>}{t.unread > 0 && <span className="msg-dot">{t.unread}</span>}</span>
+            <span className="msg-item-top"><b>{t.booking.guestName || 'Guest'}</b>{t.guestStars && <span className="msg-stars" title={`${t.guestStars.count} rating${t.guestStars.count === 1 ? '' : 's'} from hosts`}>★ {t.guestStars.average.toFixed(1)}</span>}{t.booking.status === 'enquiry' && <span className={`msg-enquiry-tag${t.booking.isRequest ? ' request' : ''}`}>{t.booking.isRequest ? 'Booking request' : 'Enquiry'}</span>}{t.booking.status === 'cancelled' && <span className="msg-enquiry-tag">Cancelled</span>}{t.unread > 0 && <span className="msg-dot">{t.unread}</span>}</span>
             <span className="muted small">{placeOf(t.booking)} · {fmtDay(t.booking.checkIn)} → {fmtDay(t.booking.checkOut)}</span>
             <span className="msg-snippet small">{t.last.sender === 'host' ? 'You: ' : ''}{t.last.body}</span>
+            {t.reviewDue && <span className="msg-review-pill">⭐ Leave a review</span>}
           </button>
         ))}
       </aside>
@@ -559,6 +560,12 @@ function Inbox({ templates, shortcuts, properties, initialBookingId, onUnreadCha
               ))}
               <div ref={endRef} />
             </div>
+            {thread.review && thread.review.due && (
+              <details className="msg-review-banner">
+                <summary>⭐ How was {b.guestName ? b.guestName.split(' ')[0] : 'this guest'}’s stay? <b>Leave a review</b></summary>
+                <RateGuest compact stay={{ bookingId: b.id }} categories={thread.review.categories} onDone={() => refreshThread('Thanks. Your review is saved.')} />
+              </details>
+            )}
             {changing && !thread.change.blocked ? (
               <ChangeComposer bookingId={activeId} booking={b} change={thread.change} onSent={(r) => refreshThread(r.applied ? 'The booking is updated, and the guest has been told.' : 'Change invoice sent. The booking updates once it is paid.')} onCancel={() => setChanging(false)} />
             ) : cancelling && !thread.cancel.blocked ? (

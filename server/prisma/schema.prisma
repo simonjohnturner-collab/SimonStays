@@ -136,6 +136,7 @@ model Rating {
   guestEmail String
   scores     Json // { category: 1 to 5 }
   average    Float
+  comment    String? // a written review alongside the stars (optional, up to 1000 characters)
   createdAt  DateTime @default(now())
 
   @@unique([bookingId, kind])

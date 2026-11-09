@@ -216,7 +216,7 @@ export const api = {
   messageRecipients: (q = '') => req('GET', `/messages/recipients${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   bookingMessages: (bookingId) => req('GET', `/messages/booking/${bookingId}`),
   listRatings: () => req('GET', '/ratings'),
-  rateGuest: (bookingId, scores) => req('POST', `/ratings/booking/${bookingId}`, { scores }),
+  rateGuest: (bookingId, scores, comment) => req('POST', `/ratings/booking/${bookingId}`, { scores, comment }),
   guestRating: (bookingId) => req('GET', `/ratings/booking/${bookingId}/guest`),
   unsendMessage: (bookingId, messageId) => req('POST', `/messages/booking/${bookingId}/messages/${messageId}/unsend`),
   sendMessage: (bookingId, body, scheduleId) => req('POST', `/messages/booking/${bookingId}`, { body, scheduleId: scheduleId || undefined }),

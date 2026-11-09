@@ -178,6 +178,7 @@ router.get('/properties/:id', async (req, res, next) => {
         id: p.id, name: p.name, address: p.address || null, description: p.description || null,
         host: { ...(await hostInfo(p.hostId)), rating: await require('../utils/ratings').hostRatingOf(p.hostId) },
         rating: await require('../utils/ratings').propertyRatingOf(p.id),
+        reviews: await require('../utils/ratings').propertyReviews(p.id), // latest written reviews
         latitude: p.latitude ?? null, longitude: p.longitude ?? null,
         cancellationPolicy: p.cancellationPolicy || DEFAULT_CANCELLATION_POLICY,
         bookingMode: require('../utils/bookingMode').modeOf(p), // instant | rated | request
