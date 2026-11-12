@@ -96,6 +96,8 @@ export const api = {
   adminStartRefund: (bookingId, amountCents, note) => req('POST', `/admin/refunds/booking/${bookingId}/start`, { amountCents, note }),
   adminApproveRefund: (id, amountCents) => req('POST', `/admin/refunds/${id}/approve`, { amountCents }),
   adminRefundPaid: (id, reference) => req('POST', `/admin/refunds/${id}/paid`, { reference }),
+  adminSendRefund: (id) => req('POST', `/admin/refunds/${id}/send`),
+  adminResolveRefund: (id, outcome, reference) => req('POST', `/admin/refunds/${id}/resolve`, { outcome, reference }),
   adminCancelRefund: (id) => req('DELETE', `/admin/refunds/${id}`),
   adminMessageThreads: (hostId) => req('GET', `/admin/messages${hostId ? `?hostId=${encodeURIComponent(hostId)}` : ''}`),
   adminMessageThread: (bookingId) => req('GET', `/admin/messages/${bookingId}`),

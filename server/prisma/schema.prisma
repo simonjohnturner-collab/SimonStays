@@ -825,7 +825,13 @@ model DepositRefund {
   booking     Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   amountCents Int
   note        String? // why it's less than the deposit
-  status      String    @default("started") // started | approved | paid
+  status      String    @default("started") // started | approved | check (sent to Paygate, outcome unknown) | paid
+  via         String? // 'paygate' when sent through PayHost, else paid by hand (EFT or the Paygate portal)
+  paymentId   String? // the card payment refunded through Paygate
+  paygate     Json? // Paygate's last reply, for the audit trail
+  sentBy      String?
+  sentAt      DateTime?
+  lastError   String? // why Paygate last refused it (no money moved)
   startedBy   String
   startedAt   DateTime  @default(now())
   approvedBy  String?

@@ -6,13 +6,17 @@
 //   PAYMENT_MODE   simulate (default) | sandbox | live
 //   PAYGATE_ID     \ from the Paygate Merchant Access Portal (PayWeb settings).
 //   PAYGATE_KEY    / The encryption key is what makes every checksum unforgeable.
+//   PAYGATE_PAYHOST_PASSWORD  the PayHost password ("PayHost encryption key"), set in
+//                  the Merchant Access Portal once Paygate has enabled PayHost. Only
+//                  refunds use it; payments still go through PayWeb3.
 // Sandbox uses Paygate's published test account unless these are set.
 const crypto = require('crypto');
 
 const BASE = 'https://secure.paygate.co.za/payweb3';
 const PROCESS_URL = `${BASE}/process.trans`;
 // Paygate's published test merchant (docs: PayWeb3 Testing) — no real money.
-const TEST = { paygateId: '10011072130', key: 'secret' };
+const TEST = { paygateId: '10011072130', key: 'secret', payhostPassword: 'test' };
+const PAYHOST_URL = 'https://secure.paygate.co.za/payhost/process.trans';
 
 // Initiate fields in checksum order (docs: Security and Checksum Validation).
 const INITIATE_ORDER = [
@@ -31,7 +35,7 @@ function mode() {
 function config() {
   const m = mode();
   const t = (v) => (v || '').trim();
-  const env = { paygateId: t(process.env.PAYGATE_ID), key: t(process.env.PAYGATE_KEY) };
+  const env = { paygateId: t(process.env.PAYGATE_ID), key: t(process.env.PAYGATE_KEY), payhostPassword: t(process.env.PAYGATE_PAYHOST_PASSWORD) };
   return { mode: m, ...(m === 'sandbox' && !env.paygateId ? TEST : env) };
 }
 function ready() {
@@ -124,4 +128,83 @@ async function selfTest(base) {
   }
 }
 
-module.exports = { mode, config, ready, initiate, query, validPayload, checksum, md5, txDate, selfTest, STATUS, TEST, PROCESS_URL };
+// ---- PayHost refunds (SOAP). Paygate, 2026-11-06: a PayWeb3 payment can be refunded
+// through PayHost by its TransactionId or MerchantOrderId; partial refunds are allowed;
+// the money comes from our bank account (50c fee) and the bank actions it. A good reply
+// is StatusName Completed, ResultCode 990005 "Request for Refund Received",
+// TransactionStatusCode 5 "Received by PayGate".
+function refundsReady() {
+  const c = config();
+  return c.mode === 'simulate' || !!(c.paygateId && c.payhostPassword);
+}
+
+const xmlEsc = (v) => String(v).replace(/[<>&'"]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[ch]));
+// The text of the first <Tag> (any namespace prefix) in `xml`, or null.
+function tag(xml, name) {
+  const m = new RegExp('<(?:[\\w-]+:)?' + name + '(?:\\s[^>]*)?>([^<]*)</(?:[\\w-]+:)?' + name + '>').exec(xml);
+  return m ? m[1].trim() : null;
+}
+
+function refundEnvelope({ paygateId, password, transactionId, amountCents }) {
+  return '<?xml version="1.0" encoding="UTF-8"?>'
+    + '<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"><SOAP-ENV:Header/><SOAP-ENV:Body>'
+    + '<SingleFollowUpRequest xmlns="http://www.paygate.co.za/PayHOST"><RefundRequest>'
+    + `<Account><PayGateId>${xmlEsc(paygateId)}</PayGateId><Password>${xmlEsc(password)}</Password></Account>`
+    + `<TransactionId>${xmlEsc(transactionId)}</TransactionId><Amount>${Math.round(amountCents)}</Amount>`
+    + '</RefundRequest></SingleFollowUpRequest></SOAP-ENV:Body></SOAP-ENV:Envelope>';
+}
+
+// Read Paygate's reply to a refund. outcome:
+//   'sent'     Paygate has the refund and passes it to the bank.
+//   'rejected' Paygate refused it — no money moved, safe to try again or pay by hand.
+//   'unclear'  anything else. The refund may or may not have gone through, so it must
+//              be checked with Paygate and is never resent automatically.
+function readRefundReply(httpStatus, xml) {
+  const body = String(xml || '');
+  const fault = tag(body, 'faultstring');
+  const reply = {
+    statusName: tag(body, 'StatusName'), resultCode: tag(body, 'ResultCode'),
+    resultDescription: tag(body, 'ResultDescription'), transactionStatusCode: tag(body, 'TransactionStatusCode'),
+    transactionStatusDescription: tag(body, 'TransactionStatusDescription'),
+    transactionId: tag(body, 'TransactionId'), payRequestId: tag(body, 'PayRequestId'),
+    amountCents: tag(body, 'Amount') != null ? Number(tag(body, 'Amount')) : null,
+    dateTime: tag(body, 'DateTime'), fault, httpStatus,
+  };
+  const why = reply.resultDescription || reply.transactionStatusDescription || fault || reply.statusName || `HTTP ${httpStatus}`;
+  if (reply.statusName === 'Completed' && (reply.resultCode === '990005' || ['1', '5'].includes(reply.transactionStatusCode))) return { outcome: 'sent', reply, message: why };
+  // A SOAP fault or a validation/decline answer means Paygate did not take the request.
+  if (fault || ['Error', 'ValidationError'].includes(reply.statusName) || ['2', '3', '4'].includes(reply.transactionStatusCode)) return { outcome: 'rejected', reply, message: why };
+  return { outcome: 'unclear', reply, message: why };
+}
+
+// Refund `amountCents` of the PayWeb3 payment with Paygate TRANSACTION_ID `transactionId`.
+// Never throws: network errors and timeouts come back as 'unclear'.
+async function refund({ transactionId, amountCents }, { fetchImpl = fetch, timeoutMs = 30000 } = {}) {
+  const c = config();
+  if (c.mode === 'simulate') return { outcome: 'sent', reply: { simulated: true, transactionId: `SIM-${Date.now()}`, resultCode: '990005' }, message: 'Simulated refund' };
+  if (!c.paygateId || !c.payhostPassword) return { outcome: 'rejected', reply: null, message: 'PayHost is not set up: PAYGATE_PAYHOST_PASSWORD is missing.' };
+  if (!transactionId) return { outcome: 'rejected', reply: null, message: 'The original payment has no Paygate transaction ID.' };
+  if (!Number.isInteger(amountCents) || amountCents < 1) return { outcome: 'rejected', reply: null, message: 'Bad refund amount.' };
+  let res; let text;
+  try {
+    res = await fetchImpl(PAYHOST_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: 'SingleFollowUp' },
+      body: refundEnvelope({ paygateId: c.paygateId, password: c.payhostPassword, transactionId, amountCents }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    text = await res.text();
+  } catch (e) {
+    return { outcome: 'unclear', reply: { error: e.message }, message: `No reply from Paygate (${e.name === 'TimeoutError' ? 'timed out' : e.message})` };
+  }
+  const r = readRefundReply(res.status, text);
+  // Paygate's firewall (403) refuses before anything is processed.
+  if (r.outcome === 'unclear' && res.status === 403) return { ...r, outcome: 'rejected', message: 'Paygate refused the connection (HTTP 403)' };
+  if (r.outcome !== 'sent') console.warn('[paygate] refund', r.outcome, transactionId, r.message, text.slice(0, 1000));
+  return r;
+}
+
+module.exports = {
+  mode, config, ready, initiate, query, validPayload, checksum, md5, txDate, selfTest, STATUS, TEST, PROCESS_URL,
+  refund, refundsReady, readRefundReply, refundEnvelope, PAYHOST_URL,
+};

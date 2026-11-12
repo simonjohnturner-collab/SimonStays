@@ -583,7 +583,11 @@ function Transactions({ hostFilter, HostPicker }) {
   );
 }
 
-const refundStage = (x) => (!x.refund ? (x.due ? 'Ready to start' : 'Waiting out the 7 days') : x.refund.status === 'started' ? 'Waiting for approval' : x.refund.status === 'approved' ? 'Approved, to pay' : 'Paid');
+const refundStage = (x) => (!x.refund ? (x.due ? 'Ready to start' : 'Waiting out the 7 days')
+  : x.refund.status === 'started' ? 'Waiting for approval'
+    : x.refund.status === 'approved' ? 'Approved, to pay'
+      : x.refund.status === 'check' ? 'Check with Paygate'
+        : x.refund.via === 'paygate' ? 'Sent to card' : 'Paid');
 
 // The next step on one deposit: start it, sign off the amount, or record the payment.
 function RefundAction({ x, onDone }) {
@@ -592,11 +596,16 @@ function RefundAction({ x, onDone }) {
   const [reference, setReference] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [byHand, setByHand] = useState(false);
   const r = x.refund;
 
   async function run(call) {
     setBusy(true); setErr('');
-    try { await call(); onDone(); } catch (e) { setErr(e.message); setBusy(false); }
+    try {
+      const out = await call();
+      if (out && out.outcome === 'unclear') window.alert(out.message);
+      onDone();
+    } catch (e) { setErr(e.message); setBusy(false); }
   }
   const error = err && <div className="msg-warn">{err}</div>;
 
@@ -612,7 +621,18 @@ function RefundAction({ x, onDone }) {
       </div>
     );
   }
-  if (r.status === 'paid') return <span className="small">{fmtWhen(r.paidAt)}<div className="muted">Ref {r.reference}</div></span>;
+  if (r.status === 'paid') return <span className="small">{fmtWhen(r.paidAt)}<div className="muted">{r.via === 'paygate' ? 'Paygate ref' : 'Ref'} {r.reference}</div></span>;
+  if (r.status === 'check') {
+    return (
+      <div className="refund-action">
+        <div className="small">Sent to Paygate {fmtWhen(r.sentAt)} but the reply was unclear{r.lastError ? ` (${r.lastError})` : ''}. Look it up in the Paygate portal before doing anything else.</div>
+        <input value={reference} placeholder="Paygate refund reference" aria-label="Paygate refund reference" onChange={(e) => setReference(e.target.value)} />
+        <button className="mini" disabled={busy || !reference.trim()} onClick={() => run(() => api.adminResolveRefund(r.id, 'went_through', reference))}>It went through</button>
+        <button className="mini danger" disabled={busy} onClick={() => window.confirm('Paygate has no record of this refund? It goes back to Approved so it can be sent again.') && run(() => api.adminResolveRefund(r.id, 'not_sent'))}>It didn't go through</button>
+        {error}
+      </div>
+    );
+  }
   const cancel = <button className="mini danger" disabled={busy} onClick={() => window.confirm('Cancel this refund? The deposit stays held.') && run(() => api.adminCancelRefund(r.id))}>Cancel</button>;
   if (r.status === 'started') {
     return (
@@ -623,9 +643,20 @@ function RefundAction({ x, onDone }) {
       </div>
     );
   }
+  const lastError = r.lastError && <div className="msg-warn">{r.lastError}</div>;
+  if (x.method === 'Card' && x.canSendToCard && !byHand) {
+    return (
+      <div className="refund-action">
+        <button className="mini" disabled={busy} onClick={() => window.confirm(`Send ${fmtR(r.amountCents)} back to ${x.guestName || 'the guest'}'s card through Paygate? The money comes out of the SimonStays bank account.`) && run(() => api.adminSendRefund(r.id))}>Send {fmtR(r.amountCents)} to card</button>
+        <button className="mini link" disabled={busy} onClick={() => setByHand(true)}>Paid by hand instead</button>
+        {cancel}{lastError}{error}
+      </div>
+    );
+  }
   return (
     <div className="refund-action">
       <div className="small">Send {fmtR(r.amountCents)} {x.method === 'Card' ? 'in the Paygate portal' : 'by EFT'}, then record it.</div>
+      {lastError}
       <input value={reference} placeholder={x.method === 'Card' ? 'Paygate reference' : 'Bank reference'} aria-label="Payment reference" onChange={(e) => setReference(e.target.value)} />
       <button className="mini" disabled={busy || !reference.trim()} onClick={() => run(() => api.adminRefundPaid(r.id, reference))}>Mark as paid</button>
       {cancel}{error}
@@ -657,7 +688,7 @@ function Refunds({ hostFilter, HostPicker }) {
             <Tile label="Under way" value={underWay.length} sub={total(underWay)} />
             <Tile label="Paid" value={paid.length} sub={total(paid)} />
           </div>
-          <p className="muted small">A refund can start {data.waitDays} days after checkout. Start it, approve it by retyping the amount, send the money, then record the reference. The guest is told when it's marked as paid.</p>
+          <p className="muted small">A refund can start {data.waitDays} days after checkout. Start it, then approve it by retyping the amount. A card payment is then sent back through Paygate in one click; an EFT is paid by hand and recorded with its reference. The guest is told once it's paid.</p>
           <div className="admin-table-wrap">
             <table className="admin-table">
               <thead><tr><th>Guest</th><th>Stay</th><th>Host</th><th>Paid by</th><th className="num">Deposit</th><th>Stage</th><th>Next step</th></tr></thead>

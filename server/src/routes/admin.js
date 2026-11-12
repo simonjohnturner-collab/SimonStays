@@ -216,6 +216,16 @@ router.post('/refunds/:id/paid', async (req, res) => {
   refundReply(res, await refunds.markRefundPaid(req.params.id, req.body || {}, req.adminHost.email));
 });
 
+// POST /admin/refunds/:id/send — send an approved card refund back through Paygate.
+router.post('/refunds/:id/send', async (req, res) => {
+  refundReply(res, await refunds.sendToPaygate(req.params.id, req.adminHost.email));
+});
+
+// POST /admin/refunds/:id/resolve { outcome: 'went_through' | 'not_sent', reference } — after checking with Paygate.
+router.post('/refunds/:id/resolve', async (req, res) => {
+  refundReply(res, await refunds.resolveCheck(req.params.id, req.body || {}, req.adminHost.email));
+});
+
 // DELETE /admin/refunds/:id — call it off before it's paid; the deposit stays held.
 router.delete('/refunds/:id', async (req, res) => {
   refundReply(res, await refunds.cancelRefund(req.params.id));
