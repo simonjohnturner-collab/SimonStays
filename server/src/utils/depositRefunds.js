@@ -29,11 +29,25 @@ const INCLUDE = {
   depositRefund: true,
 };
 
-// The card payment a deposit can go back to: a Paygate payment with a transaction
-// ID, the largest one (the deposit is charged with the stay, not the balance).
-function cardPaymentOf(payments) {
+// Paygate (2026-11-12): a card payment can be refunded for 6 months. We stop a few
+// days short so a refund is never sent on the last day and refused.
+const CARD_REFUND_MONTHS = 6;
+const CARD_REFUND_MARGIN_DAYS = 3;
+function stillRefundable(p, now = new Date()) {
+  const last = new Date(p.createdAt);
+  last.setMonth(last.getMonth() + CARD_REFUND_MONTHS);
+  return now.getTime() < last.getTime() - CARD_REFUND_MARGIN_DAYS * DAY_MS;
+}
+
+// Card payments a deposit could go back to: Paygate payments with a transaction ID.
+function cardPayments(payments) {
   const sim = paygate.mode() === 'simulate';
-  const ok = payments.filter((p) => (p.provider === 'paygate' && p.raw && p.raw.TRANSACTION_ID) || (sim && p.provider === 'simulate'));
+  return payments.filter((p) => (p.provider === 'paygate' && p.raw && p.raw.TRANSACTION_ID) || (sim && p.provider === 'simulate'));
+}
+// The one to refund: still inside Paygate's 6 months, the largest (the deposit is
+// charged with the stay, not the balance).
+function cardPaymentOf(payments, now = new Date()) {
+  const ok = cardPayments(payments).filter((p) => stillRefundable(p, now));
   return ok.sort((a, b) => b.amountCents - a.amountCents)[0] || null;
 }
 const txIdOf = (p) => (p && p.raw && p.raw.TRANSACTION_ID ? String(p.raw.TRANSACTION_ID) : p && p.provider === 'simulate' ? `SIM-${p.id}` : null);
@@ -56,7 +70,7 @@ async function listRefunds({ hostId } = {}, now = new Date()) {
   return bookings.map((b) => {
     const pays = b.payments.length ? b.payments : offerPayments.filter((p) => p.offerId === b.sourceOfferId);
     const card = pays[0];
-    const toCard = cardPaymentOf(pays);
+    const toCard = cardPaymentOf(pays, now);
     return {
       bookingId: b.id, ref: b.ref || null,
       hostId: b.hostId || b.unit?.property?.hostId || null,
@@ -69,6 +83,8 @@ async function listRefunds({ hostId } = {}, now = new Date()) {
       // Can this refund go back to the card through Paygate?
       canSendToCard: !!toCard && paygate.refundsReady(),
       cardPaidCents: toCard ? toCard.amountCents : null,
+      // Paid by card, but too long ago for Paygate to refund: it has to go by EFT.
+      cardTooOld: !toCard && cardPayments(pays).length > 0,
       refund: b.depositRefund || null,
     };
   });
@@ -112,7 +128,7 @@ async function finishPaid(r, from, data, now) {
   });
   if (!done) return false;
   const text = data.via === 'paygate'
-    ? `Your deposit refund of ${rand(r.amountCents)} has been sent back to the card you paid with. Banks usually take a few working days to show it on your statement.`
+    ? `Your deposit refund of ${rand(r.amountCents)} has been sent back to the card you paid with. It can take 7 to 14 days to show on your statement, or 14 to 21 days for a card issued outside South Africa.`
     : `Your deposit refund of ${rand(r.amountCents)} has been paid.`;
   await messaging.sendHostMessage(r.bookingId, text, { bookerOnly: true, notice: 'refund' })
     .catch((e) => console.error('[depositRefund] guest message failed', e.message));
@@ -135,8 +151,12 @@ async function sendToPaygate(id, by, now = new Date(), { refund = paygate.refund
   if (!r) return { error: 'not_found', status: 404, message: 'Refund not found.' };
   if (r.status !== 'approved') return { error: 'not_approved', status: 409, message: 'Only an approved refund can be sent to Paygate.' };
   if (!paygate.refundsReady()) return { error: 'not_set_up', status: 409, message: 'Paygate refunds are not set up yet (PayHost password missing). Pay this one by hand.' };
-  const pay = cardPaymentOf(await paymentsOf(r.booking));
-  if (!pay) return { error: 'no_card_payment', status: 409, message: 'No Paygate card payment was found for this booking. Pay this one by hand.' };
+  const pays = await paymentsOf(r.booking);
+  const pay = cardPaymentOf(pays, now);
+  if (!pay) {
+    if (cardPayments(pays).length) return { error: 'card_too_old', status: 409, message: `The card payment is more than ${CARD_REFUND_MONTHS} months old, so Paygate can't refund it. Pay this one by EFT.` };
+    return { error: 'no_card_payment', status: 409, message: 'No Paygate card payment was found for this booking. Pay this one by hand.' };
+  }
   // One card payment can cover several deposits (an invoice with several units).
   const others = await prisma.depositRefund.aggregate({ _sum: { amountCents: true }, where: { paymentId: pay.id, via: 'paygate', status: { in: ['check', 'paid'] }, id: { not: id } } });
   const left = pay.amountCents - (others._sum.amountCents || 0);

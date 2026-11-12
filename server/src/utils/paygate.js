@@ -204,7 +204,27 @@ async function refund({ transactionId, amountCents }, { fetchImpl = fetch, timeo
   return r;
 }
 
+// Check the PayHost password by asking Paygate to refund a transaction that doesn't
+// exist (TransactionId 0, 1 cent). "Unable To Find Original Transaction" (result 201)
+// means Paygate accepted our login and looked for it, so nothing moves and the key
+// is right. Logs a plain-English result for the Render logs.
+async function payhostSelfTest({ refundImpl = refund } = {}) {
+  const c = config();
+  if (c.mode === 'simulate') return { ok: true, skipped: true };
+  const who = `mode=${c.mode} PAYGATE_ID=…${String(c.paygateId).slice(-4)} password=${(c.payhostPassword || '').length} chars`;
+  if (!c.payhostPassword) { console.warn(`[paygate] PayHost self-test: PAYGATE_PAYHOST_PASSWORD missing (${who}) — card refunds are OFF, pay refunds by hand`); return { ok: false, missing: true }; }
+  const r = await refundImpl({ transactionId: '0', amountCents: 1 });
+  const code = r.reply && r.reply.resultCode;
+  if (r.outcome === 'rejected' && code === '201') {
+    console.log(`[paygate] PayHost self-test OK (${who}) — card refunds are ready`);
+    return { ok: true };
+  }
+  console.error(`[paygate] PayHost self-test FAILED (${who}): ${r.outcome}, result ${code || '—'}: ${r.message} — check the PayHost encryption key in the Merchant Access Portal (Administration → Product Configuration → PayHost) matches PAYGATE_PAYHOST_PASSWORD`);
+  return { ok: false, outcome: r.outcome, resultCode: code || null, message: r.message };
+}
+
 module.exports = {
+  payhostSelfTest,
   mode, config, ready, initiate, query, validPayload, checksum, md5, txDate, selfTest, STATUS, TEST, PROCESS_URL,
   refund, refundsReady, readRefundReply, refundEnvelope, PAYHOST_URL,
 };

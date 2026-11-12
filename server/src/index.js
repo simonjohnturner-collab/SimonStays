@@ -288,6 +288,8 @@ if (require.main === module) {
 
   // Paygate: confirm the PAYGATE_ID + PAYGATE_KEY pair works (result in the logs).
   require('./utils/paygate').selfTest(process.env.PAYMENT_BASE_URL).catch(() => {});
+  // ...and that the PayHost password (card refunds) works, without moving money.
+  require('./utils/paygate').payhostSelfTest().catch((e) => console.error('[paygate] PayHost self-test error', e.message));
   // Hourly: cancel website card bookings whose payment was never completed (24h).
   const expireHolds = () => require('./utils/payments').expireAbandoned()
     .then((n) => { if (n) console.log(`[payments] auto-cancelled ${n} unpaid card booking(s)`); })

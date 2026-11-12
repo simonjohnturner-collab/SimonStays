@@ -648,16 +648,18 @@ function RefundAction({ x, onDone }) {
     return (
       <div className="refund-action">
         <button className="mini" disabled={busy} onClick={() => window.confirm(`Send ${fmtR(r.amountCents)} back to ${x.guestName || 'the guest'}'s card through Paygate? The money comes out of the SimonStays bank account.`) && run(() => api.adminSendRefund(r.id))}>Send {fmtR(r.amountCents)} to card</button>
-        <button className="mini link" disabled={busy} onClick={() => setByHand(true)}>Paid by hand instead</button>
+        <button className="mini" disabled={busy} onClick={() => setByHand(true)}>Paid by hand instead</button>
         {cancel}{lastError}{error}
       </div>
     );
   }
   return (
     <div className="refund-action">
-      <div className="small">Send {fmtR(r.amountCents)} {x.method === 'Card' ? 'in the Paygate portal' : 'by EFT'}, then record it.</div>
+      {x.cardTooOld
+        ? <div className="small">The card payment is more than 6 months old, so Paygate can't refund it. Send {fmtR(r.amountCents)} by EFT, then record it.</div>
+        : <div className="small">Send {fmtR(r.amountCents)} {x.method === 'Card' ? 'in the Paygate portal' : 'by EFT'}, then record it.</div>}
       {lastError}
-      <input value={reference} placeholder={x.method === 'Card' ? 'Paygate reference' : 'Bank reference'} aria-label="Payment reference" onChange={(e) => setReference(e.target.value)} />
+      <input value={reference} placeholder={x.method === 'Card' && !x.cardTooOld ? 'Paygate reference' : 'Bank reference'} aria-label="Payment reference" onChange={(e) => setReference(e.target.value)} />
       <button className="mini" disabled={busy || !reference.trim()} onClick={() => run(() => api.adminRefundPaid(r.id, reference))}>Mark as paid</button>
       {cancel}{error}
     </div>
