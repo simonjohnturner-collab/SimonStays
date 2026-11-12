@@ -216,6 +216,17 @@ router.post('/refunds/:id/paid', async (req, res) => {
   refundReply(res, await refunds.markRefundPaid(req.params.id, req.body || {}, req.adminHost.email));
 });
 
+// ---- Test refunds: a small real refund to prove the Paygate link works. ----
+const testRefunds = require('../utils/testRefund');
+// GET /admin/test-refunds — recent card payments to test against, and past tests.
+router.get('/test-refunds', async (req, res) => {
+  res.json(await testRefunds.listCardPayments());
+});
+// POST /admin/test-refunds { transactionId, amountCents }
+router.post('/test-refunds', async (req, res) => {
+  refundReply(res, await testRefunds.sendTestRefund(req.body || {}, req.adminHost.email));
+});
+
 // POST /admin/refunds/:id/send — send an approved card refund back through Paygate.
 router.post('/refunds/:id/send', async (req, res) => {
   refundReply(res, await refunds.sendToPaygate(req.params.id, req.adminHost.email));

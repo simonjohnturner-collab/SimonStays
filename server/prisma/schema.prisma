@@ -819,6 +819,21 @@ enum ChannelType {
 }
 
 // Paying a held deposit back, from the admin portal. One per booking.
+// A small real refund sent from the admin Transactions tab to test the Paygate link.
+model PaygateTestRefund {
+  id            String   @id @default(uuid())
+  transactionId String // Paygate TRANSACTION_ID of the payment refunded
+  paymentId     String? // our Payment, when we have it on record
+  amountCents   Int
+  by            String
+  outcome       String // sending | sent | rejected | unclear
+  message       String?
+  reply         Json?
+  createdAt     DateTime @default(now())
+
+  @@index([transactionId])
+}
+
 model DepositRefund {
   id          String    @id @default(uuid())
   bookingId   String    @unique

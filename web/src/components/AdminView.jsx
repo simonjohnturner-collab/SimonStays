@@ -495,6 +495,66 @@ function PaymentBreakdown({ tx }) {
   );
 }
 
+// Send a small real refund through Paygate to prove the link works. Touches no booking.
+function TestRefund() {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [tx, setTx] = useState('');
+  const [amount, setAmount] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const load = () => api.adminTestRefunds().then(setData).catch((e) => setMsg(e.message));
+  useEffect(() => { if (open && !data) load(); }, [open]);
+
+  async function send() {
+    const cents = randToCents(amount);
+    if (!window.confirm(`Send a real refund of ${fmtR(cents)} to the card on Paygate transaction ${tx}? The money comes out of the SimonStays bank account (plus a 50c fee).`)) return;
+    setBusy(true); setMsg('');
+    try {
+      const r = await api.adminSendTestRefund(tx.trim(), cents);
+      setMsg(r.outcome === 'sent' ? `✅ Paygate accepted it: ${r.message}${r.reply && r.reply.transactionId ? ` (refund #${r.reply.transactionId})` : ''}`
+        : r.outcome === 'rejected' ? `❌ Paygate refused it, no money moved: ${r.message}`
+          : `⚠️ Unclear reply (${r.message}). Check the Paygate portal before trying again.`);
+      load();
+    } catch (e) { setMsg(e.message); }
+    setBusy(false);
+  }
+
+  if (!open) return <p className="small"><button className="secondary small" onClick={() => setOpen(true)}>Test a card refund…</button></p>;
+  return (
+    <div className="card" style={{ padding: 12, margin: '8px 0' }}>
+      <div className="small"><b>Test a card refund.</b> Sends a small real refund (up to {data ? fmtR(data.maxCents) : 'R50'}) through Paygate to prove the link works. Use a payment you made yourself, at least a day old. No booking or deposit is changed.</div>
+      {data && !data.ready && <div className="msg-warn">Paygate refunds aren't set up on this server (PAYGATE_PAYHOST_PASSWORD).</div>}
+      <div className="refund-action" style={{ marginTop: 8 }}>
+        <label className="small">Paygate transaction <input value={tx} placeholder="e.g. 1271114789" onChange={(e) => setTx(e.target.value)} /></label>
+        <label className="small">Amount <input className="amt" inputMode="decimal" value={amount} placeholder="1.00" onChange={(e) => setAmount(e.target.value)} /></label>
+        <button className="mini" disabled={busy || !tx.trim() || !amount.trim() || (data && !data.ready)} onClick={send}>{busy ? 'Sending…' : 'Send test refund'}</button>
+        <button className="mini" onClick={() => setOpen(false)}>Close</button>
+      </div>
+      {msg && <p className="small">{msg}</p>}
+      {data && data.payments.length > 0 && (
+        <details className="small" style={{ marginTop: 8 }}>
+          <summary>Card payments in the last 6 months ({data.payments.length}): click one to use it</summary>
+          <table className="admin-table"><tbody>
+            {data.payments.map((p) => (
+              <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => setTx(p.transactionId)}>
+                <td>{fmtDate(p.createdAt)}</td><td>#{p.transactionId}</td><td className="num">{fmtR(p.amountCents)}</td>
+                <td className="tx-wrap">{p.guestName || '—'}<div className="muted">{p.guestEmail}</div></td><td>{p.ref || '—'} {p.bookingStatus === 'cancelled' ? '(cancelled)' : ''}</td>
+              </tr>
+            ))}
+          </tbody></table>
+        </details>
+      )}
+      {data && data.tests.length > 0 && (
+        <div className="small" style={{ marginTop: 8 }}>
+          <b>Tests so far</b>
+          {data.tests.map((t) => <div key={t.id} className="muted">{fmtWhen(t.createdAt)} · #{t.transactionId} · {fmtR(t.amountCents)} · {t.outcome}{t.message ? `: ${t.message}` : ''} · {t.by}</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Transactions({ hostFilter, HostPicker }) {
   const [data, setData] = useState(null);
   const [from, setFrom] = useState('');
@@ -534,6 +594,7 @@ function Transactions({ hostFilter, HostPicker }) {
         </select>
         {data && data.rows.length > 0 && <button className="secondary small" onClick={downloadCsv}>⬇ CSV</button>}
       </div>
+      <TestRefund />
       {msg && <p className="small">{msg}</p>}
       {!data ? <p className="muted small">Loading…</p> : (
         <>
