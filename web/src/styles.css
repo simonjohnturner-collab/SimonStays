@@ -253,13 +253,17 @@ td.cell.blue.late { background: #cdb4f0; }        /* late checkout (purple) */
 .inv-brand { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--green-d); text-decoration: none; }
 .inv-foot { margin-top: 28px; padding-top: 10px; border-top: 1px solid #e6e9ed; text-align: center; font-size: 12px; color: #6b7280; }
 
+/* Margin 0 drops the browser's own date/title/URL header and footer; the
+   invoice supplies its own page padding instead. */
+@page { size: A4; margin: 0; }
 @media print {
-  body { background: #fff; }
+  html, body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .no-print { display: none !important; }
-  .invoices-view, .invoices-body, .inv-main { display: block; height: auto; min-height: 0; overflow: visible; padding: 0; }
-  .inv-list, .topbar { display: none !important; }
-  .invoice-wrap { max-width: none; }
-  .invoice-doc { box-shadow: none; border: none; border-radius: 0; margin: 0; padding: 0; }
+  /* App chrome: top nav, Payouts/Invoices/Billing tabs, impersonation banner. */
+  .hostnav, .section-tabs, .imp-banner, .inv-list, .topbar { display: none !important; }
+  .host-shell, .host-screen, .host-screen .invoices-view, .invoices-view, .invoices-body, .inv-main { display: block !important; height: auto !important; min-height: 0 !important; overflow: visible !important; padding: 0 !important; background: #fff !important; }
+  .invoice-wrap { max-width: none; margin: 0; padding: 0; }
+  .invoice-doc { box-shadow: none; border: none; border-radius: 0; margin: 0; padding: 14mm 16mm; }
   .invoice-doc input, .invoice-doc textarea { border: none !important; background: transparent !important; padding: 2px 0; }
   .inv-table input.date::-webkit-calendar-picker-indicator { display: none; }
   .invoice-doc ::placeholder { color: transparent; }

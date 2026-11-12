@@ -6,6 +6,16 @@ const { quote } = require('../utils/pricing');
 const router = express.Router();
 router.use(authHost);
 
+// Invoice dates are calendar days. Store them at noon UTC so the date shown
+// never slips a day. With no date given, use today in South Africa (UTC+2),
+// so an invoice raised just after midnight is not dated the day before.
+function invoiceDate(v) {
+  const day = typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)
+    ? v.slice(0, 10)
+    : new Date(Date.now() + 2 * 3600 * 1000).toISOString().slice(0, 10);
+  return new Date(day + 'T12:00:00Z');
+}
+
 const SETTABLE = ['date', 'invoiceType', 'billToName', 'billToAddress', 'billToAttention',
   'billToEmail', 'billToPhone', 'lineItems', 'discountPercent', 'totalCents', 'dueNowCents', 'paidCents',
   'specialConditions', 'status', 'bookingId'];
@@ -44,7 +54,7 @@ router.post('/', async (req, res) => {
   };
   // explicit body fields win over prefill
   SETTABLE.forEach((k) => { if (k in body) data[k] = body[k]; });
-  if (body.date) data.date = new Date(body.date);
+  data.date = invoiceDate(body.date);
 
   const invoice = await prisma.invoice.create({ data });
   res.status(201).json({ invoice });
@@ -55,7 +65,7 @@ router.patch('/:id', async (req, res) => {
   const inv = await owned(req, res); if (!inv) return;
   const data = {};
   SETTABLE.forEach((k) => { if (k in (req.body || {})) data[k] = req.body[k]; });
-  if (req.body?.date) data.date = new Date(req.body.date);
+  if ('date' in data) { if (req.body.date) data.date = invoiceDate(req.body.date); else delete data.date; }
   const invoice = await prisma.invoice.update({ where: { id: inv.id }, data });
   res.json({ invoice });
 });
@@ -67,7 +77,7 @@ router.post('/:id/duplicate', async (req, res) => {
   const number = await nextNumber(req.hostId);
   const { id, createdAt, updatedAt, number: _n, date: _d, ...rest } = inv;
   const invoice = await prisma.invoice.create({
-    data: { ...rest, number, date: new Date(), status: 'draft', billerSnapshot: snapshot(biller) },
+    data: { ...rest, number, date: invoiceDate(), status: 'draft', billerSnapshot: snapshot(biller) },
   });
   res.status(201).json({ invoice });
 });
