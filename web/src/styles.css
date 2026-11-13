@@ -1329,3 +1329,10 @@ button[role=radio].on { color:#e2a100; }
 .tr-timeline .tr-t { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 42px; }
 .tr-timeline .tr-gap { justify-content: center; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 0; padding-top: 10px; }
 .tr-step-pill.s-booking { background: #fdecd6; color: #9a4b0b; }
+
+/* Deposit tag under a transaction's value (admin Transactions tab). */
+.dep-tag { display: inline-block; padding: 0 6px; border-radius: 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.dep-refunded { background: #e3f4e8; color: #1b7a3d; }
+.dep-pending { background: #fff3d6; color: #8a5a00; }
+.dep-held { background: #eef0f3; color: #4a5260; }
+.dep-kept { background: #fde8e8; color: #a12828; }

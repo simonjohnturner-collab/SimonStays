@@ -127,6 +127,7 @@ router.get('/transactions', async (req, res) => {
       unit: { include: { pricingGroup: true, property: { select: { name: true, hostId: true, checkInTime: true, checkOutTime: true } } } },
       payments: { orderBy: { createdAt: 'desc' } },
       offers: { where: { status: 'paid' }, orderBy: { createdAt: 'asc' } },
+      depositRefund: { select: { status: true, amountCents: true, paidAt: true, via: true } },
     },
   });
   // An invoice's extra units hold no payments of their own: the invoice's payment
@@ -162,6 +163,8 @@ router.get('/transactions', async (req, res) => {
       paygateRef: card && card.raw && card.raw.TRANSACTION_ID ? String(card.raw.TRANSACTION_ID) : null,
       totalCents: b.totalCents != null ? b.totalCents : (b.quotedCents || 0),
       depositCents: b.depositCents || 0,
+      depositStatus: b.depositStatus || null, // held | refunded | forfeited
+      depositRefund: b.depositRefund || null,
       paidCents: b.amountPaidCents || 0,
       owingCents: b.amountOwingCents || 0,
       canEmailDetails: b.status === 'confirmed' && noticeable(b),

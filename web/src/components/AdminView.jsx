@@ -555,6 +555,21 @@ function TestRefund() {
   );
 }
 
+// The deposit under a transaction's value, and whether it has gone back to the guest.
+function DepositNote({ x }) {
+  if (!x.depositCents) return null;
+  const r = x.depositRefund;
+  let tag;
+  if (r && r.status === 'paid') {
+    const part = r.amountCents !== x.depositCents ? ` ${fmtR(r.amountCents)}` : '';
+    tag = <span className="dep-tag dep-refunded" title={`${r.via === 'paygate' ? 'Sent to card' : 'Paid'} ${r.paidAt ? fmtDate(r.paidAt) : ''}`}>✓ Refunded{part}</span>;
+  } else if (r) tag = <span className="dep-tag dep-pending">Refund under way</span>;
+  else if (x.depositStatus === 'refunded') tag = <span className="dep-tag dep-refunded">✓ Refunded</span>;
+  else if (x.depositStatus === 'forfeited') tag = <span className="dep-tag dep-kept">Kept</span>;
+  else if (x.status === 'confirmed' && x.depositStatus === 'held') tag = <span className="dep-tag dep-held">Held</span>;
+  return <div className="muted small">Deposit {fmtR(x.depositCents)}{tag && <> {tag}</>}</div>;
+}
+
 function Transactions({ hostFilter, HostPicker }) {
   const [data, setData] = useState(null);
   const [from, setFrom] = useState('');
@@ -627,7 +642,7 @@ function Transactions({ hostFilter, HostPicker }) {
                       <button type="button" className={`tx-icon${openId === x.id ? ' on' : ''}`} title={breakdownSummary(x)} aria-label={`Breakdown of the ${fmtR(x.paidCents)} paid`} aria-expanded={openId === x.id} onClick={() => setOpenId(openId === x.id ? null : x.id)}>🧾</button>
                       {fmtR(x.paidCents)}
                     </td>
-                    <td className="num">{fmtR(x.grossCents)}</td>
+                    <td className="num">{fmtR(x.grossCents)}<DepositNote x={x} /></td>
                     <td className="num"><b>{x.feeCents ? fmtR(x.feeCents) : '—'}</b></td>
                     <td className="num">{x.hostNetCents ? fmtR(x.hostNetCents) : '—'}</td>
                   </tr>
