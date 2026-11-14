@@ -229,6 +229,11 @@ router.get('/units', async (req, res, next) => {
     }
 
     const ratings = await require('../utils/ratings').ratingsByProperty();
+    // Each host's name, looked up once per host for the "Hosted by" line on the cards.
+    const hostNames = {};
+    for (const { p } of best.values()) {
+      if (p.hostId && !(p.hostId in hostNames)) hostNames[p.hostId] = (await hostInfo(p.hostId)).name;
+    }
     const out = [];
     for (const { u, p } of best.values()) {
       if (minGuests && u.capacity && u.capacity < minGuests) continue;
@@ -241,6 +246,7 @@ router.get('/units', async (req, res, next) => {
       const cover = u.photos[0] || p.photos[0] || null;
       out.push({
         unitId: u.id, unitName: u.name, propertyId: p.id, propertyName: p.name, rating: ratings[p.id] || null,
+        hostName: hostNames[p.hostId] || null,
         address: p.address || null, latitude: p.latitude ?? null, longitude: p.longitude ?? null,
         capacity: u.capacity, bedrooms: u.bedrooms ?? null, bathrooms: u.bathrooms ?? null,
         coverPhotoId: cover ? cover.id : null,
