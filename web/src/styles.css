@@ -981,7 +981,13 @@ button.doc-del:hover { background:#fdecea; color:var(--red); }
 .msg-compose .msg-warn, .msg-sched .msg-warn { margin:0 0 6px; }
 .msg-link { background:none; color:var(--green-d); padding:0; text-decoration:underline; align-self:flex-start; }
 .msg-link:hover { background:none; }
-.msg-with-shortcuts { display:grid; grid-template-columns:minmax(0,1fr) 250px; gap:14px; max-width:1100px; width:100%; margin:0 auto; padding:14px 16px 50px; align-items:start; }
+.msg-with-shortcuts { display:grid; grid-template-columns:minmax(0,1fr) 200px; gap:12px; width:100%; margin:0; padding:14px 16px 50px; align-items:start; }
+.msg-with-shortcuts .msg-tpl-body { min-height:150px; line-height:1.5; }
+/* Saved messages: a narrow shortcuts column, so the messages get the width. */
+.msg-with-shortcuts .msg-shortcuts { padding:8px; gap:2px; }
+.msg-with-shortcuts button.msg-shortcut { padding:4px 6px; }
+.msg-with-shortcuts .msg-shortcut code { font-size:12px; }
+.msg-with-shortcuts .msg-shortcut .small { font-size:11px; }
 .msg-sched-intro { max-width:none; width:100%; margin:0 auto; padding:12px 16px 0; }
 .msg-sched-layout { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:8px; width:100%; margin:0; padding:12px 16px 30px; align-items:start; }
 /* Five columns matching the five tabs above: list under Inbox, editor across the middle three, shortcuts under Reviews. */
