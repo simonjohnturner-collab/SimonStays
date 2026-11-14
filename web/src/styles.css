@@ -930,7 +930,7 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .msg-lbl { font-size:12px; color:var(--muted); font-weight:600; min-width:60px; }
 .msg-field { display:flex; flex-direction:column; gap:2px; flex:1 1 170px; margin:0; font-size:12px; color:var(--muted); font-weight:600; }
 .msg-field select, .msg-field input { width:100%; margin:0; color:var(--ink); font-weight:400; }
-.msg-tabs.sub.jr-switch { max-width:1640px; width:100%; margin:10px auto 0; padding:0 16px; }
+.msg-tabs.sub.jr-switch { max-width:none; width:100%; margin:10px auto 0; padding:0 16px; }
 .jr { max-width:760px; width:100%; margin:0 auto; padding:14px 16px 50px; }
 .jr-tools { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; margin-bottom:16px; }
 .jr-tools .msg-field { flex:0 1 280px; }
@@ -982,8 +982,12 @@ button.doc-del:hover { background:#fdecea; color:var(--red); }
 .msg-link { background:none; color:var(--green-d); padding:0; text-decoration:underline; align-self:flex-start; }
 .msg-link:hover { background:none; }
 .msg-with-shortcuts { display:grid; grid-template-columns:minmax(0,1fr) 250px; gap:14px; max-width:1100px; width:100%; margin:0 auto; padding:14px 16px 50px; align-items:start; }
-.msg-sched-intro { max-width:1640px; width:100%; margin:0 auto; padding:12px 16px 0; }
-.msg-sched-layout { display:grid; grid-template-columns:290px minmax(0,1fr) 250px; gap:16px; max-width:1640px; width:100%; margin:0 auto; padding:12px 16px 30px; align-items:start; }
+.msg-sched-intro { max-width:none; width:100%; margin:0 auto; padding:12px 16px 0; }
+.msg-sched-layout { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:8px; width:100%; margin:0; padding:12px 16px 30px; align-items:start; }
+/* Five columns matching the five tabs above: list under Inbox, editor across the middle three, shortcuts under Reviews. */
+.msg-sched-layout > .msg-list { grid-column:1; }
+.msg-sched-layout > .msg-sched, .msg-sched-layout > .msg-sched-empty { grid-column:2 / 5; }
+.msg-sched-layout > .msg-shortcuts { grid-column:5; }
 .msg-sched .msg-tpl-body { min-height:max(240px, calc(100vh - 470px)); line-height:1.5; }
 .msg-sched-layout .sp-card { margin-bottom:0; }
 .msg-sched-head { margin:10px 0 2px; font-size:12px; font-weight:600; color:var(--muted); }
@@ -1002,12 +1006,13 @@ button.msg-shortcut:hover { background:#eef6f0; }
 button.msg-shortcut:disabled { opacity:1; }
 button.msg-shortcut:disabled:hover { background:#fff; }
 .msg-shortcut code { font-size:13px; font-weight:600; color:var(--green-d); }
-@media (max-width:980px) {
-  .msg-sched-layout { grid-template-columns:250px minmax(0,1fr); }
-  .msg-sched-layout .msg-list { grid-row:1 / span 2; }
-  .msg-sched-layout .msg-shortcuts { grid-column:2; grid-row:1; }
+@media (max-width:1100px) {
+  .msg-sched-layout { grid-template-columns:250px minmax(0,1fr); gap:14px; }
+  .msg-sched-layout > .msg-list { grid-column:1; grid-row:1 / span 2; }
+  .msg-sched-layout > .msg-shortcuts { grid-column:2; grid-row:1; }
+  .msg-sched-layout > .msg-sched, .msg-sched-layout > .msg-sched-empty { grid-column:2; grid-row:2; }
 }
-@media (max-width:980px) {
+@media (max-width:1100px) {
   .msg-shortcuts { position:static; max-height:none; flex-direction:row; flex-wrap:wrap; }
   .msg-shortcuts-title, .msg-shortcuts > .small { width:100%; }
   button.msg-shortcut { padding:3px 7px; background:#eef1f4; }
@@ -1017,7 +1022,7 @@ button.msg-shortcut:disabled:hover { background:#fff; }
   .msg-with-shortcuts { grid-template-columns:1fr; padding:10px 10px 50px; }
   .msg-with-shortcuts .msg-shortcuts { order:-1; }
   .msg-sched-layout { grid-template-columns:1fr; padding:10px; }
-  .msg-sched-layout .msg-list, .msg-sched-layout .msg-shortcuts { grid-column:auto; grid-row:auto; }
+  .msg-sched-layout > .msg-list, .msg-sched-layout > .msg-shortcuts, .msg-sched-layout > .msg-sched, .msg-sched-layout > .msg-sched-empty { grid-column:auto; grid-row:auto; }
   .msg-sched .msg-tpl-body { min-height:200px; }
   .msg-sched-layout.has-active .msg-list { display:none; }
   .msg-sched-layout:not(.has-active) > :not(.msg-list) { display:none; }
