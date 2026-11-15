@@ -1349,3 +1349,43 @@ button[role=radio].on { color:#e2a100; }
 .dep-pending { background: #fff3d6; color: #8a5a00; }
 .dep-held { background: #eef0f3; color: #4a5260; }
 .dep-kept { background: #fde8e8; color: #a12828; }
+
+/* Booking popup: name and dates up top, the rest in tabs. */
+.modal.bm { width: 500px; }
+.bm-pills { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -4px 0 10px; }
+.bm-pill { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: #eef1f4; color: var(--ink); }
+.bm-pill.ok { background: #e6f4ea; color: var(--green-d); }
+.bm-pill.owe { background: #fdeaea; color: var(--red); }
+.bm-code { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: #f0f3f6; border: 1px solid var(--line); user-select: all; cursor: text; }
+.bm-note { font-size: 12px; color: #34618e; background: #eef4fb; padding: 6px 10px; border-radius: 7px; margin-bottom: 6px; }
+.bm-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+.bm-grid2 > label { min-width: 0; }
+.bm-tabs { display: flex; gap: 2px; margin: 14px 0 0; border-bottom: 1px solid var(--line); }
+.bm-tabs button { flex: 1; background: transparent; color: var(--muted); border-radius: 7px 7px 0 0; padding: 8px 4px; font-size: 13px; font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.bm-tabs button:hover { background: #f3f6f4; }
+.bm-tabs button.on { color: var(--green-d); border-bottom-color: var(--green); }
+.bm-panel { padding: 4px 0 2px; min-height: 150px; }
+.bm-seg { display: flex; margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.bm-seg button { flex: 1; background: #fff; color: var(--ink); border-radius: 0; padding: 7px 4px; font-size: 13px; }
+.bm-seg button + button { border-left: 1px solid var(--line); }
+.bm-seg button:hover { background: #f3f6f4; }
+.bm-seg button.on.paid { background: var(--green); color: #fff; }
+.bm-seg button.on.partial { background: #f5a623; color: #fff; }
+.bm-seg button.on.unpaid { background: var(--red); color: #fff; }
+.bm-toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.bm-toggles button { background: #fff; color: var(--ink); border: 1px solid var(--line); padding: 10px; font-size: 13px; }
+.bm-toggles button:hover { background: #f3f6f4; }
+.bm-toggles button.on { background: #e6f4ea; border-color: var(--green); color: var(--green-d); font-weight: 600; }
+.bm .wa-confirm { margin: 8px 0 0; }
+.bm-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.bm-actions-sub { display: flex; gap: 8px; }
+.bm-actions-sub button { flex: 1; white-space: nowrap; font-size: 13px; padding: 7px 8px; }
+.bm-actions-main { display: flex; align-items: center; gap: 8px; }
+.bm-actions-main .save { flex: 1; }
+button.bm-cancel { background: transparent; color: var(--red); padding: 8px 6px; font-size: 13px; }
+button.bm-cancel:hover { background: #fdeaea; }
+@media (max-width: 480px) {
+  .bm-tabs button { font-size: 12px; }
+  .insta-row { flex-wrap: wrap; }
+  .insta-row input[type=date], .insta-row select { width: auto; flex: 1 1 45%; }
+}

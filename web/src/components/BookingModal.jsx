@@ -36,7 +36,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   const [extraMattress, setExtraMattress] = useState(booking?.extraMattress || false);
   const [hairDryer, setHairDryer] = useState(booking?.hairDryer || false);
   const addonCount = [earlyCheckIn, lateCheckOut, extraMattress, hairDryer].filter(Boolean).length;
-  const [addonsOpen, setAddonsOpen] = useState(addonCount > 0);
+  const [tab, setTab] = useState('guest');
 
   const [cleans, setCleans] = useState(
     (booking?.cleans || []).map((c) => ({ date: c.date?.slice(0, 10) || '', paymentMethod: c.paymentMethod || 'prepaid', cleaner: c.cleaner || '' }))
@@ -181,162 +181,183 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   const WA_DONE = { delivered: '✅ Delivered to the guest’s WhatsApp', read: '✅ Delivered and read', sent: '📤 Sent. WhatsApp hasn’t confirmed delivery yet', queued: '📤 Queued', failed: '❌ Not delivered', undelivered: '❌ Not delivered', rejected: '❌ Twilio refused it' };
 
   const title = `${editing ? 'Edit' : 'New'} ${isFloating ? 'floating booking' : 'booking'}${unit ? ` · ${unit.name}` : ''}`;
+  const nights = checkIn && checkOut ? Math.round((new Date(checkOut) - new Date(checkIn)) / 86400000) : 0;
+  const SOURCE = { manual: 'Direct', website: 'SimonStays', airbnb: 'Airbnb', booking: 'Booking.com', lekkeslaap: 'LekkeSlaap', import: 'Imported' };
+  const sourceLabel = editing ? (SOURCE[booking.source] || booking.source) : null;
+  const payPill = paymentStatus === 'paid' ? { cls: 'ok', text: 'Paid' }
+    : { cls: 'owe', text: outstandingCents ? `Owing ${fmtR(outstandingCents)}` : paymentStatus === 'partial' ? 'Part paid' : 'Unpaid' };
+  const cleanCount = (cleaner ? 1 : 0) + cleans.length;
+  const TABS = [
+    ['guest', 'Guest'],
+    ['pay', 'Payment'],
+    ['extras', `Extras${addonCount ? ` · ${addonCount}` : ''}`],
+    ['clean', `Cleaning${cleanCount ? ` · ${cleanCount}` : ''}`],
+  ];
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal bm" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h3>{title}</h3>
           <button className="x" onClick={onClose}>×</button>
         </div>
 
-        {isFloating && !allocateUnitId && (
-          <div className="chip-note">Floating booking — not tied to a unit, so it blocks nothing. Shown yellow until you allocate it.</div>
-        )}
-        {editing && booking.source !== 'manual' && (
-          <div className="chip-note">From {booking.source} — dates come from the channel; edits here won't push back.</div>
-        )}
-        {editing && booking.resCode && (
-          <div className="reslabel">Airbnb confirmation code&nbsp;<code title="Click to select, then copy">{booking.resCode}</code></div>
-        )}
-
-        {guestRating !== undefined && <div className="modal-rating"><GuestRatingChip rating={guestRating} /></div>}
-        <label>Guest<input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Guest name" /></label>
-        <div className="row2">
-          <label>Guest email <span className="muted small">(so they get your messages)</span>
-            <input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} placeholder="guest@example.com" /></label>
-          <label>Guest phone<input value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} placeholder="e.g. 082 123 4567" /></label>
+        <div className="bm-pills">
+          {sourceLabel && <span className="bm-pill">{sourceLabel}</span>}
+          {editing && booking.resCode && <code className="bm-code" title="Confirmation code: click to select, then copy">{booking.resCode}</code>}
+          {editing && booking.ref && !booking.resCode && <code className="bm-code" title="Booking reference">{booking.ref}</code>}
+          {editing && booking.status === 'pending' && <span className="bm-pill owe">Awaiting payment</span>}
+          <span className={`bm-pill ${payPill.cls}`}>{payPill.text}</span>
+          {nights > 0 && <span className="bm-pill">{nights} night{nights > 1 ? 's' : ''}</span>}
+          {guestRating !== undefined && <GuestRatingChip rating={guestRating} />}
         </div>
-        {editing && booking.status === 'confirmed' && (
-          <div className="wa-confirm">
-            <button type="button" className="secondary" disabled={busy || !guestPhone.trim()} onClick={previewGuestWhatsApp}>📲 WhatsApp the guest their confirmation…</button>
-            {!guestPhone.trim() && <span className="muted small">Add the guest’s phone first.</span>}
-            {waPreview && waPreview.error && <div className="wa-result bad">{waPreview.error}</div>}
-            {waPreview && waPreview.preview && (
-              <div className="wa-preview">
-                <div className="muted small">This is exactly what <b>{waPreview.to}</b> will get:</div>
-                <pre className="wa-bubble">{waPreview.preview}</pre>
-                {!waPreview.result ? (
-                  <div className="wa-preview-btns">
-                    <button type="button" disabled={busy} onClick={sendGuestWhatsApp}>{busy ? 'Sending… (checking delivery)' : 'Send it'}</button>
-                    <button type="button" className="secondary" disabled={busy} onClick={() => setWaPreview(null)}>Cancel</button>
-                  </div>
-                ) : (
-                  <div className={`wa-result ${waPreview.result.ok ? 'ok' : 'bad'}`}>
-                    <b>{WA_DONE[waPreview.result.status] || (waPreview.result.ok ? 'Sent' : 'Not sent')}</b>
-                    {!waPreview.result.ok && waPreview.result.message && <div className="muted small">{waPreview.result.errorCode ? `${waPreview.result.errorCode} · ` : ''}{waPreview.result.message}{waPreview.result.errorCode === 63016 ? ' — the guest template isn’t approved by WhatsApp yet.' : ''}</div>}
+        {isFloating && !allocateUnitId && <div className="bm-note">Floating: not on a unit yet, so it blocks nothing.</div>}
+        {editing && !['manual', 'website'].includes(booking.source) && <div className="bm-note">Dates come from {sourceLabel}. Changes here don’t sync back.</div>}
+
+        <label>Guest name<input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Guest name" /></label>
+        <div className="bm-grid2">
+          <label>Check-in<input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} /></label>
+          <label>Check-out<input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} /></label>
+        </div>
+        {booking?.dayUse && <div className="muted small">Day use. Check-out shows the next morning so the clean falls then.</div>}
+
+        <div className="bm-tabs" role="tablist">
+          {TABS.map(([k, label]) => (
+            <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>
+          ))}
+        </div>
+
+        {tab === 'guest' && (
+          <div className="bm-panel">
+            <div className="bm-grid2">
+              <label>Email<input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} placeholder="guest@example.com" /></label>
+              <label>Phone<input type="tel" value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} placeholder="082 123 4567" /></label>
+            </div>
+            {editing && booking.status === 'confirmed' && (
+              <div className="wa-confirm">
+                <button type="button" className="secondary" disabled={busy || !guestPhone.trim()} title={guestPhone.trim() ? '' : 'Add a phone number first'} onClick={previewGuestWhatsApp}>📲 WhatsApp confirmation</button>
+                {waPreview && waPreview.error && <div className="wa-result bad">{waPreview.error}</div>}
+                {waPreview && waPreview.preview && (
+                  <div className="wa-preview">
+                    <div className="muted small">What <b>{waPreview.to}</b> will get:</div>
+                    <pre className="wa-bubble">{waPreview.preview}</pre>
+                    {!waPreview.result ? (
+                      <div className="wa-preview-btns">
+                        <button type="button" disabled={busy} onClick={sendGuestWhatsApp}>{busy ? 'Sending…' : 'Send'}</button>
+                        <button type="button" className="secondary" disabled={busy} onClick={() => setWaPreview(null)}>Cancel</button>
+                      </div>
+                    ) : (
+                      <div className={`wa-result ${waPreview.result.ok ? 'ok' : 'bad'}`}>
+                        <b>{WA_DONE[waPreview.result.status] || (waPreview.result.ok ? 'Sent' : 'Not sent')}</b>
+                        {!waPreview.result.ok && waPreview.result.message && <div className="muted small">{waPreview.result.errorCode ? `${waPreview.result.errorCode} · ` : ''}{waPreview.result.message}{waPreview.result.errorCode === 63016 ? ' — the guest template isn’t approved by WhatsApp yet.' : ''}</div>}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             )}
-          </div>
-        )}
 
-        <div className="row2">
-          <label>Check-in<input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} /></label>
-          <label>Check-out<input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} /></label>
-        </div>
-        {booking?.dayUse && <div className="muted small">Day use on {checkIn}. The check-out shown here is the next morning, so the date stays blocked and the clean falls then.</div>}
-        {editing && !isFloating && booking.source === 'manual' && units.length > 0 && (
-          <label>Move to a different unit <span className="muted small">(reassigns this booking &amp; blocks the new unit)</span>
-            <select value={moveUnitId} onChange={(e) => setMoveUnitId(e.target.value)}>
-              {units.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
-            </select>
-          </label>
-        )}
-
-        {isFloating && (
-          <>
-            <label>Property group <span className="muted small">(soft — shows on the first free unit in the group; does NOT block channels)</span>
-              <select value={groupId} onChange={(e) => setGroupId(e.target.value)}>
-                <option value="">— None (stays in the Floating row) —</option>
-                {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </select>
-            </label>
-            <label>Allocate to a unit <span className="muted small">(hard — ends floating &amp; blocks that unit)</span>
-              <select value={allocateUnitId} onChange={(e) => setAllocateUnitId(e.target.value)}>
-                <option value="">— Keep floating —</option>
-                {units.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
-              </select>
-            </label>
-          </>
-        )}
-
-        <fieldset>
-          <legend>Payment</legend>
-          <div className="pay-calc">
-            <span>Per pricing schedule</span>
-            <b>{calcCents != null ? fmtR(calcCents) : '—'}</b>
-            {quote && (
-              <span className="muted small">{quote.nights} night{quote.nights > 1 ? 's' : ''} @ {fmtR(quote.avgNightlyCents)}
-                {quote.discountPercent ? ` · ${quote.discountPercent}% off` : ''}
-                {quote.cleaningCents ? ` · clean ${fmtR(quote.cleaningCents)}` : ''}</span>
+            {editing && !isFloating && booking.source === 'manual' && units.length > 0 && (
+              <label>Unit
+                <select value={moveUnitId} onChange={(e) => setMoveUnitId(e.target.value)}>
+                  {units.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+                </select>
+              </label>
             )}
-          </div>
-          <label>Quoted to the guest (R) <span className="muted small">(what you actually charge)</span>
-            <input value={quoted} onChange={(e) => setQuoted(e.target.value)} placeholder={calcCents != null ? centsToRand(calcCents) : '0.00'} />
-          </label>
-          <div className="checks wrap">
-            <label className="chk"><input type="radio" name="pay" checked={paymentStatus === 'paid'} onChange={() => setPaymentStatus('paid')} /> Paid</label>
-            <label className="chk"><input type="radio" name="pay" checked={paymentStatus === 'partial'} onChange={() => setPaymentStatus('partial')} /> Partially paid</label>
-            <label className="chk"><input type="radio" name="pay" checked={paymentStatus === 'unpaid'} onChange={() => setPaymentStatus('unpaid')} /> Unpaid (owing)</label>
-          </div>
-          {paymentStatus === 'partial' && (
-            <div className="row2">
-              <label>Amount paid (R)<input value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} placeholder="0.00" /></label>
-              <label>Still outstanding<input className="ro" readOnly value={outstandingCents != null ? fmtR(outstandingCents) : '—'} /></label>
+            {isFloating && (
+              <div className="bm-grid2">
+                <label>Show in group
+                  <select value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+                    <option value="">Floating row</option>
+                    {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                </label>
+                <label>Allocate to unit
+                  <select value={allocateUnitId} onChange={(e) => setAllocateUnitId(e.target.value)}>
+                    <option value="">Keep floating</option>
+                    {units.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+                  </select>
+                </label>
+              </div>
+            )}
+
+            <div className="bm-grid2">
+              <label>Referred by<input value={recommendedBy} onChange={(e) => setRecommendedBy(e.target.value)} placeholder="Who recommended them" /></label>
+              <label>Notes<input value={comments} onChange={(e) => setComments(e.target.value)} placeholder="Anything else" /></label>
             </div>
-          )}
-          {paymentStatus === 'unpaid' && outstandingCents != null && (
-            <p className="pay-out">Outstanding: <b>{fmtR(outstandingCents)}</b></p>
-          )}
-          {paymentStatus !== 'paid' && <p className="muted small" style={{ color: 'var(--red)' }}>Money owing — the guest name shows red on the board.</p>}
-        </fieldset>
-
-        <details className="addons-block" open={addonsOpen} onToggle={(e) => setAddonsOpen(e.currentTarget.open)}>
-          <summary>Requests &amp; add-ons{addonCount ? ` · ${addonCount} selected` : ''}</summary>
-          <div className="checks wrap">
-            <label className="chk"><input type="checkbox" checked={earlyCheckIn} onChange={(e) => setEarlyCheckIn(e.target.checked)} /> Early check-in</label>
-            <label className="chk"><input type="checkbox" checked={lateCheckOut} onChange={(e) => setLateCheckOut(e.target.checked)} /> Late check-out</label>
-            <label className="chk"><input type="checkbox" checked={extraMattress} onChange={(e) => setExtraMattress(e.target.checked)} /> Extra mattress</label>
-            <label className="chk"><input type="checkbox" checked={hairDryer} onChange={(e) => setHairDryer(e.target.checked)} /> Hair dryer</label>
           </div>
-        </details>
+        )}
 
-        <fieldset>
-          <legend>Cleaning</legend>
-          <label>Checkout cleaner<input list="cleaner-names" value={cleaner} onChange={(e) => setCleaner(e.target.value)} placeholder="Choose or type a cleaner" /></label>
-          <datalist id="cleaner-names">{cleaners.map((c) => <option key={c} value={c} />)}</datalist>
-          <label>Checkout notes <span className="muted small">(sent to the cleaner in the 7pm night-before WhatsApp reminder)</span>
-            <textarea rows={2} value={checkoutNotes} onChange={(e) => setCheckoutNotes(e.target.value)} placeholder="e.g. Guest leaving a key in the lockbox · strip the sofa bed · extra bins out back" /></label>
-          {editing && booking.unitId && (
-            <div className="remind-row">
-              <button type="button" className="secondary" disabled={busy || !cleaner} onClick={remindCleaner}>📲 Send cleaner reminder now</button>
-              <span className="muted small">Otherwise it sends automatically at 7pm the night before checkout.</span>
+        {tab === 'pay' && (
+          <div className="bm-panel">
+            <div className="pay-calc">
+              <span>Rate card</span>
+              <b>{calcCents != null ? fmtR(calcCents) : '—'}</b>
+              {quote && (
+                <span className="muted small">{quote.nights} night{quote.nights > 1 ? 's' : ''} @ {fmtR(quote.avgNightlyCents)}
+                  {quote.discountPercent ? ` · ${quote.discountPercent}% off` : ''}
+                  {quote.cleaningCents ? ` · clean ${fmtR(quote.cleaningCents)}` : ''}</span>
+              )}
             </div>
-          )}
-          <div className="insta-head">
-            <span>In-stay cleans</span>
-            <button type="button" className="mini" onClick={addClean}>+ Add in-stay clean</button>
+            <label>Amount charged (R)
+              <input inputMode="decimal" value={quoted} onChange={(e) => setQuoted(e.target.value)} placeholder={calcCents != null ? String(centsToRand(calcCents)) : '0.00'} />
+            </label>
+            <div className="bm-seg" role="radiogroup" aria-label="Payment">
+              {[['paid', 'Paid'], ['partial', 'Part paid'], ['unpaid', 'Unpaid']].map(([k, label]) => (
+                <button key={k} type="button" role="radio" aria-checked={paymentStatus === k} className={paymentStatus === k ? `on ${k}` : ''} onClick={() => setPaymentStatus(k)}>{label}</button>
+              ))}
+            </div>
+            {paymentStatus === 'partial' && (
+              <div className="bm-grid2">
+                <label>Paid so far (R)<input inputMode="decimal" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} placeholder="0.00" /></label>
+                <label>Outstanding<input className="ro" readOnly value={outstandingCents != null ? fmtR(outstandingCents) : '—'} /></label>
+              </div>
+            )}
+            {paymentStatus === 'unpaid' && outstandingCents != null && <p className="pay-out">Outstanding: <b>{fmtR(outstandingCents)}</b></p>}
+            {paymentStatus !== 'paid' && <p className="muted small">The guest’s name shows red on the board until it’s paid.</p>}
           </div>
-          {cleans.length === 0 && <p className="muted small">None. Add one or more mid-stay cleans if the guest wants them.</p>}
-          {cleans.map((c, i) => (
-            <div key={i} className="insta-row">
-              <input type="date" value={c.date} onChange={(e) => updateClean(i, 'date', e.target.value)} title="Clean date" />
-              <select value={c.paymentMethod} onChange={(e) => updateClean(i, 'paymentMethod', e.target.value)} title="Payment">
-                <option value="prepaid">Paid for</option>
-                <option value="direct">Cleaner paid directly</option>
-              </select>
-              <input list="cleaner-names" value={c.cleaner} onChange={(e) => updateClean(i, 'cleaner', e.target.value)} placeholder="Cleaner" title="Cleaner" />
-              <button type="button" className="del sm" onClick={() => removeClean(i)} title="Remove">×</button>
+        )}
+
+        {tab === 'extras' && (
+          <div className="bm-panel">
+            <div className="bm-toggles">
+              {[['Early check-in', earlyCheckIn, setEarlyCheckIn], ['Late check-out', lateCheckOut, setLateCheckOut], ['Extra mattress', extraMattress, setExtraMattress], ['Hair dryer', hairDryer, setHairDryer]].map(([label, on, set]) => (
+                <button key={label} type="button" aria-pressed={on} className={on ? 'on' : ''} onClick={() => set(!on)}>{on ? '✓ ' : ''}{label}</button>
+              ))}
             </div>
-          ))}
-        </fieldset>
+          </div>
+        )}
 
-        <label>Recommended by <span className="muted small">(who referred this guest — so you can thank them)</span>
-          <input value={recommendedBy} onChange={(e) => setRecommendedBy(e.target.value)} placeholder="Name of the person who recommended you" /></label>
-
-        <label>Comments<input value={comments} onChange={(e) => setComments(e.target.value)} placeholder="Anything else…" /></label>
+        {tab === 'clean' && (
+          <div className="bm-panel">
+            <label>Checkout cleaner<input list="cleaner-names" value={cleaner} onChange={(e) => setCleaner(e.target.value)} placeholder="Choose or type a name" /></label>
+            <label>Notes for the cleaner
+              <textarea rows={2} value={checkoutNotes} onChange={(e) => setCheckoutNotes(e.target.value)} placeholder="e.g. Key in the lockbox · strip the sofa bed" /></label>
+            {editing && booking.unitId && (
+              <div className="remind-row">
+                <button type="button" className="secondary" disabled={busy || !cleaner} onClick={remindCleaner}>📲 Remind cleaner now</button>
+                <span className="muted small">Sends automatically at 7pm the night before.</span>
+              </div>
+            )}
+            <div className="insta-head">
+              <span>Mid-stay cleans</span>
+              <button type="button" className="mini" onClick={addClean}>+ Add</button>
+            </div>
+            {cleans.length === 0 && <p className="muted small">None.</p>}
+            {cleans.map((c, i) => (
+              <div key={i} className="insta-row">
+                <input type="date" value={c.date} onChange={(e) => updateClean(i, 'date', e.target.value)} title="Clean date" />
+                <select value={c.paymentMethod} onChange={(e) => updateClean(i, 'paymentMethod', e.target.value)} title="Payment">
+                  <option value="prepaid">Paid for</option>
+                  <option value="direct">Cleaner paid directly</option>
+                </select>
+                <input list="cleaner-names" value={c.cleaner} onChange={(e) => updateClean(i, 'cleaner', e.target.value)} placeholder="Cleaner" title="Cleaner" />
+                <button type="button" className="del sm" onClick={() => removeClean(i)} title="Remove">×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <datalist id="cleaner-names">{cleaners.map((c) => <option key={c} value={c} />)}</datalist>
 
         {msg && <div className={`msg ${msg.kind}`}>{msg.text}</div>}
         {conflicts && (
@@ -345,19 +366,23 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
             <ul>{conflicts.map((c) => (
               <li key={c.id}>{c.guestName || 'Booking'} ({c.source}): {c.checkIn.slice(0, 10)} → {c.checkOut.slice(0, 10)}</li>
             ))}</ul>
-            {!editing && <button className="danger" disabled={busy} onClick={() => save(true)}>Book anyway (override)</button>}
+            {!editing && <button className="danger" disabled={busy} onClick={() => save(true)}>Book anyway</button>}
           </div>
         )}
 
-        <div className="booking-actions">
-          {editing && <button className="danger ghost" disabled={busy} onClick={remove}>Cancel booking</button>}
-          {editing && booking.unitId && booking.source === 'manual' && (
-            <button className="secondary" disabled={busy} onClick={makeFloating}>↩ Make floating</button>
+        <div className="bm-actions">
+          {editing && (
+            <div className="bm-actions-sub">
+              {onInvoice && <button className="secondary" disabled={busy} onClick={() => onInvoice(booking)}>🧾 Invoice</button>}
+              {booking.unitId && onMessage && <button className="secondary" disabled={busy} onClick={() => onMessage(booking)}>💬 Message</button>}
+              {booking.unitId && booking.source === 'manual' && <button className="secondary" disabled={busy} onClick={makeFloating}>↩ Make floating</button>}
+            </div>
           )}
-          {editing && onInvoice && <button className="secondary" disabled={busy} onClick={() => onInvoice(booking)}>🧾 Invoice</button>}
-          {editing && booking.unitId && onMessage && <button className="secondary" disabled={busy} onClick={() => onMessage(booking)}>💬 Message guest</button>}
-          {editing && booking.status === 'pending' && <button className="save" disabled={busy} onClick={confirmPaid}>✅ Confirm booking</button>}
-          <button className="save" disabled={busy} onClick={() => save(false)}>{editing ? 'Save' : 'Create booking'}</button>
+          <div className="bm-actions-main">
+            {editing && <button className="bm-cancel" disabled={busy} onClick={remove}>Cancel booking</button>}
+            {editing && booking.status === 'pending' && <button className="save" disabled={busy} onClick={confirmPaid}>✅ Confirm</button>}
+            <button className="save" disabled={busy} onClick={() => save(false)}>{editing ? 'Save' : 'Create booking'}</button>
+          </div>
         </div>
       </div>
     </div>
