@@ -4,6 +4,10 @@
 // Runs as part of `npm run build` on Render. Never fails the deploy: if the web
 // folder isn't there or the build breaks, the server still starts and /hosting
 // falls back to the old host address (see index.js).
+//
+// Render redeploys this service on changes to server/ or web/ (render.yaml
+// buildFilter). A web-only change used to update the old static host site but
+// not /hosting. If the dashboard's Build Filters don't include web/**, add it.
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');

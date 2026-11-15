@@ -12,6 +12,12 @@ services:
     runtime: node
     plan: free
     rootDir: server
+    # This service also builds the host app (../web) into /hosting, so a change
+    # to web/ alone must redeploy it too. rootDir on its own only watches server/.
+    buildFilter:
+      paths:
+        - server/**
+        - web/**
     buildCommand: npm install && npm run build   # install + prisma generate (client only)
     # db push runs at START, when the DB is reachable on Render's private network
     startCommand: npx prisma db push --skip-generate --accept-data-loss && node src/index.js
