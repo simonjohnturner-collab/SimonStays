@@ -209,6 +209,7 @@ export const api = {
   deleteFormSubmission: (id) => req('DELETE', `/forms/submissions/${id}`),
   analyzePurchase: (id) => req('POST', `/forms/submissions/${id}/analyze`),
   remindCleaner: (id) => req('POST', `/bookings/${id}/remind-cleaner`),
+  linkGuestbook: (id) => req('POST', `/bookings/${id}/guestbook-link`),
 
   // guest messaging: conversations, saved messages, scheduled messages
   messageMeta: () => req('GET', '/messages/meta'),

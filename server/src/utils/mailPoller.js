@@ -57,7 +57,7 @@ async function pollOnce() {
           // part strips out — so without the HTML the code was never found and
           // the whole email (name included) was discarded.
           const body = [parsed.text, parsed.html].filter(Boolean).join('\n');
-          const { resCode, guestName } = parseAirbnbEmail({ subject: parsed.subject || '', body });
+          const { resCode, guestName, phoneLast4 } = parseAirbnbEmail({ subject: parsed.subject || '', body });
           summary.processed++;
           // A published Airbnb review: keep it for the shopfront's ratings.
           if (isReviewEmail(parsed.subject)) {
@@ -68,8 +68,9 @@ async function pollOnce() {
           if (resCode && guestName) {
             await prisma.guestLookup.upsert({
               where: { hostId_resCode: { hostId: host.id, resCode } },
-              update: { guestName },
-              create: { hostId: host.id, resCode, guestName },
+              // The phone's last 4 digits let the guestbook confirm it's really them.
+              update: { guestName, ...(phoneLast4 ? { phoneLast4 } : {}) },
+              create: { hostId: host.id, resCode, guestName, phoneLast4: phoneLast4 || null },
             });
             summary.matched++;
             applied = await applyGuestNames(host.id, resCode);

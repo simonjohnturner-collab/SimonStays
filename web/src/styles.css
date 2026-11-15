@@ -1389,3 +1389,7 @@ button.bm-cancel:hover { background: #fdeaea; }
   .insta-row { flex-wrap: wrap; }
   .insta-row input[type=date], .insta-row select { width: auto; flex: 1 1 45%; }
 }
+
+.bm-pill.warn { background: #fff4e0; color: #8a5a00; }
+.bm-guestnote { margin-top: 10px; padding: 8px 10px; border-radius: 7px; background: #fffaf0; border: 1px solid #f3dfb3; font-size: 13px; white-space: pre-wrap; }
+.bm-guestnote b { display: block; font-size: 12px; color: #8a5a00; margin-bottom: 2px; }

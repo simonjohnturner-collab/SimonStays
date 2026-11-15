@@ -1,0 +1,228 @@
+// The guestbook (/guestbook): a guest fills in their own details for an upcoming
+// stay — name, contact, extras and special instructions — and gets a SimonStays
+// account in the same step. Built mainly for Airbnb guests, who arrive from a
+// link in an Airbnb message that's the same for everyone, so the booking is
+// found by name rather than a personal link.
+//
+// Safety: anyone can type a name, so the search only ever shows dates (never
+// the property or address), and a booking is only linked to the guest's
+// account (which shows the door code) when the phone they give matches the
+// last 4 digits Airbnb sent us. Otherwise the details are saved and the host
+// links the account by hand.
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const prisma = require('../lib/prisma');
+const { optionalGuest } = require('../middleware/auth');
+const { signGuest } = require('../lib/jwt');
+const { alertHost } = require('../utils/payments');
+const { shownCheckOut } = require('../utils/ical');
+
+const router = express.Router();
+router.use(optionalGuest);
+
+const DAY = 864e5;
+const LOOK_AHEAD_DAYS = 120; // bookings starting this far ahead can be found
+const MAX_RESULTS = 5;
+const iso = (d) => new Date(d).toISOString().slice(0, 10);
+const fmtR = (c) => `R${(c / 100).toFixed(2).replace(/\.00$/, '')}`;
+const fmtDay = (d) => new Date(d).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+const clean = (s, max = 200) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, max);
+// Lower case, no accents, letters only: "José" ↔ "jose".
+const norm = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z\s'-]/g, ' ').replace(/\s+/g, ' ').trim();
+const digits = (s) => String(s || '').replace(/\D/g, '');
+
+// Per-IP limit on searches and submissions, so names can't be trawled.
+const hits = new Map();
+function overLimit(key, max, windowMs = 60 * 60 * 1000) {
+  const now = Date.now(), cutoff = now - windowMs;
+  const list = (hits.get(key) || []).filter((t) => t > cutoff);
+  if (list.length >= max) { hits.set(key, list); return true; }
+  list.push(now); hits.set(key, list);
+  if (hits.size > 5000) for (const [k, v] of hits) if (!v.some((t) => t > cutoff)) hits.delete(k);
+  return false;
+}
+const tooMany = (res) => res.status(429).json({ error: 'too_many', message: 'Too many tries. Please wait a little and try again.' });
+
+const BOOKING_INCLUDE = { unit: { include: { pricingGroup: true, property: { select: { id: true, name: true, hostId: true } } } } };
+
+// Upcoming or current stays: confirmed, not over, starting within the window.
+function openWhere() {
+  const today = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+  return { status: 'confirmed', unitId: { not: null }, checkOut: { gte: today }, checkIn: { lte: new Date(today.getTime() + LOOK_AHEAD_DAYS * DAY) } };
+}
+
+// Does the name typed match the booking's? First names must match; a surname is
+// only checked when the booking has one (Airbnb often gives a first name only).
+function nameMatches(booking, firstName, surname) {
+  const parts = norm(booking.guestName).split(' ').filter(Boolean);
+  if (!parts.length || parts[0] !== norm(firstName).split(' ')[0]) return false;
+  const sur = norm(surname);
+  if (parts.length > 1 && sur) return parts.slice(1).some((p) => p === sur || p.startsWith(sur) || sur.startsWith(p));
+  return true;
+}
+
+// The paid and free extras on offer for this stay, priced from its rate card.
+function extrasOf(b) {
+  const g = (b.unit && b.unit.pricingGroup) || {};
+  return [
+    { key: 'earlyCheckIn', label: 'Early check-in', cents: g.earlyCheckInCents || 0 },
+    { key: 'lateCheckOut', label: 'Late check-out', cents: g.lateCheckOutCents || 0 },
+    { key: 'extraMattress', label: 'Extra mattress', cents: g.mattressCents || 0 },
+    { key: 'hairDryer', label: 'Hair dryer', cents: 0 },
+  ];
+}
+
+// What the guest sees of a booking: dates and extras only.
+function stayOut(b, mine = false) {
+  const out = {
+    id: b.id, checkIn: iso(b.checkIn), checkOut: iso(shownCheckOut(b)),
+    nights: Math.max(1, Math.round((shownCheckOut(b) - new Date(b.checkIn)) / DAY)),
+    label: `${fmtDay(b.checkIn)} → ${fmtDay(shownCheckOut(b))}`,
+    channel: b.source === 'airbnb' ? 'airbnb' : 'simonstays',
+    extras: extrasOf(b),
+    done: !!b.guestbookAt,
+  };
+  // Their own trip (signed in): the place and what's already on file.
+  if (mine) {
+    Object.assign(out, {
+      place: b.unit ? `${b.unit.property.name} · Unit ${b.unit.name}` : null,
+      current: { earlyCheckIn: b.earlyCheckIn, lateCheckOut: b.lateCheckOut, extraMattress: b.extraMattress, hairDryer: b.hairDryer, notes: b.guestNotes || '' },
+    });
+  }
+  return out;
+}
+
+// A booking already linked to someone else's account is theirs to edit.
+const lockedTo = (b, acct) => !!(b.guestbookAt && b.guestAccountId && (!acct || acct.id !== b.guestAccountId));
+
+// POST /public/guestbook/find { firstName, surname } → the matching stays (dates only).
+router.post('/find', async (req, res, next) => {
+  try {
+    if (overLimit(`find:${req.ip}`, 20)) return tooMany(res);
+    const firstName = clean((req.body || {}).firstName, 60);
+    const surname = clean((req.body || {}).surname, 60);
+    if (norm(firstName).length < 2) return res.status(400).json({ error: 'name_required', message: 'Please enter your first name.' });
+    const first = norm(firstName).split(' ')[0];
+    // Narrow in the database by the first name's start, then match properly here.
+    const rows = await prisma.booking.findMany({
+      where: { ...openWhere(), guestName: { contains: firstName.split(' ')[0].slice(0, 3), mode: 'insensitive' } },
+      include: BOOKING_INCLUDE, orderBy: { checkIn: 'asc' }, take: 200,
+    });
+    const acct = req.guestId ? { id: req.guestId } : null;
+    const stays = rows.filter((b) => nameMatches(b, first, surname) && !lockedTo(b, acct)).slice(0, MAX_RESULTS).map((b) => stayOut(b));
+    res.json({ stays });
+  } catch (e) { next(e); }
+});
+
+// GET /public/guestbook/mine — a signed-in guest's own upcoming stays.
+router.get('/mine', async (req, res, next) => {
+  try {
+    if (!req.guestId) return res.status(401).json({ error: 'sign_in_required' });
+    const acct = await prisma.guestAccount.findUnique({ where: { id: req.guestId } });
+    if (!acct) return res.status(401).json({ error: 'sign_in_required' });
+    const or = [{ guestAccountId: acct.id }];
+    if (acct.emailVerifiedAt) or.push({ guestEmail: { equals: acct.email, mode: 'insensitive' } });
+    const rows = await prisma.booking.findMany({ where: { ...openWhere(), OR: or }, include: BOOKING_INCLUDE, orderBy: { checkIn: 'asc' }, take: 10 });
+    const name = String(acct.name || '').trim().split(/\s+/);
+    res.json({ stays: rows.map((b) => stayOut(b, true)), account: { firstName: name[0] || '', surname: name.slice(1).join(' '), email: acct.email, phone: acct.phone || '' } });
+  } catch (e) { next(e); }
+});
+
+// POST /public/guestbook/:id — save the guestbook for one stay.
+// { firstName, surname, email, phone, password?, extras: {earlyCheckIn,…}, notes, agreeCharges }
+router.post('/:id', async (req, res, next) => {
+  try {
+    if (overLimit(`save:${req.ip}`, 15)) return tooMany(res);
+    const body = req.body || {};
+    const firstName = clean(body.firstName, 60), surname = clean(body.surname, 60);
+    const email = clean(body.email, 120).toLowerCase(), phone = clean(body.phone, 30);
+    const notes = String(body.notes || '').replace(/\r/g, '').trim().slice(0, 1500) || null;
+    if (!firstName || !surname) return res.status(400).json({ error: 'name_required', message: 'Please enter your first name and surname.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'email_required', message: 'Please enter a valid email address.' });
+    if (digits(phone).length < 9) return res.status(400).json({ error: 'phone_required', message: 'Please enter your mobile number, with the country code if outside South Africa.' });
+
+    const b = await prisma.booking.findFirst({ where: { id: String(req.params.id), ...openWhere() }, include: BOOKING_INCLUDE });
+    if (!b) return res.status(404).json({ error: 'not_found', message: 'We couldn’t find that stay. It may have ended or been cancelled.' });
+
+    // The account: the signed-in one, or a new one made from this form.
+    let acct = req.guestId ? await prisma.guestAccount.findUnique({ where: { id: req.guestId } }) : null;
+    const ownTrip = !!(acct && (b.guestAccountId === acct.id || (acct.emailVerifiedAt && String(b.guestEmail || '').toLowerCase() === acct.email)));
+    if (!ownTrip && !nameMatches(b, firstName, surname)) return res.status(403).json({ error: 'name_mismatch', message: 'That name doesn’t match the booking. Please use the name the stay was booked under.' });
+    if (lockedTo(b, acct)) return res.status(409).json({ error: 'already_done', message: 'This stay’s guestbook is already filled in. Sign in with the account that did it to change it.' });
+
+    let token = null;
+    if (!acct) {
+      const password = String(body.password || '');
+      if (password.length < 8) return res.status(400).json({ error: 'password_too_short', message: 'Please choose a password of at least 8 characters.' });
+      if (await prisma.guestAccount.findUnique({ where: { email } })) return res.status(409).json({ error: 'email_taken', message: 'You already have a SimonStays account with this email. Please sign in to continue.' });
+      acct = await prisma.guestAccount.create({ data: { email, passwordHash: await bcrypt.hash(password, 10), name: `${firstName} ${surname}`, phone } });
+      token = signGuest(acct);
+      require('./guestAuth').sendConfirmation(acct).catch(() => {});
+    } else if (!acct.name || !acct.phone) {
+      acct = await prisma.guestAccount.update({ where: { id: acct.id }, data: { name: acct.name || `${firstName} ${surname}`, phone: acct.phone || phone } });
+    }
+
+    // Verified: their own trip already, or the phone matches the booking's
+    // (a direct booking's full number, or the last 4 digits Airbnb sent us).
+    const hostId = b.hostId || b.unit.property.hostId;
+    const lookup = b.resCode ? await prisma.guestLookup.findUnique({ where: { hostId_resCode: { hostId, resCode: b.resCode } }, select: { phoneLast4: true } }) : null;
+    const typed = digits(phone);
+    const phoneOk = !!((lookup && lookup.phoneLast4 && typed.endsWith(lookup.phoneLast4))
+      || (digits(b.guestPhone).length >= 9 && typed.slice(-9) === digits(b.guestPhone).slice(-9)));
+    const verified = ownTrip || phoneOk;
+
+    // Extras: what they ask for now, keeping anything the host already added.
+    const want = body.extras || {};
+    const extras = extrasOf(b);
+    const picked = extras.filter((x) => want[x.key]);
+    const charge = picked.filter((x) => !b[x.key]).reduce((n, x) => n + x.cents, 0); // only new paid ones
+    if (charge > 0 && !body.agreeCharges) return res.status(400).json({ error: 'agree_charges', message: 'Please confirm you’re happy to pay for the extras.' });
+
+    await prisma.booking.update({
+      where: { id: b.id },
+      data: {
+        guestName: `${firstName} ${surname}`,
+        guestEmail: b.guestEmail || email,
+        guestPhone: phone,
+        guestNotes: notes,
+        earlyCheckIn: b.earlyCheckIn || !!want.earlyCheckIn,
+        lateCheckOut: b.lateCheckOut || !!want.lateCheckOut,
+        extraMattress: b.extraMattress || !!want.extraMattress,
+        hairDryer: b.hairDryer || !!want.hairDryer,
+        guestbookAt: new Date(),
+        guestbookVerified: verified,
+        guestbookAccountId: acct.id,
+        ...(verified && !b.guestAccountId ? { guestAccountId: acct.id } : {}),
+      },
+    });
+
+    // The host's contact book: update the guest if they're known, else add them.
+    const known = await prisma.guest.findFirst({ where: { hostId, OR: [{ email: { equals: email, mode: 'insensitive' } }, ...(digits(phone).length >= 9 ? [{ phone: { contains: digits(phone).slice(-9) } }] : [])] } });
+    if (known) await prisma.guest.update({ where: { id: known.id }, data: { name: `${firstName} ${surname}`, email, phone } });
+    else await prisma.guest.create({ data: { hostId, name: `${firstName} ${surname}`, email, phone } });
+
+    // Tell the host, in the booking's conversation and by WhatsApp.
+    const airbnb = b.source === 'airbnb';
+    const lines = [
+      '📒 Guestbook filled in',
+      `Name: ${firstName} ${surname}`,
+      `Phone: ${phone}`,
+      `Email: ${email}`,
+      picked.length ? `Extras: ${picked.map((x) => `${x.label}${x.cents ? ` (${fmtR(x.cents)})` : ''}`).join(', ')}` : 'Extras: none',
+      charge > 0 ? `I agree to pay ${fmtR(charge)} for the new extras. Please send me a payment request${airbnb ? ' through Airbnb' : ''}.` : null,
+      notes ? `Special instructions: ${notes}` : null,
+    ].filter(Boolean);
+    await prisma.message.create({ data: { hostId, bookingId: b.id, sender: 'guest', authorId: acct.id, authorName: `${firstName} ${surname}`, body: lines.join('\n') } });
+    const place = `${b.unit.property.name} · ${b.unit.name}`;
+    alertHost(b, [
+      `📒 Guestbook: ${firstName} ${surname} (${airbnb ? 'Airbnb' : 'SimonStays'}), ${place}, ${fmtDay(b.checkIn)} → ${fmtDay(shownCheckOut(b))}`,
+      charge > 0 ? `💰 Agreed to ${fmtR(charge)} for extras: send a payment request${airbnb ? ' in Airbnb' : ''}.` : null,
+      notes ? `📝 ${notes.slice(0, 300)}` : null,
+      verified ? null : '⚠️ Not verified (phone didn’t match Airbnb’s). Link their account from the booking once you’re sure it’s them.',
+    ].filter(Boolean).join('\n'));
+
+    res.json({ ok: true, verified, chargeCents: charge, channel: airbnb ? 'airbnb' : 'simonstays', token, account: token ? { id: acct.id, email: acct.email, name: acct.name, phone: acct.phone, emailVerified: false } : undefined });
+  } catch (e) { next(e); }
+});
+
+module.exports = router;

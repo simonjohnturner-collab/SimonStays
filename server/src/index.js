@@ -41,6 +41,8 @@ app.use('/public/documents', require('./routes/documents').publicRouter);
 app.use('/public/account', require('./routes/guestAuth'));
 // Paygate PayWeb3 callbacks (notify + guest return) — public, verified with Paygate.
 app.use('/public/paygate', require('./routes/paygate'));
+// The guestbook: guests fill in their details for an upcoming stay.
+app.use('/public/guestbook', require('./routes/guestbook'));
 // Ask Simon (AI guest Q&A on the shopfront) — public, rate-limited.
 app.use('/public/ask', require('./routes/ask'));
 // Public shopfront API (no auth) — mount before the auth'd catch-all routers.
@@ -175,7 +177,7 @@ app.get(['/privacy', '/privacy.html', '/privacy-policy'], (req, res) => {
 
 // Travelling: the guest site. Every screen has an address of its own; the page
 // opens the matching screen from the path (/trips/:id, /stays/:unitId, …).
-app.get(['/', '/stay', '/book', '/stays/:propertyId', '/stays/:propertyId/:unitId', '/trips', '/trips/:bookingId', '/messages'], (req, res) => {
+app.get(['/', '/stay', '/book', '/guestbook', '/stays/:propertyId', '/stays/:propertyId/:unitId', '/trips', '/trips/:bookingId', '/messages'], (req, res) => {
   res.setHeader('Content-Security-Policy', STAY_CSP);
   res.setHeader('Cache-Control', 'no-cache, must-revalidate'); // always serve the latest shopfront (map tiles, checkout, etc.)
   res.type('html').send(stayHtml);

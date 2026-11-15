@@ -37,6 +37,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   const [hairDryer, setHairDryer] = useState(booking?.hairDryer || false);
   const addonCount = [earlyCheckIn, lateCheckOut, extraMattress, hairDryer].filter(Boolean).length;
   const [tab, setTab] = useState('guest');
+  const [gbLinked, setGbLinked] = useState(!!booking?.guestbookVerified);
 
   const [cleans, setCleans] = useState(
     (booking?.cleans || []).map((c) => ({ date: c.date?.slice(0, 10) || '', paymentMethod: c.paymentMethod || 'prepaid', cleaner: c.cleaner || '' }))
@@ -158,6 +159,14 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
     } finally { setBusy(false); }
   }
 
+  // The guestbook was filled in but the phone didn't match: the host links it once sure.
+  async function linkGuestbook() {
+    if (!window.confirm('Link this booking to the account that filled in the guestbook? They’ll see it in their trips, including the door code once it’s paid.')) return;
+    setBusy(true); setMsg(null);
+    try { await api.linkGuestbook(booking.id); setGbLinked(true); setMsg({ text: 'Linked. The guest can now see this stay in their trips.', kind: 'ok' }); }
+    catch (e) { setMsg({ text: e.message, kind: 'err' }); } finally { setBusy(false); }
+  }
+
   // The guest's WhatsApp confirmation, sent by hand: preview first, then send.
   const [waPreview, setWaPreview] = useState(null); // { preview, to } | { result } | { error }
   const waCall = async (method) => {
@@ -209,6 +218,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
           {editing && booking.status === 'pending' && <span className="bm-pill owe">Awaiting payment</span>}
           <span className={`bm-pill ${payPill.cls}`}>{payPill.text}</span>
           {nights > 0 && <span className="bm-pill">{nights} night{nights > 1 ? 's' : ''}</span>}
+          {editing && booking.guestbookAt && <span className={`bm-pill ${gbLinked ? 'ok' : 'warn'}`} title={gbLinked ? 'The guest filled in the guestbook' : 'Filled in, but the phone didn’t match Airbnb’s. Check it’s them, then link it on the Guest tab.'}>📒 Guestbook{gbLinked ? ' ✓' : ' · check'}</span>}
           {guestRating !== undefined && <GuestRatingChip rating={guestRating} />}
         </div>
         {isFloating && !allocateUnitId && <div className="bm-note">Floating: not on a unit yet, so it blocks nothing.</div>}
@@ -281,6 +291,13 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
               </div>
             )}
 
+            {editing && booking.guestNotes && (
+              <div className="bm-guestnote"><b>Guest’s instructions</b>{booking.guestNotes}</div>
+            )}
+            {editing && booking.guestbookAt && !gbLinked && (
+              <div className="bm-note">Guestbook filled in, but the phone didn’t match Airbnb’s, so it isn’t linked to their account yet.{' '}
+                <button type="button" className="mini" disabled={busy} onClick={linkGuestbook}>Link account</button></div>
+            )}
             <div className="bm-grid2">
               <label>Referred by<input value={recommendedBy} onChange={(e) => setRecommendedBy(e.target.value)} placeholder="Who recommended them" /></label>
               <label>Notes<input value={comments} onChange={(e) => setComments(e.target.value)} placeholder="Anything else" /></label>

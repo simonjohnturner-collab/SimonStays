@@ -186,6 +186,16 @@ function normalizeCleans(cleans) {
     }));
 }
 
+// POST /bookings/:id/guestbook-link — the host is sure the guest who filled in
+// the guestbook (unverified: their phone didn't match) is the real guest: link
+// the booking to their account so it shows in their trips.
+router.post('/bookings/:id/guestbook-link', async (req, res) => {
+  const booking = await loadOwned(req, res); if (!booking) return;
+  if (!booking.guestbookAccountId) return res.status(400).json({ error: 'no_guestbook', message: 'Nobody has filled in the guestbook for this booking yet.' });
+  const updated = await prisma.booking.update({ where: { id: booking.id }, data: { guestAccountId: booking.guestbookAccountId, guestbookVerified: true } });
+  res.json({ booking: updated });
+});
+
 // PATCH /bookings/:id — edit any field the host owns (guest, paid, cleaner, dates, status…).
 router.patch('/bookings/:id', async (req, res) => {
   const booking = await loadOwned(req, res); if (!booking) return;

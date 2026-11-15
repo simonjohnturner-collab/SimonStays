@@ -550,6 +550,11 @@ model Booking {
   guestEmail   String?
   guestPhone   String?
   recommendedBy String? // who referred this guest, so the host can thank them
+  // Guestbook: the guest's own details form (/guestbook), mainly for Airbnb guests.
+  guestNotes         String? // the guest's special instructions, from the guestbook
+  guestbookAt        DateTime? // when the guest last completed the guestbook
+  guestbookVerified  Boolean @default(false) // the phone they gave matched the one Airbnb sent us
+  guestbookAccountId String? // the account that filled it in, waiting for the host to link it when unverified
   totalCents   Int?    // payable total captured at booking time (website bookings)
   guestAccountId String?
   guestAccount   GuestAccount? @relation(fields: [guestAccountId], references: [id], onDelete: SetNull)
