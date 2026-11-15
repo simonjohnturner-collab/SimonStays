@@ -21,6 +21,8 @@ function config() {
   };
 }
 
+let reviewsBackfilled = false;
+
 function enabled() { const c = config(); return !!(c.user && c.pass); }
 
 async function pollOnce() {
@@ -79,9 +81,11 @@ async function pollOnce() {
           await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
         } catch (e) { summary.failed++; }
       }
-      // First run: read every published review in the folder, not just the
-      // last three weeks, so the shopfront starts with the full history.
-      if ((await prisma.channelReview.count({ where: { hostId: host.id } })) === 0) {
+      // Once per server start: read every published review in the folder, not
+      // just the last three weeks, so the shopfront has the full history and
+      // older unmatched reviews get another chance to match a booking.
+      if (!reviewsBackfilled) {
+        reviewsBackfilled = true;
         const all = await client.search({ subject: 'review' }, { uid: true });
         for (const uid of all || []) {
           try {
