@@ -1626,7 +1626,7 @@
     setPath('/guestbook');
     var host=$('#detail'), overlay=el('div','overlay');
     overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
-    overlay.innerHTML='<div class="sheet" style="max-width:560px"><div class="sheet-head"><h2>📒 Guestbook</h2><button class="x">&times;</button></div><div class="sheet-body"><p class="note">Loading…</p></div></div>';
+    overlay.innerHTML='<div class="sheet" style="max-width:560px"><div class="sheet-head"><h2>SimonStays Guestbook</h2><button class="x">&times;</button></div><div class="sheet-body"><p class="note">Loading…</p></div></div>';
     host.innerHTML=''; host.appendChild(overlay);
     overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
     var body=overlay.querySelector('.sheet-body');
@@ -1640,35 +1640,36 @@
 
     // Step 1 (signed out, or no trips on the account): find the stay by name.
     function drawFind(msg){
-      body.innerHTML='<p class="gb-intro">Welcome! Fill this in before you arrive so we can get everything ready for you: your contact details, any extras, and anything we should know.</p>'+
-        '<div class="frm"><div class="two"><input id="gbFirst" placeholder="First name" autocomplete="given-name" value="'+esc(S.who.firstName)+'"><input id="gbSur" placeholder="Surname" autocomplete="family-name" value="'+esc(S.who.surname)+'"></div></div>'+
-        '<p class="note small">Use the name your stay is booked under.</p>'+
+      body.innerHTML='<p class="gb-intro">Hi! Please fill in these details before you arrive so that we can get everything ready for you.</p>'+
+        '<div class="frm"><div class="two"><input id="gbFirst" placeholder="First name" autocomplete="given-name" value="'+esc(S.who.firstName)+'"><input id="gbSur" placeholder="Surname" autocomplete="family-name" value="'+esc(S.who.surname)+'"></div>'+
+        '<input id="gbCode" placeholder="Booking code (if we can’t find your name), e.g. HM23XFDBYQ" autocapitalize="characters" value="'+esc(S.code||'')+'"></div>'+
         (msg||'')+'<div id="gbList"></div>'+
         '<button class="cta-btn" id="gbFind">Find my stay</button>'+
         (GTOKEN?'':'<div class="auth-toggle" style="margin-top:10px">Already have a SimonStays account? <a id="gbSignin">Sign in</a></div>');
       var go=function(){ findStays(); };
       body.querySelector('#gbFind').onclick=go;
-      body.querySelector('#gbSur').onkeydown=function(e){ if(e.key==='Enter') go(); };
+      body.querySelector('#gbSur').onkeydown=body.querySelector('#gbCode').onkeydown=function(e){ if(e.key==='Enter') go(); };
       var si=body.querySelector('#gbSignin'); if(si) si.onclick=function(){ AFTER_AUTH=function(){ openGuestbook(preId); }; openAuth('login'); };
     }
 
     async function findStays(){
       S.who.firstName=body.querySelector('#gbFirst').value.trim(); S.who.surname=body.querySelector('#gbSur').value.trim();
-      if(S.who.firstName.length<2){ drawFind(err('Please enter your first name.')); return; }
+      S.code=body.querySelector('#gbCode').value.trim();
+      if(!S.code&&S.who.firstName.length<2){ drawFind(err('Please enter your first name, or your booking code.')); return; }
       var btn=body.querySelector('#gbFind'); btn.disabled=true; btn.textContent='Searching…';
       try{
-        var r=await fetch(API+'/public/guestbook/find',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({firstName:S.who.firstName,surname:S.who.surname})});
+        var r=await fetch(API+'/public/guestbook/find',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify(S.code?{code:S.code}:{firstName:S.who.firstName,surname:S.who.surname})});
         var d=await r.json();
         if(!r.ok){ drawFind(err(esc(d.message||'Something went wrong. Please try again.'))); return; }
         S.stays=d.stays||[]; S.mine=false; S.sel=S.stays.length===1?S.stays[0]:null;
-        if(!S.stays.length){ drawFind(err('We couldn’t find an upcoming stay under that name. Check the spelling matches your booking, or message your host.')); return; }
+        if(!S.stays.length){ drawFind(err(S.code?'We couldn’t find an upcoming stay with that booking code. Please check it and try again.':'We couldn’t find an upcoming stay under that name. Try your booking code instead.')); return; }
         drawPick();
       }catch(e){ drawFind(err('Could not search right now. Please try again.')); }
     }
 
     // Step 2: pick the stay (one or more under the same name).
     function drawPick(){
-      body.innerHTML='<p class="gb-intro">'+(S.mine?'Which stay is this for?':(S.stays.length===1?'Is this your stay?':'We found '+S.stays.length+' stays under that name. Which is yours?'))+'</p>'+
+      body.innerHTML='<p class="gb-intro">'+(S.mine?'Which stay is this for?':(S.stays.length===1?'Is this your stay?':'We found '+S.stays.length+' stays. Which is yours?'))+'</p>'+
         '<div class="gb-stays">'+S.stays.map(stayCard).join('')+'</div>'+
         '<button class="cta-btn" id="gbNext"'+(S.sel?'':' disabled')+'>Continue</button>'+
         '<div class="auth-toggle" style="margin-top:10px"><a id="gbBack">'+(S.mine?'Booked under another name? Search by name':'← Not mine, search again')+'</a></div>';
@@ -1722,7 +1723,7 @@
         var btn=body.querySelector('#gbSave'); btn.disabled=true; btn.textContent='Saving…';
         try{
           var r=await fetch(API+'/public/guestbook/'+encodeURIComponent(s.id),{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
-            body:JSON.stringify(Object.assign({},S.who,{password:password||undefined,extras:S.picked,notes:S.notes,agreeCharges:!!(agree&&agree.checked)}))});
+            body:JSON.stringify(Object.assign({},S.who,{code:S.code||undefined,password:password||undefined,extras:S.picked,notes:S.notes,agreeCharges:!!(agree&&agree.checked)}))});
           var d=await r.json();
           if(r.status===409&&d.error==='email_taken'){ drawForm(err(esc(d.message)+' <a id="gbLogin">Sign in</a>')); var l=body.querySelector('#gbLogin'); if(l) l.onclick=function(){ AFTER_AUTH=function(){ openGuestbook(s.id); }; openAuth('login', S.who.email); }; return; }
           if(!r.ok){ drawForm(err(esc(d.message||'Could not save. Please try again.'))); return; }

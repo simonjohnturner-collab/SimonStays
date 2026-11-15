@@ -4,8 +4,9 @@
 // link in an Airbnb message that's the same for everyone, so the booking is
 // found by name rather than a personal link.
 //
-// Safety: anyone can type a name, so the search only ever shows dates (never
-// the property or address), and a booking is only linked to the guest's
+// Guests can also search by their booking code (Airbnb's HM… code or our ref).
+// Results show the dates, building and unit, as the host wants guests to
+// recognise their stay at a glance. A booking is only linked to the guest's
 // account (which shows the door code) when the phone they give matches the
 // last 4 digits Airbnb sent us. Otherwise the details are saved and the host
 // links the account by hand.
@@ -81,11 +82,11 @@ function stayOut(b, mine = false) {
     channel: b.source === 'airbnb' ? 'airbnb' : 'simonstays',
     extras: extrasOf(b),
     done: !!b.guestbookAt,
+    place: b.unit ? `${b.unit.property.name} · Unit ${b.unit.name}` : null,
   };
-  // Their own trip (signed in): the place and what's already on file.
+  // Their own trip (signed in): what's already on file.
   if (mine) {
     Object.assign(out, {
-      place: b.unit ? `${b.unit.property.name} · Unit ${b.unit.name}` : null,
       current: { earlyCheckIn: b.earlyCheckIn, lateCheckOut: b.lateCheckOut, extraMattress: b.extraMattress, hairDryer: b.hairDryer, notes: b.guestNotes || '' },
     });
   }
@@ -95,13 +96,27 @@ function stayOut(b, mine = false) {
 // A booking already linked to someone else's account is theirs to edit.
 const lockedTo = (b, acct) => !!(b.guestbookAt && b.guestAccountId && (!acct || acct.id !== b.guestAccountId));
 
-// POST /public/guestbook/find { firstName, surname } → the matching stays (dates only).
+// A booking code typed by the guest: Airbnb's confirmation code or our ref.
+const cleanCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20);
+const codeMatches = (b, code) => !!code && code.length >= 5 && [b.resCode, b.ref].some((c) => c && String(c).toUpperCase() === code);
+
+// POST /public/guestbook/find { firstName, surname } or { code } → the matching stays.
 router.post('/find', async (req, res, next) => {
   try {
     if (overLimit(`find:${req.ip}`, 20)) return tooMany(res);
     const firstName = clean((req.body || {}).firstName, 60);
     const surname = clean((req.body || {}).surname, 60);
-    if (norm(firstName).length < 2) return res.status(400).json({ error: 'name_required', message: 'Please enter your first name.' });
+    const code = cleanCode((req.body || {}).code);
+    if (code) {
+      if (code.length < 5) return res.status(400).json({ error: 'code_invalid', message: 'Please check your booking code.' });
+      const rows = await prisma.booking.findMany({
+        where: { ...openWhere(), OR: [{ resCode: { equals: code, mode: 'insensitive' } }, { ref: { equals: code, mode: 'insensitive' } }] },
+        include: BOOKING_INCLUDE, take: MAX_RESULTS,
+      });
+      const acct = req.guestId ? { id: req.guestId } : null;
+      return res.json({ stays: rows.filter((b) => !lockedTo(b, acct)).map((b) => stayOut(b)) });
+    }
+    if (norm(firstName).length < 2) return res.status(400).json({ error: 'name_required', message: 'Please enter your first name, or your booking code.' });
     const first = norm(firstName).split(' ')[0];
     // Narrow in the database by the first name's start, then match properly here.
     const rows = await prisma.booking.findMany({
@@ -147,7 +162,7 @@ router.post('/:id', async (req, res, next) => {
     // The account: the signed-in one, or a new one made from this form.
     let acct = req.guestId ? await prisma.guestAccount.findUnique({ where: { id: req.guestId } }) : null;
     const ownTrip = !!(acct && (b.guestAccountId === acct.id || (acct.emailVerifiedAt && String(b.guestEmail || '').toLowerCase() === acct.email)));
-    if (!ownTrip && !nameMatches(b, firstName, surname)) return res.status(403).json({ error: 'name_mismatch', message: 'That name doesn’t match the booking. Please use the name the stay was booked under.' });
+    if (!ownTrip && !codeMatches(b, cleanCode(body.code)) && !nameMatches(b, firstName, surname)) return res.status(403).json({ error: 'name_mismatch', message: 'That name doesn’t match the booking. Please use the name the stay was booked under.' });
     if (lockedTo(b, acct)) return res.status(409).json({ error: 'already_done', message: 'This stay’s guestbook is already filled in. Sign in with the account that did it to change it.' });
 
     let token = null;
