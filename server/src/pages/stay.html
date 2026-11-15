@@ -128,6 +128,9 @@
   .gb-bill-note{ padding:8px 14px 10px; font-size:12px; color:var(--muted); background:#f3faf5; }
   .gb-sum-notes{ margin-top:12px; padding:10px 12px; border-radius:10px; background:#f7f8fa; font-size:14px; white-space:pre-wrap; }
   .gb-sum-notes b{ display:block; font-size:12px; color:var(--muted); margin-bottom:2px; }
+  .gb-pay .pay-opt span{ display:flex; flex-direction:column; }
+  .gb-pay .pay-opt small{ color:var(--muted); font-size:12px; }
+  .gb-pay .pay-opt.on{ border-color:var(--green); background:#f3faf5; }
   .gb-agree{ background:#fffaf0; border:1px solid #f3dfb3; border-radius:10px; padding:10px 12px; }
   .trip-gb{ background:#eef6f0; color:var(--green-d); border:1px solid #cfe6d6; margin-top:8px; margin-right:6px; }
   .trip-gb:hover{ background:#e2f0e6; }
@@ -1659,6 +1662,19 @@
     var S={ stays:[], sel:null, mine:false, who:{ firstName:'', surname:'', email:'', phone:'' } };
 
     function err(m){ return '<div class="msg err">'+m+'</div>'; }
+    var PAY_OPTS={
+      airbnb:{ title:'Payment request through Airbnb', sub:'We’ll send it to you in the Airbnb app.' },
+      card:{ title:'Card', sub:'Pay now on Paygate’s secure page.' },
+      eft:{ title:'EFT (bank transfer)', sub:'We’ll show our bank details when you save.' },
+    };
+    // Bank details and the reference, for paying extras by EFT.
+    function eftBox(d){
+      var e=d.eft;
+      return '<div class="eft-box" style="text-align:left"><b>Please pay '+rand(d.chargeCents)+' by EFT</b><br>'+
+        (e?((e.accountName?'Account name: <b>'+esc(e.accountName)+'</b><br>':'')+(e.bankName?'Bank: <b>'+esc(e.bankName)+'</b><br>':'')+(e.accountNumber?'Account number: <b>'+esc(e.accountNumber)+'</b><br>':'')+(e.branch?'Branch code: <b>'+esc(e.branch)+'</b><br>':'')):'Your host will send you their bank details.<br>')+
+        'Reference: <b>'+esc(d.reference||'')+'</b></div>'+
+        '<p class="note small">Once you’ve paid, please send your proof of payment to us in Messages.</p>';
+    }
     function stayCard(s){
       return '<label class="gb-stay'+(S.sel&&S.sel.id===s.id?' on':'')+'"><input type="radio" name="gbStay" value="'+esc(s.id)+'"'+(S.sel&&S.sel.id===s.id?' checked':'')+'>'+
         '<span><b>'+esc(s.label)+'</b><small>'+(s.place?esc(s.place)+' · ':'')+s.nights+' night'+(s.nights===1?'':'s')+(s.done?' · already filled in':'')+'</small></span></label>';
@@ -1709,6 +1725,9 @@
     // switching. Summary lists every charge and holds the Save button.
     function drawForm(msg, tab){
       var s=S.sel, cur=(S.mine&&s.current)||{}, airbnb=s.channel==='airbnb', ic=s.instayClean;
+      var have=cur.have||{}, paidCleans=cur.paidCleans||[];
+      var methods=s.payMethods||['eft'];
+      if(methods.indexOf(S.payMethod)<0) S.payMethod=methods.length===1?methods[0]:null;
       S.tab=tab||S.tab||'details';
       var ex=s.extras.map(function(x){
         var on=S.picked?!!S.picked[x.key]:!!cur[x.key];
@@ -1758,8 +1777,8 @@
       // The charge lines: new paid extras, then each clean by date.
       function lines(){
         var p=picked(), out=[];
-        s.extras.forEach(function(x){ if(!p[x.key]) return; out.push({ label:x.label, cents:cur[x.key]?0:x.cents, note:cur[x.key]?'Already booked':(!x.cents?(x.key==='hairDryer'?'Free':'Price confirmed by your host'):'') }); });
-        cleanDates().forEach(function(d){ out.push({ label:'Mid-stay clean · '+new Date(d+'T12:00:00Z').toLocaleDateString('en-ZA',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}), cents:ic.cents, note:ic.cents?'':'Price confirmed by your host' }); });
+        s.extras.forEach(function(x){ if(!p[x.key]) return; out.push({ label:x.label, cents:have[x.key]?0:x.cents, note:have[x.key]?'Already booked':(!x.cents?(x.key==='hairDryer'?'Free':'Price confirmed by your host'):'') }); });
+        cleanDates().forEach(function(d){ var paid=paidCleans.indexOf(d)>=0; out.push({ label:'Mid-stay clean · '+new Date(d+'T12:00:00Z').toLocaleDateString('en-ZA',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}), cents:paid?0:ic.cents, note:paid?'Already paid':(ic.cents?'':'Price confirmed by your host') }); });
         return out;
       }
       function total(){ return lines().reduce(function(n,l){ return n+(l.cents||0); },0); }
@@ -1772,11 +1791,14 @@
             '<div class="gb-bill-head">Charges</div>'+
             (ls.length?ls.map(function(l){ return '<div class="gb-bill-row"><span>'+esc(l.label)+(l.note?'<small>'+esc(l.note)+'</small>':'')+'</span><b>'+(l.cents?rand(l.cents):'—')+'</b></div>'; }).join(''):'<div class="gb-bill-row muted"><span>No extras or cleans</span><b>—</b></div>')+
             '<div class="gb-bill-row gb-bill-tot"><span>Total to pay</span><b>'+rand(t)+'</b></div>'+
-            (t>0?'<div class="gb-bill-note">Paid separately. We’ll send you a payment request'+(airbnb?' through Airbnb':'')+'.</div>':'')+
+            (t>0?'<div class="gb-bill-note">Paid separately from your stay.</div>':'')+
           '</div>'+
           (S.notes&&S.notes.trim()?'<div class="gb-sum-notes"><b>Special instructions</b>'+esc(S.notes.trim())+'</div>':'')+
-          (t>0?'<label class="tnc gb-agree"><input type="checkbox" id="gbAgree"'+(S.agree?' checked':'')+'> <span>I’m happy to pay <b>'+rand(t)+'</b>. Please send me a payment request'+(airbnb?' through Airbnb':'')+'.</span></label>':'');
+          (t>0?('<h3 class="sec">How would you like to pay?</h3><div class="pay-opts gb-pay">'+methods.map(function(m){ var o=PAY_OPTS[m]; return '<label class="pay-opt'+(S.payMethod===m?' on':'')+'"><input type="radio" name="gbPay" value="'+m+'"'+(S.payMethod===m?' checked':'')+'><span><b>'+o.title+'</b><small>'+o.sub+'</small></span></label>'; }).join('')+'</div>'+
+            '<label class="tnc gb-agree"><input type="checkbox" id="gbAgree"'+(S.agree?' checked':'')+'> <span>I’m happy to pay <b>'+rand(t)+'</b> for these extras.</span></label>'):'');
         var a=box.querySelector('#gbAgree'); if(a) a.onchange=function(){ S.agree=a.checked; };
+        box.querySelectorAll('input[name=gbPay]').forEach(function(r){ r.onchange=function(){ S.payMethod=r.value; drawSummary(); }; });
+        var sv=body.querySelector('#gbSave'); if(sv) sv.textContent=t>0&&S.payMethod==='card'?'Save and pay '+rand(t)+' by card':'Save my guestbook';
       }
       // Keep S in step with the inputs, so the summary and a redraw show the latest.
       function capture(){
@@ -1803,15 +1825,18 @@
         var password=GTOKEN?'':(S.pw||'');
         if(!GTOKEN&&password.length<8){ drawForm(err('Please choose a password of at least 8 characters.'),'details'); return; }
         if(S.cleans.some(function(d){ return !d; })){ drawForm(err('Please pick a date for each clean, or remove the empty one.'),'extras'); return; }
+        if(charge>0&&!S.payMethod){ drawForm(err('Please choose how you’d like to pay.'),'summary'); return; }
         if(charge>0&&!(agree&&agree.checked)){ drawForm(err('Please tick to confirm you’re happy to pay, or remove the extras you don’t want.'),'summary'); return; }
         var btn=body.querySelector('#gbSave'); btn.disabled=true; btn.textContent='Saving…';
         try{
           var r=await fetch(API+'/public/guestbook/'+encodeURIComponent(s.id),{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
-            body:JSON.stringify(Object.assign({},S.who,{code:S.code||undefined,password:password||undefined,extras:S.picked,cleans:cleanDates(),notes:S.notes,agreeCharges:!!(agree&&agree.checked)}))});
+            body:JSON.stringify(Object.assign({},S.who,{code:S.code||undefined,password:password||undefined,extras:S.picked,cleans:cleanDates(),notes:S.notes,agreeCharges:!!(agree&&agree.checked),payMethod:charge>0?S.payMethod:undefined}))});
           var d=await r.json();
           if(r.status===409&&d.error==='email_taken'){ drawForm(err(esc(d.message)+' <a id="gbLogin">Sign in</a>'),'details'); var l=body.querySelector('#gbLogin'); if(l) l.onclick=function(){ AFTER_AUTH=function(){ openGuestbook(s.id); }; openAuth('login', S.who.email); }; return; }
           if(!r.ok){ drawForm(err(esc(d.message||'Could not save. Please try again.'))); return; }
           if(d.token) saveSession(d.token, d.account);
+          // Card: straight on to Paygate's secure page; it sends them back here.
+          if(d.payment&&d.payment.goUrl){ body.innerHTML='<div class="done"><div class="big">🔒</div><p class="note">Saved. Taking you to secure card payment…</p></div>'; location.href=d.payment.goUrl; return; }
           drawDone(d);
         }catch(e){ drawForm(err('Could not save right now. Please try again.')); }
       }
@@ -1820,11 +1845,30 @@
     function drawDone(d){
       body.innerHTML='<div class="done"><div class="big">✅</div><h3>Thank you, '+esc(S.who.firstName)+'!</h3>'+
         '<p class="note">Your details are saved and your host has been told.</p>'+
-        (d.chargeCents?'<p class="note">You’ll get a payment request for <b>'+rand(d.chargeCents)+'</b>'+(d.channel==='airbnb'?' through Airbnb':'')+' for your extras.</p>':'')+
+        (d.payError?'<div class="msg err">'+esc(d.payError)+'</div>':'')+
+        (d.chargeCents&&d.payMethod==='airbnb'?'<p class="note">We’ll send you a payment request for <b>'+rand(d.chargeCents)+'</b> through Airbnb.</p>':'')+
+        (d.chargeCents&&d.payMethod==='eft'?eftBox(d):'')+
         (d.token?'<p class="note">Your SimonStays account is ready. We’ve emailed you a link to confirm your address.</p>':'')+
         (d.verified?'<button class="cta-btn" id="gbTrips">See my trip</button>':'<p class="note">Your host will add this stay to your account shortly.</p>')+
         '</div>';
       var t=body.querySelector('#gbTrips'); if(t) t.onclick=openTrips;
+    }
+
+    // Back from Paygate after paying for extras by card.
+    var qs=new URLSearchParams(location.search), back=qs.get('extras');
+    if(back){
+      try{ history.replaceState(null,'','/guestbook'); }catch(e){}
+      var stayId=qs.get('stay');
+      if(back==='paid'){ body.innerHTML='<div class="done"><div class="big">✅</div><h3>Payment received</h3><p class="note">Thank you! Your extras are paid and your host has been told.</p>'+(GTOKEN?'<button class="cta-btn" id="gbTrips">See my trip</button>':'')+'</div>'; var tb=body.querySelector('#gbTrips'); if(tb) tb.onclick=openTrips; return; }
+      body.innerHTML='<div class="done"><div class="big">↩</div><h3>Payment not completed</h3><p class="note">Your guestbook is saved, but the card payment didn’t go through.</p><button class="cta-btn" id="gbRetry">Try the card payment again</button><p class="note small" style="margin-top:10px">Prefer EFT? Message us and we’ll send our bank details.</p></div>';
+      body.querySelector('#gbRetry').onclick=async function(){
+        var btn=this; btn.disabled=true; btn.textContent='Starting payment…';
+        try{ var r=await fetch(API+'/public/guestbook/'+encodeURIComponent(stayId)+'/pay',{method:'POST'}); var d=await r.json();
+          if(r.ok&&d.payment&&d.payment.goUrl){ location.href=d.payment.goUrl; return; }
+          btn.outerHTML='<div class="msg err">'+esc(d.message||'Could not start the payment. Please try again later.')+'</div>';
+        }catch(e){ btn.disabled=false; btn.textContent='Try the card payment again'; }
+      };
+      return;
     }
 
     // Signed in: start from their own upcoming stays.

@@ -555,6 +555,10 @@ model Booking {
   guestbookAt        DateTime? // when the guest last completed the guestbook
   guestbookVerified  Boolean @default(false) // the phone they gave matched the one Airbnb sent us
   guestbookAccountId String? // the account that filled it in, waiting for the host to link it when unverified
+  extrasCents        Int? // what the guest agreed to pay for guestbook extras and cleans
+  extrasItems        Json? // those charges as lines: [{key?, date?, label, cents}]
+  extrasPayMethod    String? // how they chose to pay: 'airbnb' | 'card' | 'eft'
+  extrasPaidAt       DateTime? // when the extras were paid (card: by Paygate; EFT/Airbnb: marked by the host)
   requestedCleans    Json? // mid-stay cleans the guest asked for in the guestbook: ["YYYY-MM-DD"]. Off the calendar until the host adds them (once paid)
   totalCents   Int?    // payable total captured at booking time (website bookings)
   guestAccountId String?

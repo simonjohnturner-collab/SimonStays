@@ -16,7 +16,9 @@ const prisma = require('../lib/prisma');
 const { Prisma } = require('@prisma/client');
 const { optionalGuest } = require('../middleware/auth');
 const { signGuest } = require('../lib/jwt');
-const { alertHost } = require('../utils/payments');
+const payments = require('../utils/payments');
+const { alertHost } = payments;
+const { eftFor } = require('../utils/eft');
 const { shownCheckOut } = require('../utils/ical');
 
 const router = express.Router();
@@ -95,12 +97,18 @@ function stayOut(b, mine = false) {
     extras: extrasOf(b),
     done: !!b.guestbookAt,
     instayClean: instayOf(b),
+    payMethods: payMethodsFor(b),
     place: b.unit ? `${b.unit.property.name} · Unit ${b.unit.name}` : null,
   };
   // Their own trip (signed in): what's already on file.
   if (mine) {
     Object.assign(out, {
-      current: { earlyCheckIn: b.earlyCheckIn, lateCheckOut: b.lateCheckOut, extraMattress: b.extraMattress, hairDryer: b.hairDryer, notes: b.guestNotes || '', cleans: requestedOf(b) },
+      current: {
+        earlyCheckIn: b.earlyCheckIn, lateCheckOut: b.lateCheckOut, extraMattress: b.extraMattress, hairDryer: b.hairDryer, notes: b.guestNotes || '', cleans: requestedOf(b),
+        // Already on the booking and not to be charged again (host-added or paid).
+        have: { earlyCheckIn: haveExtra(b, 'earlyCheckIn'), lateCheckOut: haveExtra(b, 'lateCheckOut'), extraMattress: haveExtra(b, 'extraMattress'), hairDryer: haveExtra(b, 'hairDryer') },
+        paidCleans: paidCleansOf(b),
+      },
     });
   }
   return out;
@@ -156,8 +164,26 @@ router.get('/mine', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// What's already on the booking, so it isn't charged again: extras the host
+// added or that were paid, not ones from an earlier guestbook still unpaid.
+function unpaidItems(b) { return !b.extrasPaidAt && Array.isArray(b.extrasItems) ? b.extrasItems : []; }
+function haveExtra(b, key) { return !!b[key] && !unpaidItems(b).some((l) => l.key === key); }
+// Requested cleans already paid for: any not in an unpaid request.
+function paidCleansOf(b) { const unpaid = new Set(unpaidItems(b).map((l) => l.date).filter(Boolean)); return requestedOf(b).filter((d) => !unpaid.has(d)); }
+
+// How a guest can pay for extras: Airbnb's own payment request (Airbnb
+// bookings only), card through Paygate (when it's switched on), or EFT.
+function payMethodsFor(b) {
+  return [...(b.source === 'airbnb' ? ['airbnb'] : []), ...(payments.isOnline() ? ['card'] : []), 'eft'];
+}
+const PAY_LABEL = { airbnb: 'payment request through Airbnb', card: 'card', eft: 'EFT' };
+const payRef = (b) => b.ref || b.resCode || b.id.slice(0, 8).toUpperCase();
+// PAYMENT_BASE_URL overrides it — Paygate refuses non-public addresses like localhost.
+const siteBase = (req) => (process.env.PAYMENT_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+
 // POST /public/guestbook/:id — save the guestbook for one stay.
-// { firstName, surname, email, phone, password?, extras: {earlyCheckIn,…}, notes, agreeCharges }
+// { firstName, surname, email, phone, password?, code?, extras: {earlyCheckIn,…},
+//   cleans: ['YYYY-MM-DD'], notes, agreeCharges, payMethod: 'airbnb'|'card'|'eft' }
 router.post('/:id', async (req, res, next) => {
   try {
     if (overLimit(`save:${req.ip}`, 15)) return tooMany(res);
@@ -172,12 +198,32 @@ router.post('/:id', async (req, res, next) => {
     const b = await prisma.booking.findFirst({ where: { id: String(req.params.id), ...openWhere() }, include: BOOKING_INCLUDE });
     if (!b) return res.status(404).json({ error: 'not_found', message: 'We couldn’t find that stay. It may have ended or been cancelled.' });
 
-    // The account: the signed-in one, or a new one made from this form.
     let acct = req.guestId ? await prisma.guestAccount.findUnique({ where: { id: req.guestId } }) : null;
     const ownTrip = !!(acct && (b.guestAccountId === acct.id || (acct.emailVerifiedAt && String(b.guestEmail || '').toLowerCase() === acct.email)));
     if (!ownTrip && !codeMatches(b, cleanCode(body.code)) && !nameMatches(b, firstName, surname)) return res.status(403).json({ error: 'name_mismatch', message: 'That name doesn’t match the booking. Please use the name the stay was booked under.' });
     if (lockedTo(b, acct)) return res.status(409).json({ error: 'already_done', message: 'This stay’s guestbook is already filled in. Sign in with the account that did it to change it.' });
 
+    // Extras and cleans, and what they cost: only what isn't already on the booking.
+    const want = body.extras || {};
+    const picked = extrasOf(b).filter((x) => want[x.key]);
+    const offer = instayOf(b);
+    const paidCleans = new Set(paidCleansOf(b));
+    const booked = new Set((await prisma.clean.findMany({ where: { bookingId: b.id }, select: { date: true } })).filter((c) => c.date).map((c) => iso(c.date)));
+    const cleans = offer ? [...new Set((Array.isArray(body.cleans) ? body.cleans : []).map(String))]
+      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= offer.from && d <= offer.to && !booked.has(d)).sort().slice(0, 60) : [];
+    const items = [
+      ...picked.filter((x) => !haveExtra(b, x.key) && x.cents > 0).map((x) => ({ key: x.key, label: x.label, cents: x.cents })),
+      ...(offer && offer.cents ? cleans.filter((d) => !paidCleans.has(d)).map((d) => ({ date: d, label: `Mid-stay clean · ${fmtDay(`${d}T12:00:00Z`)}`, cents: offer.cents })) : []),
+    ];
+    const charge = items.reduce((n, l) => n + l.cents, 0);
+    const chargedCleans = items.filter((l) => l.date).length;
+    const payMethod = String(body.payMethod || '');
+    if (charge > 0) {
+      if (!body.agreeCharges) return res.status(400).json({ error: 'agree_charges', message: 'Please confirm you’re happy to pay for the extras.' });
+      if (!payMethodsFor(b).includes(payMethod)) return res.status(400).json({ error: 'pay_method', message: 'Please choose how you’d like to pay.' });
+    }
+
+    // The account: the signed-in one, or a new one made from this form.
     let token = null;
     if (!acct) {
       const password = String(body.password || '');
@@ -199,19 +245,8 @@ router.post('/:id', async (req, res, next) => {
       || (digits(b.guestPhone).length >= 9 && typed.slice(-9) === digits(b.guestPhone).slice(-9)));
     const verified = ownTrip || phoneOk;
 
-    // Extras: what they ask for now, keeping anything the host already added.
-    const want = body.extras || {};
-    const extras = extrasOf(b);
-    const picked = extras.filter((x) => want[x.key]);
-    // Mid-stay cleans: distinct days within the stay, not already booked as cleans.
-    const offer = instayOf(b);
-    const booked = new Set((await prisma.clean.findMany({ where: { bookingId: b.id }, select: { date: true } })).filter((c) => c.date).map((c) => iso(c.date)));
-    const cleans = offer ? [...new Set((Array.isArray(body.cleans) ? body.cleans : []).map(String))]
-      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= offer.from && d <= offer.to && !booked.has(d)).sort().slice(0, 60) : [];
-    const cleansCents = cleans.length * (offer ? offer.cents : 0);
-    const charge = picked.filter((x) => !b[x.key]).reduce((n, x) => n + x.cents, 0) + cleansCents; // only new paid ones
-    if (charge > 0 && !body.agreeCharges) return res.status(400).json({ error: 'agree_charges', message: 'Please confirm you’re happy to pay for the extras.' });
-
+    // Extras the guest unticked come off, unless the host added them or they're paid.
+    const flag = (key) => haveExtra(b, key) || !!want[key];
     await prisma.booking.update({
       where: { id: b.id },
       data: {
@@ -220,10 +255,10 @@ router.post('/:id', async (req, res, next) => {
         guestPhone: phone,
         guestNotes: notes,
         requestedCleans: cleans.length ? cleans : Prisma.DbNull,
-        earlyCheckIn: b.earlyCheckIn || !!want.earlyCheckIn,
-        lateCheckOut: b.lateCheckOut || !!want.lateCheckOut,
-        extraMattress: b.extraMattress || !!want.extraMattress,
-        hairDryer: b.hairDryer || !!want.hairDryer,
+        earlyCheckIn: flag('earlyCheckIn'), lateCheckOut: flag('lateCheckOut'), extraMattress: flag('extraMattress'), hairDryer: flag('hairDryer'),
+        // A new request replaces an earlier unpaid one; one already paid stays paid.
+        ...(charge > 0 ? { extrasCents: charge, extrasItems: items, extrasPayMethod: payMethod, extrasPaidAt: null }
+          : !b.extrasPaidAt ? { extrasCents: null, extrasItems: Prisma.DbNull, extrasPayMethod: null } : {}),
         guestbookAt: new Date(),
         guestbookVerified: verified,
         guestbookAccountId: acct.id,
@@ -232,9 +267,20 @@ router.post('/:id', async (req, res, next) => {
     });
 
     // The host's contact book: update the guest if they're known, else add them.
-    const known = await prisma.guest.findFirst({ where: { hostId, OR: [{ email: { equals: email, mode: 'insensitive' } }, ...(digits(phone).length >= 9 ? [{ phone: { contains: digits(phone).slice(-9) } }] : [])] } });
+    const known = await prisma.guest.findFirst({ where: { hostId, OR: [{ email: { equals: email, mode: 'insensitive' } }, ...(typed.length >= 9 ? [{ phone: { contains: typed.slice(-9) } }] : [])] } });
     if (known) await prisma.guest.update({ where: { id: known.id }, data: { name: `${firstName} ${surname}`, email, phone } });
     else await prisma.guest.create({ data: { hostId, name: `${firstName} ${surname}`, email, phone } });
+
+    // Paying: start the card payment, or hand over the bank details.
+    let payment = null, eft = null, payError = null;
+    if (charge > 0 && payMethod === 'card') {
+      try {
+        const c = await payments.createCheckout(b, charge, { base: siteBase(req), kind: 'extras' });
+        payment = c.mode === 'form' ? { goUrl: c.goUrl } : null;
+        if (!payment) payError = 'Card payment isn’t available right now. Please pay by EFT instead.';
+      } catch (e) { console.error('[guestbook] card checkout failed', e.message); payError = 'We couldn’t start the card payment. Please try again, or pay by EFT.'; }
+    }
+    if (charge > 0 && payMethod === 'eft') eft = await eftFor(hostId);
 
     // Tell the host, in the booking's conversation and by WhatsApp.
     const airbnb = b.source === 'airbnb';
@@ -244,20 +290,39 @@ router.post('/:id', async (req, res, next) => {
       `Phone: ${phone}`,
       `Email: ${email}`,
       picked.length ? `Extras: ${picked.map((x) => `${x.label}${x.cents ? ` (${fmtR(x.cents)})` : ''}`).join(', ')}` : 'Extras: none',
-      cleans.length ? `Mid-stay cleans: ${cleans.map((d) => fmtDay(`${d}T12:00:00Z`)).join(', ')}${offer.cents ? ` (${fmtR(offer.cents)} each, ${fmtR(cleansCents)})` : ''}` : null,
-      charge > 0 ? `I agree to pay ${fmtR(charge)} for the new extras. Please send me a payment request${airbnb ? ' through Airbnb' : ''}.` : null,
+      cleans.length ? `Mid-stay cleans: ${cleans.map((d) => fmtDay(`${d}T12:00:00Z`)).join(', ')}${offer.cents ? ` (${fmtR(offer.cents)} each)` : ''}` : null,
+      charge > 0 ? `To pay: ${fmtR(charge)}, by ${PAY_LABEL[payMethod]}${payMethod === 'eft' ? ` (reference ${payRef(b)})` : ''}.` : null,
       notes ? `Special instructions: ${notes}` : null,
     ].filter(Boolean);
     await prisma.message.create({ data: { hostId, bookingId: b.id, sender: 'guest', authorId: acct.id, authorName: `${firstName} ${surname}`, body: lines.join('\n') } });
     const place = `${b.unit.property.name} · ${b.unit.name}`;
+    const todo = { airbnb: 'send a payment request in Airbnb', card: 'paying by card now (you’ll get another alert when it’s through)', eft: `paying by EFT, reference ${payRef(b)}: mark it paid on the booking when it arrives` };
     alertHost(b, [
       `📒 Guestbook: ${firstName} ${surname} (${airbnb ? 'Airbnb' : 'SimonStays'}), ${place}, ${fmtDay(b.checkIn)} → ${fmtDay(shownCheckOut(b))}`,
-      charge > 0 ? `💰 Agreed to ${fmtR(charge)} for extras${cleans.length ? ` (incl. ${cleans.length} mid-stay clean${cleans.length > 1 ? 's' : ''})` : ''}: send a payment request${airbnb ? ' in Airbnb' : ''}.` : null,
+      charge > 0 ? `💰 ${fmtR(charge)} for extras${chargedCleans ? ` (incl. ${chargedCleans} mid-stay clean${chargedCleans > 1 ? 's' : ''})` : ''}: ${todo[payMethod]}.` : null,
       notes ? `📝 ${notes.slice(0, 300)}` : null,
       verified ? null : '⚠️ Not verified (phone didn’t match Airbnb’s). Link their account from the booking once you’re sure it’s them.',
     ].filter(Boolean).join('\n'));
 
-    res.json({ ok: true, verified, chargeCents: charge, channel: airbnb ? 'airbnb' : 'simonstays', token, account: token ? { id: acct.id, email: acct.email, name: acct.name, phone: acct.phone, emailVerified: false } : undefined });
+    res.json({
+      ok: true, verified, chargeCents: charge, payMethod: charge > 0 ? payMethod : null, channel: airbnb ? 'airbnb' : 'simonstays',
+      payment, payError, eft, reference: charge > 0 ? payRef(b) : null,
+      token, account: token ? { id: acct.id, email: acct.email, name: acct.name, phone: acct.phone, emailVerified: false } : undefined,
+    });
+  } catch (e) { next(e); }
+});
+
+// POST /public/guestbook/:id/pay — try the card payment again for extras still
+// unpaid (after a cancelled or failed Paygate payment). The amount is the one
+// saved with the guestbook, never from the browser.
+router.post('/:id/pay', async (req, res, next) => {
+  try {
+    if (overLimit(`pay:${req.ip}`, 10)) return tooMany(res);
+    const b = await prisma.booking.findUnique({ where: { id: String(req.params.id) }, include: BOOKING_INCLUDE });
+    if (!b || !(b.extrasCents > 0) || b.extrasPaidAt) return res.status(400).json({ error: 'nothing_owing', message: 'There’s nothing left to pay for these extras.' });
+    if (!payments.isOnline()) return res.status(400).json({ error: 'offline', message: 'Card payment isn’t available right now. Please pay by EFT instead.' });
+    const c = await payments.createCheckout(b, b.extrasCents, { base: siteBase(req), kind: 'extras' });
+    res.json({ payment: c.mode === 'form' ? { goUrl: c.goUrl } : null, amountCents: b.extrasCents });
   } catch (e) { next(e); }
 });
 

@@ -84,6 +84,7 @@ function sendInvoice(bookingId, details) {
 // Money has been received for `payment` — update the booking.
 async function applyPaid(payment, txId) {
   if (payment.kind === 'change') return require('./changes').applyPaidChange(payment, txId);
+  if (payment.kind === 'extras') return applyPaidExtras(payment, txId);
   const { checkAvailability } = require('./sync');
   const { onBookingConfirmed } = require('./bookingConfirmed');
   let booking = await prisma.booking.findUnique({ where: { id: payment.bookingId }, include: { unit: { include: { property: true } } } });
@@ -144,6 +145,23 @@ async function applyPaid(payment, txId) {
   }
   await sendInvoice(booking.id, { method: 'card', receivedCents: payment.amountCents, offer });
   return { ok: true, outcome: 'confirmed' };
+}
+
+// Guestbook extras paid by card. Kept apart from the stay's own money (an Airbnb
+// stay is paid on Airbnb), so only the extras are marked paid. The guest's
+// requested cleans stay off the calendar until the host adds them.
+async function applyPaidExtras(payment, txId) {
+  const booking = await prisma.booking.findUnique({ where: { id: payment.bookingId }, include: { unit: { include: { property: true } } } });
+  if (!booking) return { ok: true, outcome: 'booking_gone' };
+  await prisma.booking.update({ where: { id: booking.id }, data: { extrasPaidAt: new Date(), extrasPayMethod: 'card' } });
+  const rand = `R${(payment.amountCents / 100).toFixed(2)}`;
+  const hostId = booking.hostId || booking.unit?.property?.hostId;
+  if (hostId) await prisma.message.create({ data: { hostId, bookingId: booking.id, sender: 'host', bookerOnly: true, body: `✅ Thank you! We've received your card payment of ${rand} for your extras.` } }).catch(() => {});
+  const cleans = Array.isArray(booking.requestedCleans) ? booking.requestedCleans.length : 0;
+  alertHost(booking, `💳 Extras paid — ${placeOf(booking)}
+👤 ${booking.guestName || 'Guest'}
+${rand} received via Paygate${txId ? ` (transaction ${txId})` : ''}.${cleans ? ` Add the ${cleans} mid-stay clean${cleans > 1 ? 's' : ''} to the calendar from the booking.` : ''}`);
+  return { ok: true, outcome: 'extras_paid' };
 }
 
 // The host has seen an EFT reach their account: confirm the booking. Mirrors what a

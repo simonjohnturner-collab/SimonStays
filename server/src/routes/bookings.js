@@ -197,6 +197,15 @@ router.post('/bookings/:id/guestbook-link', async (req, res) => {
   res.json({ booking: updated });
 });
 
+// POST /bookings/:id/extras-paid — the host has received the guestbook extras
+// (an EFT, or paid through Airbnb). Card payments are marked by Paygate.
+router.post('/bookings/:id/extras-paid', async (req, res) => {
+  const booking = await loadOwned(req, res); if (!booking) return;
+  if (!(booking.extrasCents > 0)) return res.status(400).json({ error: 'no_extras', message: 'There are no guestbook extras to pay on this booking.' });
+  const updated = await prisma.booking.update({ where: { id: booking.id }, data: { extrasPaidAt: booking.extrasPaidAt ? null : new Date() } });
+  res.json({ booking: updated });
+});
+
 // PATCH /bookings/:id — edit any field the host owns (guest, paid, cleaner, dates, status…).
 router.patch('/bookings/:id', async (req, res) => {
   const booking = await loadOwned(req, res); if (!booking) return;

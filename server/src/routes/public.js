@@ -18,17 +18,7 @@ const { offerState, staysOf, firstClash, splitOf, saveExtraStays } = require('..
 const { nextRef } = require('../utils/bookingRef');
 const { addProof } = require('../utils/attachments');
 
-// The host's bank details for an EFT. Only given to a guest who has chosen EFT on
-// a booking, never on the public listings.
-async function eftFor(hostId) {
-  const h = await prisma.host.findUnique({ where: { id: hostId }, select: { name: true } });
-  const biller = await prisma.billerProfile.findUnique({ where: { hostId }, select: { companyName: true, bankName: true, accountNumber: true, branch: true } });
-  if (!biller || !(biller.bankName || biller.accountNumber)) return null;
-  return {
-    accountName: biller.companyName || (h && h.name) || null,
-    bankName: biller.bankName || null, accountNumber: biller.accountNumber || null, branch: biller.branch || null,
-  };
-}
+const { eftFor } = require('../utils/eft');
 
 // Build + send the guest's invoice email. Non-blocking; swallows its own errors.
 async function emailInvoice(data) {

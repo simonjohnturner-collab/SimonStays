@@ -55,6 +55,8 @@ router.all('/return/:paymentId', async (req, res) => {
     const offer = await prisma.priceOffer.findUnique({ where: { id: payment.offerId } }).catch(() => null);
     if (offer) return res.redirect(303, `/invoice/${offer.token}?${failed ? 'payment=cancelled' : 'paid=1'}`);
   }
+  // Guestbook extras go back to the guestbook.
+  if (payment.kind === 'extras') return res.redirect(303, `/guestbook?extras=${failed ? 'cancelled' : 'paid'}&stay=${payment.bookingId}`);
   const balance = payment.kind === 'balance' ? '&balance=1' : '';
   if (payment.returnTo) {
     // Back into the app (its in-app browser closes when it sees this link).

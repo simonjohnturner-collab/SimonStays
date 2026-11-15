@@ -38,6 +38,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   const addonCount = [earlyCheckIn, lateCheckOut, extraMattress, hairDryer].filter(Boolean).length;
   const [tab, setTab] = useState('guest');
   const [gbLinked, setGbLinked] = useState(!!booking?.guestbookVerified);
+  const [extrasPaidAt, setExtrasPaidAt] = useState(booking?.extrasPaidAt || null);
 
   const [cleans, setCleans] = useState(
     (booking?.cleans || []).map((c) => ({ date: c.date?.slice(0, 10) || '', paymentMethod: c.paymentMethod || 'prepaid', cleaner: c.cleaner || '' }))
@@ -178,6 +179,13 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
     catch (e) { setMsg({ text: e.message, kind: 'err' }); } finally { setBusy(false); }
   }
 
+  // Guestbook extras paid by EFT or through Airbnb: the host marks them (card is automatic).
+  async function toggleExtrasPaid() {
+    setBusy(true); setMsg(null);
+    try { const r = await api.toggleExtrasPaid(booking.id); setExtrasPaidAt(r.booking.extrasPaidAt); }
+    catch (e) { setMsg({ text: e.message, kind: 'err' }); } finally { setBusy(false); }
+  }
+
   // The guest's WhatsApp confirmation, sent by hand: preview first, then send.
   const [waPreview, setWaPreview] = useState(null); // { preview, to } | { result } | { error }
   const waCall = async (method) => {
@@ -229,6 +237,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
           {editing && booking.status === 'pending' && <span className="bm-pill owe">Awaiting payment</span>}
           <span className={`bm-pill ${payPill.cls}`}>{payPill.text}</span>
           {nights > 0 && <span className="bm-pill">{nights} night{nights > 1 ? 's' : ''}</span>}
+          {editing && booking.extrasCents > 0 && <span className={`bm-pill ${extrasPaidAt ? 'ok' : 'warn'}`}>Extras {fmtR(booking.extrasCents)}{extrasPaidAt ? ' paid' : ' due'}</span>}
           {editing && booking.guestbookAt && <span className={`bm-pill ${gbLinked ? 'ok' : 'warn'}`} title={gbLinked ? 'The guest filled in the guestbook' : 'Filled in, but the phone didn’t match Airbnb’s. Check it’s them, then link it on the Guest tab.'}>📒 Guestbook{gbLinked ? ' ✓' : ' · check'}</span>}
           {guestRating !== undefined && <GuestRatingChip rating={guestRating} />}
         </div>
@@ -343,6 +352,23 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
             )}
             {paymentStatus === 'unpaid' && outstandingCents != null && <p className="pay-out">Outstanding: <b>{fmtR(outstandingCents)}</b></p>}
             {paymentStatus !== 'paid' && <p className="muted small">The guest’s name shows red on the board until it’s paid.</p>}
+            {editing && booking.extrasCents > 0 && (
+              <div className="bm-extras-pay">
+                <div className="bm-extras-head">
+                  <b>Guestbook extras · {fmtR(booking.extrasCents)}</b>
+                  <span className={`bm-pill ${extrasPaidAt ? 'ok' : 'warn'}`}>{extrasPaidAt ? 'Paid' : 'Awaiting payment'}</span>
+                </div>
+                {(Array.isArray(booking.extrasItems) ? booking.extrasItems : []).map((l, i) => (
+                  <div key={i} className="bm-extras-row"><span>{l.label}</span><span>{fmtR(l.cents)}</span></div>
+                ))}
+                <div className="bm-extras-foot">
+                  <span className="muted small">{{ airbnb: 'Payment request through Airbnb', card: 'Card (Paygate)', eft: 'EFT' }[booking.extrasPayMethod] || ''}{booking.ref || booking.resCode ? ` · ref ${booking.ref || booking.resCode}` : ''}</span>
+                  {booking.extrasPayMethod !== 'card' || extrasPaidAt
+                    ? <button type="button" className="mini" disabled={busy} onClick={toggleExtrasPaid}>{extrasPaidAt ? 'Undo paid' : 'Mark paid'}</button>
+                    : <span className="muted small">Marked paid automatically</span>}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
