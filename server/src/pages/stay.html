@@ -83,6 +83,7 @@
   .ratings{ margin:14px 0; padding:12px 14px; border:1px solid var(--line); border-radius:12px; }
   .ratings h3{ margin:0 0 8px; font-size:15px; }
   .rating-row{ display:flex; justify-content:space-between; gap:12px; padding:2px 0; font-size:14px; }
+  .rating-src{ font-size:12px; color:var(--muted); margin:-4px 0 6px; }
   .rating-host{ margin-top:6px; padding-top:6px; border-top:1px solid var(--line); font-size:14px; }
   #map{ height:70vh; min-height:420px; border-radius:14px; border:1px solid var(--line); }
   .empty{ text-align:center; color:var(--muted); padding:60px 20px; }
@@ -595,9 +596,10 @@
     var hostBlock = (HOST && HOST.name) ? ('<div class="host-by">'+(HOST.photoId?('<img class="host-av" src="'+API+'/photos/'+HOST.photoId+'">'):'<span class="host-av ph">🙂</span>')+'<span>Hosted by <b>'+esc(HOST.name)+'</b></span></div>') : '';
     var pr=p.rating, hr=p.host&&p.host.rating;
     var ratingBlock=(pr&&pr.count)?('<div class="ratings"><h3>★ '+pr.average.toFixed(1)+' · '+pr.count+(pr.count===1?' rating':' ratings')+' from guests</h3>'+
+      (pr.airbnbCount?'<div class="rating-src">Includes '+pr.airbnbCount+' from Airbnb</div>':'')+
       pr.categories.map(function(c){ return '<div class="rating-row"><span>'+esc(c.label)+'</span><b>'+c.average.toFixed(1)+'</b></div>'; }).join('')+
       ((hr&&hr.count)?'<div class="rating-host">Host rating across all their stays: <b>★ '+hr.average.toFixed(1)+'</b> ('+hr.count+')</div>':'')+
-      ((p.reviews&&p.reviews.length)?'<div class="reviews">'+p.reviews.map(function(rv){ return '<figure class="review"><div class="rv-head"><span class="rv-av">'+esc((rv.name||'G').charAt(0))+'</span><span><b>'+esc(rv.name)+'</b><small>'+esc(new Date(rv.at).toLocaleDateString('en-ZA',{month:'long',year:'numeric'}))+' · ★ '+rv.average.toFixed(1)+'</small></span></div><blockquote>'+esc(rv.comment)+'</blockquote></figure>'; }).join('')+'</div>':'')+'</div>'):'';
+      ((p.reviews&&p.reviews.length)?'<div class="reviews">'+p.reviews.map(function(rv){ return '<figure class="review"><div class="rv-head"><span class="rv-av">'+esc((rv.name||'G').charAt(0))+'</span><span><b>'+esc(rv.name)+'</b><small>'+esc(new Date(rv.at).toLocaleDateString('en-ZA',{month:'long',year:'numeric'}))+' · ★ '+rv.average.toFixed(1)+(rv.source==='airbnb'?' · via Airbnb':'')+'</small></span></div><blockquote>'+esc(rv.comment)+'</blockquote></figure>'; }).join('')+'</div>':'')+'</div>'):'';
     overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>'+esc(p.name)+' · Unit '+esc(u.name||'')+'</h2><button class="x">&times;</button></div>'+
       '<div class="sheet-body">'+gal+
       '<div class="note">📍 '+esc(p.address||'Location shared on booking')+'</div>'+

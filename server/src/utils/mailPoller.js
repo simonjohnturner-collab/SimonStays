@@ -8,6 +8,7 @@ const { simpleParser } = require('mailparser');
 const prisma = require('../lib/prisma');
 const { parseAirbnbEmail } = require('./guestEmail');
 const { applyGuestNames } = require('./sync');
+const { isReviewEmail, parseAirbnbReview, saveAirbnbReview } = require('./airbnbReviews');
 
 function config() {
   return {
@@ -33,7 +34,7 @@ async function pollOnce() {
 
   const client = new ImapFlow({ host: c.host, port: c.port, secure: true, auth: { user: c.user, pass: c.pass }, logger: false });
   await client.connect();
-  const summary = { processed: 0, matched: 0, updated: 0, failed: 0, details: [] };
+  const summary = { processed: 0, matched: 0, updated: 0, failed: 0, reviews: 0, details: [] };
   try {
     const lock = await client.getMailboxLock(c.folder);
     try {
@@ -56,6 +57,11 @@ async function pollOnce() {
           const body = [parsed.text, parsed.html].filter(Boolean).join('\n');
           const { resCode, guestName } = parseAirbnbEmail({ subject: parsed.subject || '', body });
           summary.processed++;
+          // A published Airbnb review: keep it for the shopfront's ratings.
+          if (isReviewEmail(parsed.subject)) {
+            const review = parseAirbnbReview({ subject: parsed.subject || '', text: parsed.text || '', html: parsed.html || '', messageId: parsed.messageId, date: parsed.date });
+            if (review && (await saveAirbnbReview(host.id, review)) !== 'unchanged') summary.reviews++;
+          }
           let applied = 0;
           if (resCode && guestName) {
             await prisma.guestLookup.upsert({
@@ -73,9 +79,24 @@ async function pollOnce() {
           await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
         } catch (e) { summary.failed++; }
       }
+      // First run: read every published review in the folder, not just the
+      // last three weeks, so the shopfront starts with the full history.
+      if ((await prisma.channelReview.count({ where: { hostId: host.id } })) === 0) {
+        const all = await client.search({ subject: 'review' }, { uid: true });
+        for (const uid of all || []) {
+          try {
+            const msg = await client.fetchOne(uid, { envelope: true }, { uid: true });
+            if (!isReviewEmail(msg.envelope && msg.envelope.subject)) continue;
+            const full = await client.fetchOne(uid, { source: true }, { uid: true });
+            const parsed = await simpleParser(full.source);
+            const review = parseAirbnbReview({ subject: parsed.subject || '', text: parsed.text || '', html: parsed.html || '', messageId: parsed.messageId, date: parsed.date });
+            if (review && (await saveAirbnbReview(host.id, review)) !== 'unchanged') summary.reviews++;
+          } catch (e) { summary.failed++; }
+        }
+      }
     } finally { lock.release(); }
   } finally { await client.logout().catch(() => {}); }
-  console.log('[mailPoller] poll result:', JSON.stringify({ processed: summary.processed, matched: summary.matched, updated: summary.updated, failed: summary.failed, details: summary.details }));
+  console.log('[mailPoller] poll result:', JSON.stringify({ processed: summary.processed, reviews: summary.reviews, matched: summary.matched, updated: summary.updated, failed: summary.failed, details: summary.details }));
   return summary;
 }
 

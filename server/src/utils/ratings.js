@@ -43,17 +43,42 @@ function summarise(rows, kind) {
 
 const allOf = (where, kind) => prisma.rating.findMany({ where: { kind, ...where }, select: { scores: true, average: true } });
 const guestRatingOf = async (email) => (email ? summarise(await allOf({ guestEmail: email }, 'guest'), 'guest') : null);
-const propertyRatingOf = async (propertyId) => summarise(await allOf({ propertyId }, 'host'), 'host');
-const hostRatingOf = async (hostId) => summarise(await allOf({ hostId }, 'host'), 'host');
+// Guests' ratings of a stay: SimonStays' own (with categories) plus Airbnb
+// reviews (one overall star rating each). The overall figure and count cover
+// both; the categories only SimonStays ratings, so those without any are left
+// out. airbnbCount says how many of the ratings came from Airbnb.
+async function withAirbnb(own, where) {
+  const airbnb = await prisma.channelReview.findMany({ where: { ...where, propertyId: where.propertyId || { not: null } }, select: { stars: true } });
+  if (!airbnb.length) return own && { ...own, airbnbCount: 0 };
+  const ownCount = own ? own.count : 0;
+  const total = ownCount + airbnb.length;
+  const sum = (own ? own.average * ownCount : 0) + airbnb.reduce((n, r) => n + r.stars, 0);
+  return {
+    average: round1(sum / total),
+    count: total,
+    airbnbCount: airbnb.length,
+    categories: own ? own.categories.filter((c) => c.average > 0) : [],
+  };
+}
+const propertyRatingOf = async (propertyId) => withAirbnb(summarise(await allOf({ propertyId }, 'host'), 'host'), { propertyId });
+const hostRatingOf = async (hostId) => withAirbnb(summarise(await allOf({ hostId }, 'host'), 'host'), { hostId });
 
 // The latest written reviews of a property, for its listing page: first name and
-// month only, never the guest's full name or email.
+// month only, never the guest's full name or email. Airbnb ones say so.
 async function propertyReviews(propertyId, take = 6) {
-  const rows = await prisma.rating.findMany({
-    where: { propertyId, kind: 'host', comment: { not: null } }, orderBy: { createdAt: 'desc' }, take,
-    select: { average: true, comment: true, createdAt: true, booking: { select: { guestName: true } } },
-  });
-  return rows.map((r) => ({ average: r.average, comment: r.comment, name: String((r.booking && r.booking.guestName) || 'A guest').trim().split(/\s+/)[0], at: r.createdAt }));
+  const [rows, airbnb] = await Promise.all([
+    prisma.rating.findMany({
+      where: { propertyId, kind: 'host', comment: { not: null } }, orderBy: { createdAt: 'desc' }, take,
+      select: { average: true, comment: true, createdAt: true, booking: { select: { guestName: true } } },
+    }),
+    prisma.channelReview.findMany({
+      where: { propertyId, comment: { not: null } }, orderBy: { reviewedAt: 'desc' }, take,
+      select: { stars: true, comment: true, reviewedAt: true, guestFirstName: true },
+    }),
+  ]);
+  const own = rows.map((r) => ({ average: r.average, comment: r.comment, name: String((r.booking && r.booking.guestName) || 'A guest').trim().split(/\s+/)[0], at: r.createdAt, source: 'simonstays' }));
+  const fromAirbnb = airbnb.map((r) => ({ average: r.stars, comment: r.comment, name: r.guestFirstName || 'A guest', at: r.reviewedAt, source: 'airbnb' }));
+  return [...own, ...fromAirbnb].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, take);
 }
 
 // guestEmail -> average stars from hosts, for many guests at once (inbox list).
@@ -65,9 +90,16 @@ async function guestStarsByEmail(emails) {
 }
 
 // propertyId -> { average, count }, for the shopfront's listings.
+// Counts Airbnb reviews too (see withAirbnb).
 async function ratingsByProperty() {
-  const rows = await prisma.rating.groupBy({ by: ['propertyId'], where: { kind: 'host' }, _avg: { average: true }, _count: true });
-  return Object.fromEntries(rows.map((r) => [r.propertyId, { average: round1(r._avg.average), count: r._count }]));
+  const [rows, airbnb] = await Promise.all([
+    prisma.rating.groupBy({ by: ['propertyId'], where: { kind: 'host' }, _sum: { average: true }, _count: true }),
+    prisma.channelReview.groupBy({ by: ['propertyId'], where: { propertyId: { not: null } }, _sum: { stars: true }, _count: true }),
+  ]);
+  const acc = {};
+  for (const r of rows) acc[r.propertyId] = { sum: r._sum.average || 0, count: r._count };
+  for (const r of airbnb) { const a = acc[r.propertyId] || (acc[r.propertyId] = { sum: 0, count: 0 }); a.sum += r._sum.stars || 0; a.count += r._count; }
+  return Object.fromEntries(Object.entries(acc).map(([id, a]) => [id, { average: round1(a.sum / a.count), count: a.count }]));
 }
 
 // Check a set of scores: every category, whole stars from 1 to 5.

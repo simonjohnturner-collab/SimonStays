@@ -145,6 +145,31 @@ model Rating {
   @@index([guestEmail, kind])
 }
 
+// A guest review from a channel (Airbnb), read from the review emails Airbnb
+// sends once a review is published. Shown on the shopfront alongside
+// SimonStays' own ratings. Airbnb gives one overall star rating, no categories.
+model ChannelReview {
+  id             String    @id @default(uuid())
+  hostId         String
+  channel        String    @default("airbnb")
+  externalKey    String // "airbnb:<review id>", or "msg:<email Message-ID>" when there's no id
+  propertyId     String? // null until it can be matched to one of the host's properties
+  unitId         String?
+  bookingId      String?
+  guestFirstName String? // null for Airbnb's anonymous "A recent guest" reviews
+  stars          Int
+  comment        String?
+  listingName    String? // the Airbnb listing title, e.g. "304 The Vantage"
+  stayStart      DateTime?
+  stayEnd        DateTime?
+  reviewedAt     DateTime // when Airbnb emailed it
+  createdAt      DateTime  @default(now())
+
+  @@unique([hostId, externalKey])
+  @@index([propertyId])
+  @@index([hostId])
+}
+
 // What a guest uploads when creating an account. Private: only the SimonStays
 // admin can open these, never a host or another guest.
 model GuestDocument {
