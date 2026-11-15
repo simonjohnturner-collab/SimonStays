@@ -13,6 +13,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const prisma = require('../lib/prisma');
+const { Prisma } = require('@prisma/client');
 const { optionalGuest } = require('../middleware/auth');
 const { signGuest } = require('../lib/jwt');
 const { alertHost } = require('../utils/payments');
@@ -73,7 +74,18 @@ function extrasOf(b) {
   ];
 }
 
-// What the guest sees of a booking: dates and extras only.
+// Mid-stay cleans: any day after check-in and before check-out, at the rate
+// card's in-stay clean price (or the unit clean price when none is set).
+// Null for a stay too short to have one.
+function instayOf(b) {
+  const first = new Date(new Date(b.checkIn).getTime() + DAY), last = new Date(shownCheckOut(b).getTime() - DAY);
+  if (iso(first) > iso(last)) return null;
+  const g = (b.unit && b.unit.pricingGroup) || {};
+  return { cents: g.instayCleanCents || g.cleaningCents || 0, from: iso(first), to: iso(last) };
+}
+const requestedOf = (b) => (Array.isArray(b.requestedCleans) ? b.requestedCleans.filter((d) => typeof d === 'string') : []);
+
+// What the guest sees of a booking: its dates, place and what can be added.
 function stayOut(b, mine = false) {
   const out = {
     id: b.id, checkIn: iso(b.checkIn), checkOut: iso(shownCheckOut(b)),
@@ -82,12 +94,13 @@ function stayOut(b, mine = false) {
     channel: b.source === 'airbnb' ? 'airbnb' : 'simonstays',
     extras: extrasOf(b),
     done: !!b.guestbookAt,
+    instayClean: instayOf(b),
     place: b.unit ? `${b.unit.property.name} · Unit ${b.unit.name}` : null,
   };
   // Their own trip (signed in): what's already on file.
   if (mine) {
     Object.assign(out, {
-      current: { earlyCheckIn: b.earlyCheckIn, lateCheckOut: b.lateCheckOut, extraMattress: b.extraMattress, hairDryer: b.hairDryer, notes: b.guestNotes || '' },
+      current: { earlyCheckIn: b.earlyCheckIn, lateCheckOut: b.lateCheckOut, extraMattress: b.extraMattress, hairDryer: b.hairDryer, notes: b.guestNotes || '', cleans: requestedOf(b) },
     });
   }
   return out;
@@ -190,7 +203,13 @@ router.post('/:id', async (req, res, next) => {
     const want = body.extras || {};
     const extras = extrasOf(b);
     const picked = extras.filter((x) => want[x.key]);
-    const charge = picked.filter((x) => !b[x.key]).reduce((n, x) => n + x.cents, 0); // only new paid ones
+    // Mid-stay cleans: distinct days within the stay, not already booked as cleans.
+    const offer = instayOf(b);
+    const booked = new Set((await prisma.clean.findMany({ where: { bookingId: b.id }, select: { date: true } })).filter((c) => c.date).map((c) => iso(c.date)));
+    const cleans = offer ? [...new Set((Array.isArray(body.cleans) ? body.cleans : []).map(String))]
+      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= offer.from && d <= offer.to && !booked.has(d)).sort().slice(0, 60) : [];
+    const cleansCents = cleans.length * (offer ? offer.cents : 0);
+    const charge = picked.filter((x) => !b[x.key]).reduce((n, x) => n + x.cents, 0) + cleansCents; // only new paid ones
     if (charge > 0 && !body.agreeCharges) return res.status(400).json({ error: 'agree_charges', message: 'Please confirm you’re happy to pay for the extras.' });
 
     await prisma.booking.update({
@@ -200,6 +219,7 @@ router.post('/:id', async (req, res, next) => {
         guestEmail: b.guestEmail || email,
         guestPhone: phone,
         guestNotes: notes,
+        requestedCleans: cleans.length ? cleans : Prisma.DbNull,
         earlyCheckIn: b.earlyCheckIn || !!want.earlyCheckIn,
         lateCheckOut: b.lateCheckOut || !!want.lateCheckOut,
         extraMattress: b.extraMattress || !!want.extraMattress,
@@ -224,6 +244,7 @@ router.post('/:id', async (req, res, next) => {
       `Phone: ${phone}`,
       `Email: ${email}`,
       picked.length ? `Extras: ${picked.map((x) => `${x.label}${x.cents ? ` (${fmtR(x.cents)})` : ''}`).join(', ')}` : 'Extras: none',
+      cleans.length ? `Mid-stay cleans: ${cleans.map((d) => fmtDay(`${d}T12:00:00Z`)).join(', ')}${offer.cents ? ` (${fmtR(offer.cents)} each, ${fmtR(cleansCents)})` : ''}` : null,
       charge > 0 ? `I agree to pay ${fmtR(charge)} for the new extras. Please send me a payment request${airbnb ? ' through Airbnb' : ''}.` : null,
       notes ? `Special instructions: ${notes}` : null,
     ].filter(Boolean);
@@ -231,7 +252,7 @@ router.post('/:id', async (req, res, next) => {
     const place = `${b.unit.property.name} · ${b.unit.name}`;
     alertHost(b, [
       `📒 Guestbook: ${firstName} ${surname} (${airbnb ? 'Airbnb' : 'SimonStays'}), ${place}, ${fmtDay(b.checkIn)} → ${fmtDay(shownCheckOut(b))}`,
-      charge > 0 ? `💰 Agreed to ${fmtR(charge)} for extras: send a payment request${airbnb ? ' in Airbnb' : ''}.` : null,
+      charge > 0 ? `💰 Agreed to ${fmtR(charge)} for extras${cleans.length ? ` (incl. ${cleans.length} mid-stay clean${cleans.length > 1 ? 's' : ''})` : ''}: send a payment request${airbnb ? ' in Airbnb' : ''}.` : null,
       notes ? `📝 ${notes.slice(0, 300)}` : null,
       verified ? null : '⚠️ Not verified (phone didn’t match Airbnb’s). Link their account from the booking once you’re sure it’s them.',
     ].filter(Boolean).join('\n'));

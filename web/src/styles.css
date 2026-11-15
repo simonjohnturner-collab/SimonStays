@@ -1393,3 +1393,4 @@ button.bm-cancel:hover { background: #fdeaea; }
 .bm-pill.warn { background: #fff4e0; color: #8a5a00; }
 .bm-guestnote { margin-top: 10px; padding: 8px 10px; border-radius: 7px; background: #fffaf0; border: 1px solid #f3dfb3; font-size: 13px; white-space: pre-wrap; }
 .bm-guestnote b { display: block; font-size: 12px; color: #8a5a00; margin-bottom: 2px; }
+.bm-req-btns { display: flex; gap: 6px; margin-top: 6px; white-space: normal; }

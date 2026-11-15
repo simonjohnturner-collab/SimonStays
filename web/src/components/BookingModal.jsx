@@ -45,6 +45,16 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   const addClean = () => setCleans([...cleans, { date: '', paymentMethod: 'prepaid', cleaner: '' }]);
   const updateClean = (i, field, val) => setCleans(cleans.map((c, j) => (j === i ? { ...c, [field]: val } : c)));
   const removeClean = (i) => setCleans(cleans.filter((_, j) => j !== i));
+  // Mid-stay cleans the guest asked for in the guestbook, kept off the calendar
+  // until the host adds them (once paid). Saving after adding clears the request.
+  const [requested, setRequested] = useState(Array.isArray(booking?.requestedCleans) ? booking.requestedCleans : []);
+  const [requestDone, setRequestDone] = useState(false);
+  const addRequested = () => {
+    const have = new Set(cleans.map((c) => c.date));
+    setCleans([...cleans, ...requested.filter((d) => !have.has(d)).map((date) => ({ date, paymentMethod: 'prepaid', cleaner: '' }))]);
+    setRequested([]); setRequestDone(true);
+  };
+  const dismissRequested = () => { setRequested([]); setRequestDone(true); };
 
   const [msg, setMsg] = useState(null);
   const [conflicts, setConflicts] = useState(null);
@@ -86,6 +96,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
       amountPaidCents: paymentStatus === 'partial' ? paidCents : null,
       earlyCheckIn, lateCheckOut, extraMattress, hairDryer,
       cleans: cleans.filter((c) => c.date || c.cleaner),
+      ...(requestDone ? { requestedCleans: null } : {}),
       ...(isFloating ? { pricingGroupId: groupId || null } : {}),
       ...extra,
     };
@@ -195,7 +206,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   const sourceLabel = editing ? (SOURCE[booking.source] || booking.source) : null;
   const payPill = paymentStatus === 'paid' ? { cls: 'ok', text: 'Paid' }
     : { cls: 'owe', text: outstandingCents ? `Owing ${fmtR(outstandingCents)}` : paymentStatus === 'partial' ? 'Part paid' : 'Unpaid' };
-  const cleanCount = (cleaner ? 1 : 0) + cleans.length;
+  const cleanCount = (cleaner ? 1 : 0) + cleans.length + requested.length;
   const TABS = [
     ['guest', 'Guest'],
     ['pay', 'Payment'],
@@ -354,6 +365,16 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
               <div className="remind-row">
                 <button type="button" className="secondary" disabled={busy || !cleaner} onClick={remindCleaner}>📲 Remind cleaner now</button>
                 <span className="muted small">Sends automatically at 7pm the night before.</span>
+              </div>
+            )}
+            {requested.length > 0 && (
+              <div className="bm-guestnote">
+                <b>Guest asked for {requested.length} mid-stay clean{requested.length > 1 ? 's' : ''}</b>
+                {requested.map((d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })).join(' · ')}
+                <div className="bm-req-btns">
+                  <button type="button" className="mini" onClick={addRequested}>Add to cleans (once paid)</button>
+                  <button type="button" className="mini" onClick={dismissRequested}>Dismiss</button>
+                </div>
               </div>
             )}
             <div className="insta-head">

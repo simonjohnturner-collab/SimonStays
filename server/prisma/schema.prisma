@@ -555,6 +555,7 @@ model Booking {
   guestbookAt        DateTime? // when the guest last completed the guestbook
   guestbookVerified  Boolean @default(false) // the phone they gave matched the one Airbnb sent us
   guestbookAccountId String? // the account that filled it in, waiting for the host to link it when unverified
+  requestedCleans    Json? // mid-stay cleans the guest asked for in the guestbook: ["YYYY-MM-DD"]. Off the calendar until the host adds them (once paid)
   totalCents   Int?    // payable total captured at booking time (website bookings)
   guestAccountId String?
   guestAccount   GuestAccount? @relation(fields: [guestAccountId], references: [id], onDelete: SetNull)

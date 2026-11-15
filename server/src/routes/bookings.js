@@ -1,5 +1,6 @@
 const express = require('express');
 const prisma = require('../lib/prisma');
+const { Prisma } = require('@prisma/client');
 const { authHost, requireOwnedUnit } = require('../middleware/auth');
 const { checkAvailability, syncUnit } = require('../utils/sync');
 const { dateOnly } = require('../utils/ical');
@@ -204,6 +205,8 @@ router.patch('/bookings/:id', async (req, res) => {
   ['guestName', 'cleaner', 'comments', 'accessCode', 'recommendedBy', 'checkoutNotes'].forEach((k) => { if (k in b) data[k] = b[k]; });
   ['leavingEarly', 'earlyCheckIn', 'lateCheckOut', 'extraMattress', 'hairDryer']
     .forEach((k) => { if (k in b) data[k] = !!b[k]; });
+  // The host has added the guest's requested cleans (or dismissed them).
+  if ('requestedCleans' in b && b.requestedCleans === null) data.requestedCleans = Prisma.DbNull;
   Object.assign(data, paymentFields(b));
   Object.assign(data, await guestContactFields(b));
   if ('status' in b) data.status = b.status;

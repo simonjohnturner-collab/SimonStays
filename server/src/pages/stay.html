@@ -102,6 +102,12 @@
   .gb-extra span{ font-weight:600; font-size:14px; padding-right:22px; }
   .gb-extra small{ color:var(--muted); font-size:12px; }
   .gb-extra.on{ border-color:var(--green); background:#f3faf5; }
+  .gb-cleans{ display:flex; flex-direction:column; gap:6px; }
+  .gb-clean{ display:flex; align-items:center; gap:10px; }
+  .gb-clean span{ font-size:14px; font-weight:600; min-width:62px; }
+  .gb-clean input{ flex:1; max-width:220px; }
+  .gb-addclean{ background:#eef6f0; color:var(--green-d); border:1px dashed #a9d4b8; margin-top:8px; padding:8px 14px; }
+  .gb-addclean:hover{ background:#e2f0e6; }
   .gb-agree{ background:#fffaf0; border:1px solid #f3dfb3; border-radius:10px; padding:10px 12px; }
   .trip-gb{ background:#eef6f0; color:var(--green-d); border:1px solid #cfe6d6; margin-top:8px; margin-right:6px; }
   .trip-gb:hover{ background:#e2f0e6; }
@@ -1673,7 +1679,7 @@
         '<div class="gb-stays">'+S.stays.map(stayCard).join('')+'</div>'+
         '<button class="cta-btn" id="gbNext"'+(S.sel?'':' disabled')+'>Continue</button>'+
         '<div class="auth-toggle" style="margin-top:10px"><a id="gbBack">'+(S.mine?'Booked under another name? Search by name':'← Not mine, search again')+'</a></div>';
-      body.querySelectorAll('input[name=gbStay]').forEach(function(i){ i.onchange=function(){ S.sel=S.stays.filter(function(s){ return s.id===i.value; })[0]; drawPick(); }; });
+      body.querySelectorAll('input[name=gbStay]').forEach(function(i){ i.onchange=function(){ S.sel=S.stays.filter(function(s){ return s.id===i.value; })[0]; S.cleans=null; drawPick(); }; });
       body.querySelector('#gbNext').onclick=function(){ if(S.sel) drawForm(); };
       body.querySelector('#gbBack').onclick=function(){ drawFind(); };
     }
@@ -1694,18 +1700,32 @@
           (GTOKEN?'':'<input id="gbPass" type="password" placeholder="Create a password (8+ characters)" autocomplete="new-password"><p class="note small">This sets up your free SimonStays account, where you’ll see your stay and can message us.</p>')+
         '</div>'+
         '<h3 class="sec">Extras</h3><div class="gb-extras">'+ex+'</div>'+
+        (s.instayClean?('<h3 class="sec">Mid-stay cleans</h3><p class="note small">'+(s.instayClean.cents?rand(s.instayClean.cents)+' per clean. ':'')+'Pick a date for each clean you’d like during your stay.</p><div id="gbCleans" class="gb-cleans"></div><button type="button" class="gb-addclean" id="gbAddClean">+ Add a clean</button>'):'')+
         '<div id="gbCharge"></div>'+
         '<h3 class="sec">Special instructions</h3>'+
         '<div class="frm"><textarea id="gbNotes" rows="3" placeholder="Arrival time, allergies, celebrations, anything we should know">'+esc(S.notes!=null?S.notes:(cur.notes||''))+'</textarea></div>'+
         '<button class="cta-btn" id="gbSave">Save my guestbook</button>';
+      if(!S.cleans) S.cleans=(cur.cleans||[]).slice();
+      // Each clean: a date within the stay. Blank rows are ignored when saving.
+      function drawCleans(){
+        var box=body.querySelector('#gbCleans'); if(!box) return;
+        var ic=s.instayClean;
+        box.innerHTML=S.cleans.map(function(d,i){ return '<div class="gb-clean"><span>Clean '+(i+1)+'</span><input type="date" data-c="'+i+'" min="'+ic.from+'" max="'+ic.to+'" value="'+esc(d||'')+'"><button type="button" class="x" data-rm="'+i+'" title="Remove">&times;</button></div>'; }).join('');
+        box.querySelectorAll('[data-c]').forEach(function(inp){ inp.onchange=function(){ S.cleans[+inp.getAttribute('data-c')]=inp.value; drawCharge(); }; });
+        box.querySelectorAll('[data-rm]').forEach(function(b){ b.onclick=function(){ S.cleans.splice(+b.getAttribute('data-rm'),1); drawCleans(); drawCharge(); }; });
+      }
+      function cleanDates(){ var ic=s.instayClean; if(!ic) return []; var seen={}; return S.cleans.filter(function(d){ if(!d||d<ic.from||d>ic.to||seen[d]) return false; seen[d]=1; return true; }); }
       function picked(){ var o={}; body.querySelectorAll('[data-x]').forEach(function(c){ o[c.getAttribute('data-x')]=c.checked; }); return o; }
-      function chargeOf(p){ return s.extras.reduce(function(n,x){ return n+(p[x.key]&&!cur[x.key]?x.cents:0); },0); }
+      function chargeOf(p){ return s.extras.reduce(function(n,x){ return n+(p[x.key]&&!cur[x.key]?x.cents:0); },0)+(s.instayClean?cleanDates().length*s.instayClean.cents:0); }
       function drawCharge(){
         var c=chargeOf(picked()), box=body.querySelector('#gbCharge');
-        box.innerHTML=c>0?('<label class="tnc gb-agree"><input type="checkbox" id="gbAgree"'+(S.agree?' checked':'')+'> <span>These extras cost <b>'+rand(c)+'</b>. I’m happy to pay this. Please send me a payment request'+(airbnb?' through Airbnb':'')+'.</span></label>'):'';
+        var nc=cleanDates().length;
+        box.innerHTML=c>0?('<label class="tnc gb-agree"><input type="checkbox" id="gbAgree"'+(S.agree?' checked':'')+'> <span>'+(nc?'These extras and '+nc+' clean'+(nc>1?'s':''):'These extras')+' cost <b>'+rand(c)+'</b>. I’m happy to pay this. Please send me a payment request'+(airbnb?' through Airbnb':'')+'.</span></label>'):'';
         var a=box.querySelector('#gbAgree'); if(a) a.onchange=function(){ S.agree=a.checked; };
       }
       body.querySelectorAll('[data-x]').forEach(function(c){ c.onchange=function(){ c.parentNode.classList.toggle('on',c.checked); drawCharge(); }; });
+      var addC=body.querySelector('#gbAddClean'); if(addC) addC.onclick=function(){ S.cleans.push(''); drawCleans(); var ins=body.querySelectorAll('[data-c]'); if(ins.length) ins[ins.length-1].focus(); };
+      drawCleans();
       drawCharge();
       body.querySelector('#gbChange').onclick=function(){ S.stays.length>1||S.mine?drawPick():drawFind(); };
       body.querySelector('#gbSave').onclick=save;
@@ -1719,11 +1739,12 @@
         if(S.who.phone.replace(/\D/g,'').length<9){ drawForm(err('Please enter your mobile number.')); return; }
         var pw=body.querySelector('#gbPass'); var password=pw?pw.value:'';
         if(pw&&password.length<8){ drawForm(err('Please choose a password of at least 8 characters.')); return; }
+        if(S.cleans.some(function(d){ return !d; })){ drawForm(err('Please pick a date for each clean, or remove the empty one.')); return; }
         if(charge>0&&!(agree&&agree.checked)){ drawForm(err('Please tick to confirm you’re happy to pay for the extras, or untick them.')); return; }
         var btn=body.querySelector('#gbSave'); btn.disabled=true; btn.textContent='Saving…';
         try{
           var r=await fetch(API+'/public/guestbook/'+encodeURIComponent(s.id),{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
-            body:JSON.stringify(Object.assign({},S.who,{code:S.code||undefined,password:password||undefined,extras:S.picked,notes:S.notes,agreeCharges:!!(agree&&agree.checked)}))});
+            body:JSON.stringify(Object.assign({},S.who,{code:S.code||undefined,password:password||undefined,extras:S.picked,cleans:cleanDates(),notes:S.notes,agreeCharges:!!(agree&&agree.checked)}))});
           var d=await r.json();
           if(r.status===409&&d.error==='email_taken'){ drawForm(err(esc(d.message)+' <a id="gbLogin">Sign in</a>')); var l=body.querySelector('#gbLogin'); if(l) l.onclick=function(){ AFTER_AUTH=function(){ openGuestbook(s.id); }; openAuth('login', S.who.email); }; return; }
           if(!r.ok){ drawForm(err(esc(d.message||'Could not save. Please try again.'))); return; }
