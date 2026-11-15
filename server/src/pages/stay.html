@@ -1640,7 +1640,7 @@
 
     // Step 1 (signed out, or no trips on the account): find the stay by name.
     function drawFind(msg){
-      body.innerHTML='<p class="gb-intro">Hi! Please fill in these details before you arrive so that we can get everything ready for you.</p>'+
+      body.innerHTML='<p class="gb-intro">Welcome to SimonStays! Please help us by capturing your details so that we have them on record for future stays.</p>'+
         '<div class="frm"><div class="two"><input id="gbFirst" placeholder="First name" autocomplete="given-name" value="'+esc(S.who.firstName)+'"><input id="gbSur" placeholder="Surname" autocomplete="family-name" value="'+esc(S.who.surname)+'"></div>'+
         '<input id="gbCode" placeholder="Booking code (if we can’t find your name), e.g. HM23XFDBYQ" autocapitalize="characters" value="'+esc(S.code||'')+'"></div>'+
         (msg||'')+'<div id="gbList"></div>'+
