@@ -108,6 +108,26 @@
   .gb-clean input{ flex:1; max-width:220px; }
   .gb-addclean{ background:#eef6f0; color:var(--green-d); border:1px dashed #a9d4b8; margin-top:8px; padding:8px 14px; }
   .gb-addclean:hover{ background:#e2f0e6; }
+  .gb-tabs{ display:flex; gap:4px; margin:14px 0 4px; border-bottom:1px solid var(--line); }
+  .gb-tabs button{ flex:1; background:transparent; color:var(--muted); font-weight:600; font-size:14px; padding:10px 6px; border-radius:8px 8px 0 0; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
+  .gb-tabs button:hover{ background:#f3f6f4; color:var(--ink); }
+  .gb-tabs button.on{ color:var(--green-d); border-bottom-color:var(--green); }
+  .gb-pane{ padding-top:6px; }
+  .gb-pane[hidden]{ display:none; }
+  .gb-clean-price{ font-size:14px; min-width:56px; text-align:right; margin-left:auto; }
+  .gb-sum-who{ display:flex; flex-direction:column; gap:2px; margin:8px 0 12px; }
+  .gb-sum-who span{ font-size:13px; color:var(--muted); }
+  .gb-bill{ border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .gb-bill-head{ background:#f7f8fa; padding:9px 14px; font-size:12px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--line); }
+  .gb-bill-row{ display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:10px 14px; font-size:14px; border-bottom:1px solid #f0f2f4; }
+  .gb-bill-row span small{ display:block; font-size:12px; color:var(--muted); }
+  .gb-bill-row b{ white-space:nowrap; }
+  .gb-bill-row.muted{ color:var(--muted); }
+  .gb-bill-tot{ background:#f3faf5; font-size:16px; border-bottom:0; }
+  .gb-bill-tot b{ color:var(--green-d); font-size:18px; }
+  .gb-bill-note{ padding:8px 14px 10px; font-size:12px; color:var(--muted); background:#f3faf5; }
+  .gb-sum-notes{ margin-top:12px; padding:10px 12px; border-radius:10px; background:#f7f8fa; font-size:14px; white-space:pre-wrap; }
+  .gb-sum-notes b{ display:block; font-size:12px; color:var(--muted); margin-bottom:2px; }
   .gb-agree{ background:#fffaf0; border:1px solid #f3dfb3; border-radius:10px; padding:10px 12px; }
   .trip-gb{ background:#eef6f0; color:var(--green-d); border:1px solid #cfe6d6; margin-top:8px; margin-right:6px; }
   .trip-gb:hover{ background:#e2f0e6; }
@@ -1679,74 +1699,117 @@
         '<div class="gb-stays">'+S.stays.map(stayCard).join('')+'</div>'+
         '<button class="cta-btn" id="gbNext"'+(S.sel?'':' disabled')+'>Continue</button>'+
         '<div class="auth-toggle" style="margin-top:10px"><a id="gbBack">'+(S.mine?'Booked under another name? Search by name':'← Not mine, search again')+'</a></div>';
-      body.querySelectorAll('input[name=gbStay]').forEach(function(i){ i.onchange=function(){ S.sel=S.stays.filter(function(s){ return s.id===i.value; })[0]; S.cleans=null; drawPick(); }; });
+      body.querySelectorAll('input[name=gbStay]').forEach(function(i){ i.onchange=function(){ S.sel=S.stays.filter(function(s){ return s.id===i.value; })[0]; S.cleans=null; S.tab=null; drawPick(); }; });
       body.querySelector('#gbNext').onclick=function(){ if(S.sel) drawForm(); };
       body.querySelector('#gbBack').onclick=function(){ drawFind(); };
     }
 
-    // Step 3: the details form.
-    function drawForm(msg){
-      var s=S.sel, cur=(S.mine&&s.current)||{}, airbnb=s.channel==='airbnb';
+    // Step 3: the details form, in three tabs: Details · Extras · Summary.
+    // All three stay on the page (only hidden), so nothing typed is lost when
+    // switching. Summary lists every charge and holds the Save button.
+    function drawForm(msg, tab){
+      var s=S.sel, cur=(S.mine&&s.current)||{}, airbnb=s.channel==='airbnb', ic=s.instayClean;
+      S.tab=tab||S.tab||'details';
       var ex=s.extras.map(function(x){
         var on=S.picked?!!S.picked[x.key]:!!cur[x.key];
         var price=x.cents?rand(x.cents):(x.key==='hairDryer'?'Free':'Price confirmed by your host');
         return '<label class="gb-extra'+(on?' on':'')+'"><input type="checkbox" data-x="'+x.key+'"'+(on?' checked':'')+'><span>'+esc(x.label)+'</span><small>'+esc(price)+'</small></label>';
       }).join('');
-      body.innerHTML='<div class="gb-chosen">📅 '+esc(s.label)+(s.place?' · '+esc(s.place):'')+' <a id="gbChange">Change</a></div>'+(msg||'')+
-        '<h3 class="sec">Your details</h3>'+
-        '<div class="frm">'+
-          '<div class="two"><input id="gbFirst" placeholder="First name" autocomplete="given-name" value="'+esc(S.who.firstName)+'"><input id="gbSur" placeholder="Surname" autocomplete="family-name" value="'+esc(S.who.surname)+'"></div>'+
-          '<div class="two"><input id="gbEmail" type="email" placeholder="Email" autocomplete="email" value="'+esc(S.who.email)+'"><input id="gbPhone" type="tel" placeholder="Mobile (WhatsApp)" autocomplete="tel" value="'+esc(S.who.phone)+'"></div>'+
-          (GTOKEN?'':'<input id="gbPass" type="password" placeholder="Create a password (8+ characters)" autocomplete="new-password"><p class="note small">This sets up your free SimonStays account, where you’ll see your stay and can message us.</p>')+
+      var TABS=[['details','1 · Details'],['extras','2 · Extras'],['summary','3 · Summary']];
+      body.innerHTML='<div class="gb-chosen">📅 '+esc(s.label)+(s.place?' · '+esc(s.place):'')+' <a id="gbChange">Change</a></div>'+
+        '<div class="gb-tabs" role="tablist">'+TABS.map(function(t){ return '<button type="button" role="tab" data-tab="'+t[0]+'">'+t[1]+'</button>'; }).join('')+'</div>'+
+        (msg||'')+
+        // 1 · Details
+        '<div class="gb-pane" data-pane="details">'+
+          '<div class="frm">'+
+            '<div class="two"><input id="gbFirst" placeholder="First name" autocomplete="given-name" value="'+esc(S.who.firstName)+'"><input id="gbSur" placeholder="Surname" autocomplete="family-name" value="'+esc(S.who.surname)+'"></div>'+
+            '<div class="two"><input id="gbEmail" type="email" placeholder="Email" autocomplete="email" value="'+esc(S.who.email)+'"><input id="gbPhone" type="tel" placeholder="Mobile (WhatsApp)" autocomplete="tel" value="'+esc(S.who.phone)+'"></div>'+
+            (GTOKEN?'':'<input id="gbPass" type="password" placeholder="Create a password (8+ characters)" autocomplete="new-password" value="'+esc(S.pw||'')+'"><p class="note small">This sets up your free SimonStays account, where you’ll see your stay and can message us.</p>')+
+          '</div>'+
+          '<button type="button" class="cta-btn" data-next="extras">Next: extras →</button>'+
         '</div>'+
-        '<h3 class="sec">Extras</h3><div class="gb-extras">'+ex+'</div>'+
-        (s.instayClean?('<h3 class="sec">Mid-stay cleans</h3><p class="note small">'+(s.instayClean.cents?rand(s.instayClean.cents)+' per clean. ':'')+'Pick a date for each clean you’d like during your stay.</p><div id="gbCleans" class="gb-cleans"></div><button type="button" class="gb-addclean" id="gbAddClean">+ Add a clean</button>'):'')+
-        '<div id="gbCharge"></div>'+
-        '<h3 class="sec">Special instructions</h3>'+
-        '<div class="frm"><textarea id="gbNotes" rows="3" placeholder="Arrival time, allergies, celebrations, anything we should know">'+esc(S.notes!=null?S.notes:(cur.notes||''))+'</textarea></div>'+
-        '<button class="cta-btn" id="gbSave">Save my guestbook</button>';
+        // 2 · Extras
+        '<div class="gb-pane" data-pane="extras">'+
+          '<h3 class="sec">Extras</h3><div class="gb-extras">'+ex+'</div>'+
+          (ic?('<h3 class="sec">Mid-stay cleans</h3><p class="note small">Pick a date for each clean you’d like during your stay.</p><div id="gbCleans" class="gb-cleans"></div><button type="button" class="gb-addclean" id="gbAddClean">+ Add a clean'+(ic.cents?' · '+rand(ic.cents):'')+'</button>'):'')+
+          '<h3 class="sec">Special instructions</h3>'+
+          '<div class="frm"><textarea id="gbNotes" rows="3" placeholder="Arrival time, allergies, celebrations, anything we should know">'+esc(S.notes!=null?S.notes:(cur.notes||''))+'</textarea></div>'+
+          '<button type="button" class="cta-btn" data-next="summary">Next: summary →</button>'+
+        '</div>'+
+        // 3 · Summary
+        '<div class="gb-pane" data-pane="summary"><div id="gbSummary"></div><button class="cta-btn" id="gbSave">Save my guestbook</button></div>';
+
       if(!S.cleans) S.cleans=(cur.cleans||[]).slice();
-      // Each clean: a date within the stay. Blank rows are ignored when saving.
+      function openTab(name){
+        S.tab=name;
+        body.querySelectorAll('.gb-tabs button').forEach(function(b){ var on=b.getAttribute('data-tab')===name; b.classList.toggle('on',on); b.setAttribute('aria-selected',on); });
+        body.querySelectorAll('.gb-pane').forEach(function(p){ p.hidden=p.getAttribute('data-pane')!==name; });
+        if(name==='summary') drawSummary();
+      }
+      // Each clean: a date within the stay, its price on the right.
       function drawCleans(){
         var box=body.querySelector('#gbCleans'); if(!box) return;
-        var ic=s.instayClean;
-        box.innerHTML=S.cleans.map(function(d,i){ return '<div class="gb-clean"><span>Clean '+(i+1)+'</span><input type="date" data-c="'+i+'" min="'+ic.from+'" max="'+ic.to+'" value="'+esc(d||'')+'"><button type="button" class="x" data-rm="'+i+'" title="Remove">&times;</button></div>'; }).join('');
-        box.querySelectorAll('[data-c]').forEach(function(inp){ inp.onchange=function(){ S.cleans[+inp.getAttribute('data-c')]=inp.value; drawCharge(); }; });
-        box.querySelectorAll('[data-rm]').forEach(function(b){ b.onclick=function(){ S.cleans.splice(+b.getAttribute('data-rm'),1); drawCleans(); drawCharge(); }; });
+        box.innerHTML=S.cleans.map(function(d,i){ return '<div class="gb-clean"><span>Clean '+(i+1)+'</span><input type="date" data-c="'+i+'" min="'+ic.from+'" max="'+ic.to+'" value="'+esc(d||'')+'"><b class="gb-clean-price">'+(ic.cents?rand(ic.cents):'')+'</b><button type="button" class="x" data-rm="'+i+'" title="Remove">&times;</button></div>'; }).join('');
+        box.querySelectorAll('[data-c]').forEach(function(inp){ inp.onchange=function(){ S.cleans[+inp.getAttribute('data-c')]=inp.value; }; });
+        box.querySelectorAll('[data-rm]').forEach(function(b){ b.onclick=function(){ S.cleans.splice(+b.getAttribute('data-rm'),1); drawCleans(); }; });
       }
-      function cleanDates(){ var ic=s.instayClean; if(!ic) return []; var seen={}; return S.cleans.filter(function(d){ if(!d||d<ic.from||d>ic.to||seen[d]) return false; seen[d]=1; return true; }); }
+      function cleanDates(){ if(!ic) return []; var seen={}; return S.cleans.filter(function(d){ if(!d||d<ic.from||d>ic.to||seen[d]) return false; seen[d]=1; return true; }).sort(); }
       function picked(){ var o={}; body.querySelectorAll('[data-x]').forEach(function(c){ o[c.getAttribute('data-x')]=c.checked; }); return o; }
-      function chargeOf(p){ return s.extras.reduce(function(n,x){ return n+(p[x.key]&&!cur[x.key]?x.cents:0); },0)+(s.instayClean?cleanDates().length*s.instayClean.cents:0); }
-      function drawCharge(){
-        var c=chargeOf(picked()), box=body.querySelector('#gbCharge');
-        var nc=cleanDates().length;
-        box.innerHTML=c>0?('<label class="tnc gb-agree"><input type="checkbox" id="gbAgree"'+(S.agree?' checked':'')+'> <span>'+(nc?'These extras and '+nc+' clean'+(nc>1?'s':''):'These extras')+' cost <b>'+rand(c)+'</b>. I’m happy to pay this. Please send me a payment request'+(airbnb?' through Airbnb':'')+'.</span></label>'):'';
+      // The charge lines: new paid extras, then each clean by date.
+      function lines(){
+        var p=picked(), out=[];
+        s.extras.forEach(function(x){ if(!p[x.key]) return; out.push({ label:x.label, cents:cur[x.key]?0:x.cents, note:cur[x.key]?'Already booked':(!x.cents?(x.key==='hairDryer'?'Free':'Price confirmed by your host'):'') }); });
+        cleanDates().forEach(function(d){ out.push({ label:'Mid-stay clean · '+new Date(d+'T12:00:00Z').toLocaleDateString('en-ZA',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}), cents:ic.cents, note:ic.cents?'':'Price confirmed by your host' }); });
+        return out;
+      }
+      function total(){ return lines().reduce(function(n,l){ return n+(l.cents||0); },0); }
+      function drawSummary(){
+        var box=body.querySelector('#gbSummary'), ls=lines(), t=total();
+        var who=[S.who.firstName,S.who.surname].filter(Boolean).join(' ');
+        box.innerHTML=
+          '<div class="gb-sum-who"><b>'+esc(who||'Your name')+'</b><span>'+esc([S.who.email,S.who.phone].filter(Boolean).join(' · ')||'Add your contact details on the Details tab')+'</span></div>'+
+          '<div class="gb-bill">'+
+            '<div class="gb-bill-head">Charges</div>'+
+            (ls.length?ls.map(function(l){ return '<div class="gb-bill-row"><span>'+esc(l.label)+(l.note?'<small>'+esc(l.note)+'</small>':'')+'</span><b>'+(l.cents?rand(l.cents):'—')+'</b></div>'; }).join(''):'<div class="gb-bill-row muted"><span>No extras or cleans</span><b>—</b></div>')+
+            '<div class="gb-bill-row gb-bill-tot"><span>Total to pay</span><b>'+rand(t)+'</b></div>'+
+            (t>0?'<div class="gb-bill-note">Paid separately. We’ll send you a payment request'+(airbnb?' through Airbnb':'')+'.</div>':'')+
+          '</div>'+
+          (S.notes&&S.notes.trim()?'<div class="gb-sum-notes"><b>Special instructions</b>'+esc(S.notes.trim())+'</div>':'')+
+          (t>0?'<label class="tnc gb-agree"><input type="checkbox" id="gbAgree"'+(S.agree?' checked':'')+'> <span>I’m happy to pay <b>'+rand(t)+'</b>. Please send me a payment request'+(airbnb?' through Airbnb':'')+'.</span></label>':'');
         var a=box.querySelector('#gbAgree'); if(a) a.onchange=function(){ S.agree=a.checked; };
       }
-      body.querySelectorAll('[data-x]').forEach(function(c){ c.onchange=function(){ c.parentNode.classList.toggle('on',c.checked); drawCharge(); }; });
-      var addC=body.querySelector('#gbAddClean'); if(addC) addC.onclick=function(){ S.cleans.push(''); drawCleans(); var ins=body.querySelectorAll('[data-c]'); if(ins.length) ins[ins.length-1].focus(); };
-      drawCleans();
-      drawCharge();
-      body.querySelector('#gbChange').onclick=function(){ S.stays.length>1||S.mine?drawPick():drawFind(); };
-      body.querySelector('#gbSave').onclick=save;
-
-      async function save(){
+      // Keep S in step with the inputs, so the summary and a redraw show the latest.
+      function capture(){
         S.who={ firstName:body.querySelector('#gbFirst').value.trim(), surname:body.querySelector('#gbSur').value.trim(), email:body.querySelector('#gbEmail').value.trim(), phone:body.querySelector('#gbPhone').value.trim() };
         S.picked=picked(); S.notes=body.querySelector('#gbNotes').value;
-        var charge=chargeOf(S.picked), agree=body.querySelector('#gbAgree');
-        if(!S.who.firstName||!S.who.surname){ drawForm(err('Please enter your first name and surname.')); return; }
-        if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(S.who.email)){ drawForm(err('Please enter a valid email address.')); return; }
-        if(S.who.phone.replace(/\D/g,'').length<9){ drawForm(err('Please enter your mobile number.')); return; }
-        var pw=body.querySelector('#gbPass'); var password=pw?pw.value:'';
-        if(pw&&password.length<8){ drawForm(err('Please choose a password of at least 8 characters.')); return; }
-        if(S.cleans.some(function(d){ return !d; })){ drawForm(err('Please pick a date for each clean, or remove the empty one.')); return; }
-        if(charge>0&&!(agree&&agree.checked)){ drawForm(err('Please tick to confirm you’re happy to pay for the extras, or untick them.')); return; }
+        var pw=body.querySelector('#gbPass'); if(pw) S.pw=pw.value;
+      }
+
+      body.querySelectorAll('.gb-tabs button').forEach(function(b){ b.onclick=function(){ capture(); openTab(b.getAttribute('data-tab')); }; });
+      body.querySelectorAll('[data-next]').forEach(function(b){ b.onclick=function(){ capture(); openTab(b.getAttribute('data-next')); body.querySelector('.gb-tabs').scrollIntoView({behavior:'smooth',block:'nearest'}); }; });
+      body.querySelectorAll('[data-x]').forEach(function(c){ c.onchange=function(){ c.parentNode.classList.toggle('on',c.checked); }; });
+      var addC=body.querySelector('#gbAddClean'); if(addC) addC.onclick=function(){ S.cleans.push(''); drawCleans(); var ins=body.querySelectorAll('[data-c]'); if(ins.length) ins[ins.length-1].focus(); };
+      drawCleans();
+      body.querySelector('#gbChange').onclick=function(){ capture(); S.stays.length>1||S.mine?drawPick():drawFind(); };
+      body.querySelector('#gbSave').onclick=save;
+      openTab(S.tab);
+
+      async function save(){
+        capture();
+        var charge=total(), agree=body.querySelector('#gbAgree');
+        if(!S.who.firstName||!S.who.surname){ drawForm(err('Please enter your first name and surname.'),'details'); return; }
+        if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(S.who.email)){ drawForm(err('Please enter a valid email address.'),'details'); return; }
+        if(S.who.phone.replace(/\D/g,'').length<9){ drawForm(err('Please enter your mobile number.'),'details'); return; }
+        var password=GTOKEN?'':(S.pw||'');
+        if(!GTOKEN&&password.length<8){ drawForm(err('Please choose a password of at least 8 characters.'),'details'); return; }
+        if(S.cleans.some(function(d){ return !d; })){ drawForm(err('Please pick a date for each clean, or remove the empty one.'),'extras'); return; }
+        if(charge>0&&!(agree&&agree.checked)){ drawForm(err('Please tick to confirm you’re happy to pay, or remove the extras you don’t want.'),'summary'); return; }
         var btn=body.querySelector('#gbSave'); btn.disabled=true; btn.textContent='Saving…';
         try{
           var r=await fetch(API+'/public/guestbook/'+encodeURIComponent(s.id),{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
             body:JSON.stringify(Object.assign({},S.who,{code:S.code||undefined,password:password||undefined,extras:S.picked,cleans:cleanDates(),notes:S.notes,agreeCharges:!!(agree&&agree.checked)}))});
           var d=await r.json();
-          if(r.status===409&&d.error==='email_taken'){ drawForm(err(esc(d.message)+' <a id="gbLogin">Sign in</a>')); var l=body.querySelector('#gbLogin'); if(l) l.onclick=function(){ AFTER_AUTH=function(){ openGuestbook(s.id); }; openAuth('login', S.who.email); }; return; }
+          if(r.status===409&&d.error==='email_taken'){ drawForm(err(esc(d.message)+' <a id="gbLogin">Sign in</a>'),'details'); var l=body.querySelector('#gbLogin'); if(l) l.onclick=function(){ AFTER_AUTH=function(){ openGuestbook(s.id); }; openAuth('login', S.who.email); }; return; }
           if(!r.ok){ drawForm(err(esc(d.message||'Could not save. Please try again.'))); return; }
           if(d.token) saveSession(d.token, d.account);
           drawDone(d);
