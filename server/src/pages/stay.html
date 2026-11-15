@@ -131,6 +131,8 @@
   .gb-pay .pay-opt span{ display:flex; flex-direction:column; }
   .gb-pay .pay-opt small{ color:var(--muted); font-size:12px; }
   .gb-pay .pay-opt.on{ border-color:var(--green); background:#f3faf5; }
+  .cta-btn.gb-close{ background:#eef1f4; color:var(--ink); }
+  .cta-btn.gb-close:hover{ background:#e2e6ea; }
   .gb-agree{ background:#fffaf0; border:1px solid #f3dfb3; border-radius:10px; padding:10px 12px; }
   .trip-gb{ background:#eef6f0; color:var(--green-d); border:1px solid #cfe6d6; margin-top:8px; margin-right:6px; }
   .trip-gb:hover{ background:#e2f0e6; }
@@ -1663,9 +1665,9 @@
 
     function err(m){ return '<div class="msg err">'+m+'</div>'; }
     var PAY_OPTS={
-      airbnb:{ title:'Payment request through Airbnb', sub:'We’ll send it to you in the Airbnb app.' },
-      card:{ title:'Card', sub:'Pay now on Paygate’s secure page.' },
-      eft:{ title:'EFT (bank transfer)', sub:'We’ll show our bank details when you save.' },
+      airbnb:{ title:'Payment request through Airbnb', sub:'We’ll send you a request in the Airbnb app.' },
+      card:{ title:'Card', sub:'Pay now on Paygate’s secure card page.' },
+      eft:{ title:'EFT (bank transfer)', sub:'We’ll give you our bank details and a reference.' },
     };
     // Bank details and the reference, for paying extras by EFT.
     function eftBox(d){
@@ -1734,7 +1736,7 @@
         var price=x.cents?rand(x.cents):(x.key==='hairDryer'?'Free':'Price confirmed by your host');
         return '<label class="gb-extra'+(on?' on':'')+'"><input type="checkbox" data-x="'+x.key+'"'+(on?' checked':'')+'><span>'+esc(x.label)+'</span><small>'+esc(price)+'</small></label>';
       }).join('');
-      var TABS=[['details','1 · Details'],['extras','2 · Extras'],['summary','3 · Summary']];
+      var TABS=[['details','1 · Details'],['extras','2 · Personalised booking'],['summary','3 · Summary']];
       body.innerHTML='<div class="gb-chosen">📅 '+esc(s.label)+(s.place?' · '+esc(s.place):'')+' <a id="gbChange">Change</a></div>'+
         '<div class="gb-tabs" role="tablist">'+TABS.map(function(t){ return '<button type="button" role="tab" data-tab="'+t[0]+'">'+t[1]+'</button>'; }).join('')+'</div>'+
         (msg||'')+
@@ -1745,7 +1747,7 @@
             '<div class="two"><input id="gbEmail" type="email" placeholder="Email" autocomplete="email" value="'+esc(S.who.email)+'"><input id="gbPhone" type="tel" placeholder="Mobile (WhatsApp)" autocomplete="tel" value="'+esc(S.who.phone)+'"></div>'+
             (GTOKEN?'':'<input id="gbPass" type="password" placeholder="Create a password (8+ characters)" autocomplete="new-password" value="'+esc(S.pw||'')+'"><p class="note small">This sets up your free SimonStays account, where you’ll see your stay and can message us.</p>')+
           '</div>'+
-          '<button type="button" class="cta-btn" data-next="extras">Next: extras →</button>'+
+          '<button type="button" class="cta-btn" id="gbDetailsNext">Next: personalised booking →</button>'+
         '</div>'+
         // 2 · Extras
         '<div class="gb-pane" data-pane="extras">'+
@@ -1794,11 +1796,10 @@
             (t>0?'<div class="gb-bill-note">Paid separately from your stay.</div>':'')+
           '</div>'+
           (S.notes&&S.notes.trim()?'<div class="gb-sum-notes"><b>Special instructions</b>'+esc(S.notes.trim())+'</div>':'')+
-          (t>0?('<h3 class="sec">How would you like to pay?</h3><div class="pay-opts gb-pay">'+methods.map(function(m){ var o=PAY_OPTS[m]; return '<label class="pay-opt'+(S.payMethod===m?' on':'')+'"><input type="radio" name="gbPay" value="'+m+'"'+(S.payMethod===m?' checked':'')+'><span><b>'+o.title+'</b><small>'+o.sub+'</small></span></label>'; }).join('')+'</div>'+
-            '<label class="tnc gb-agree"><input type="checkbox" id="gbAgree"'+(S.agree?' checked':'')+'> <span>I’m happy to pay <b>'+rand(t)+'</b> for these extras.</span></label>'):'');
-        var a=box.querySelector('#gbAgree'); if(a) a.onchange=function(){ S.agree=a.checked; };
+          (t>0?('<h3 class="sec">How would you like to pay?</h3><div class="pay-opts gb-pay">'+methods.map(function(m){ var o=PAY_OPTS[m]; return '<label class="pay-opt'+(S.payMethod===m?' on':'')+'"><input type="radio" name="gbPay" value="'+m+'"'+(S.payMethod===m?' checked':'')+'><span><b>'+o.title+'</b><small>'+o.sub+'</small></span></label>'; }).join('')+'</div>'):'');
         box.querySelectorAll('input[name=gbPay]').forEach(function(r){ r.onchange=function(){ S.payMethod=r.value; drawSummary(); }; });
-        var sv=body.querySelector('#gbSave'); if(sv) sv.textContent=t>0&&S.payMethod==='card'?'Save and pay '+rand(t)+' by card':'Save my guestbook';
+        var sv=body.querySelector('#gbSave');
+        if(sv) sv.textContent=!t?'Save my guestbook':({ card:'Pay '+rand(t)+' by card', eft:'Pay '+rand(t)+' by EFT', airbnb:'Confirm: send me an Airbnb request' }[S.payMethod]||'Choose how to pay');
       }
       // Keep S in step with the inputs, so the summary and a redraw show the latest.
       function capture(){
@@ -1807,7 +1808,36 @@
         var pw=body.querySelector('#gbPass'); if(pw) S.pw=pw.value;
       }
 
-      body.querySelectorAll('.gb-tabs button').forEach(function(b){ b.onclick=function(){ capture(); openTab(b.getAttribute('data-tab')); }; });
+      // Check the details, then save them (and make the account) before moving on.
+      async function saveDetails(){
+        capture();
+        if(!S.who.firstName||!S.who.surname) return 'Please enter your first name and surname.';
+        if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(S.who.email)) return 'Please enter a valid email address.';
+        if(S.who.phone.replace(/\D/g,'').length<9) return 'Please enter your mobile number.';
+        if(!GTOKEN&&(S.pw||'').length<8) return 'Please choose a password of at least 8 characters.';
+        try{
+          var r=await fetch(API+'/public/guestbook/'+encodeURIComponent(s.id)+'/details',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
+            body:JSON.stringify(Object.assign({},S.who,{code:S.code||undefined,password:GTOKEN?undefined:S.pw}))});
+          var d=await r.json();
+          if(r.status===409&&d.error==='email_taken') return { html:esc(d.message)+' <a id="gbLogin">Sign in</a>' };
+          if(!r.ok) return d.message||'Could not save your details. Please try again.';
+          if(d.token){ saveSession(d.token, d.account); S.pw=''; }
+          return null;
+        }catch(e){ return 'Could not save your details right now. Please try again.'; }
+      }
+      async function leaveDetails(to){
+        var btn=body.querySelector('#gbDetailsNext'); if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+        var problem=await saveDetails();
+        if(problem){
+          drawForm(err(problem.html||esc(problem)),'details');
+          var l=body.querySelector('#gbLogin'); if(l) l.onclick=function(){ AFTER_AUTH=function(){ openGuestbook(s.id); }; openAuth('login', S.who.email); };
+          return;
+        }
+        // Signed in now: redraw without the password box, on the next tab.
+        drawForm(null,to);
+      }
+      body.querySelectorAll('.gb-tabs button').forEach(function(b){ b.onclick=function(){ var to=b.getAttribute('data-tab'); if(S.tab==='details'&&to!=='details'){ leaveDetails(to); return; } capture(); openTab(to); }; });
+      var dn=body.querySelector('#gbDetailsNext'); if(dn) dn.onclick=function(){ leaveDetails('extras'); };
       body.querySelectorAll('[data-next]').forEach(function(b){ b.onclick=function(){ capture(); openTab(b.getAttribute('data-next')); body.querySelector('.gb-tabs').scrollIntoView({behavior:'smooth',block:'nearest'}); }; });
       body.querySelectorAll('[data-x]').forEach(function(c){ c.onchange=function(){ c.parentNode.classList.toggle('on',c.checked); }; });
       var addC=body.querySelector('#gbAddClean'); if(addC) addC.onclick=function(){ S.cleans.push(''); drawCleans(); var ins=body.querySelectorAll('[data-c]'); if(ins.length) ins[ins.length-1].focus(); };
@@ -1818,7 +1848,7 @@
 
       async function save(){
         capture();
-        var charge=total(), agree=body.querySelector('#gbAgree');
+        var charge=total();
         if(!S.who.firstName||!S.who.surname){ drawForm(err('Please enter your first name and surname.'),'details'); return; }
         if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(S.who.email)){ drawForm(err('Please enter a valid email address.'),'details'); return; }
         if(S.who.phone.replace(/\D/g,'').length<9){ drawForm(err('Please enter your mobile number.'),'details'); return; }
@@ -1826,11 +1856,10 @@
         if(!GTOKEN&&password.length<8){ drawForm(err('Please choose a password of at least 8 characters.'),'details'); return; }
         if(S.cleans.some(function(d){ return !d; })){ drawForm(err('Please pick a date for each clean, or remove the empty one.'),'extras'); return; }
         if(charge>0&&!S.payMethod){ drawForm(err('Please choose how you’d like to pay.'),'summary'); return; }
-        if(charge>0&&!(agree&&agree.checked)){ drawForm(err('Please tick to confirm you’re happy to pay, or remove the extras you don’t want.'),'summary'); return; }
         var btn=body.querySelector('#gbSave'); btn.disabled=true; btn.textContent='Saving…';
         try{
           var r=await fetch(API+'/public/guestbook/'+encodeURIComponent(s.id),{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
-            body:JSON.stringify(Object.assign({},S.who,{code:S.code||undefined,password:password||undefined,extras:S.picked,cleans:cleanDates(),notes:S.notes,agreeCharges:!!(agree&&agree.checked),payMethod:charge>0?S.payMethod:undefined}))});
+            body:JSON.stringify(Object.assign({},S.who,{code:S.code||undefined,password:password||undefined,extras:S.picked,cleans:cleanDates(),notes:S.notes,payMethod:charge>0?S.payMethod:undefined}))});
           var d=await r.json();
           if(r.status===409&&d.error==='email_taken'){ drawForm(err(esc(d.message)+' <a id="gbLogin">Sign in</a>'),'details'); var l=body.querySelector('#gbLogin'); if(l) l.onclick=function(){ AFTER_AUTH=function(){ openGuestbook(s.id); }; openAuth('login', S.who.email); }; return; }
           if(!r.ok){ drawForm(err(esc(d.message||'Could not save. Please try again.'))); return; }
@@ -1846,12 +1875,14 @@
       body.innerHTML='<div class="done"><div class="big">✅</div><h3>Thank you, '+esc(S.who.firstName)+'!</h3>'+
         '<p class="note">Your details are saved and your host has been told.</p>'+
         (d.payError?'<div class="msg err">'+esc(d.payError)+'</div>':'')+
-        (d.chargeCents&&d.payMethod==='airbnb'?'<p class="note">We’ll send you a payment request for <b>'+rand(d.chargeCents)+'</b> through Airbnb.</p>':'')+
+        (d.chargeCents&&d.payMethod==='airbnb'?'<p class="note">We’ll send you a payment request for <b>'+rand(d.chargeCents)+'</b> through Airbnb. Thank you!</p>':'')+
         (d.chargeCents&&d.payMethod==='eft'?eftBox(d):'')+
         (d.token?'<p class="note">Your SimonStays account is ready. We’ve emailed you a link to confirm your address.</p>':'')+
         (d.verified?'<button class="cta-btn" id="gbTrips">See my trip</button>':'<p class="note">Your host will add this stay to your account shortly.</p>')+
+        '<button class="cta-btn gb-close" id="gbClose">Close</button>'+
         '</div>';
       var t=body.querySelector('#gbTrips'); if(t) t.onclick=openTrips;
+      body.querySelector('#gbClose').onclick=function(){ host.innerHTML=''; };
     }
 
     // Back from Paygate after paying for extras by card.

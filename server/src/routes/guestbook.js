@@ -181,9 +181,76 @@ const payRef = (b) => b.ref || b.resCode || b.id.slice(0, 8).toUpperCase();
 // PAYMENT_BASE_URL overrides it — Paygate refuses non-public addresses like localhost.
 const siteBase = (req) => (process.env.PAYMENT_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
 
+// Does the phone the guest typed match the booking's? A direct booking's full
+// number, or the last 4 digits Airbnb sent us. A match links their account.
+async function phoneMatches(b, phone) {
+  const hostId = b.hostId || b.unit.property.hostId;
+  const lookup = b.resCode ? await prisma.guestLookup.findUnique({ where: { hostId_resCode: { hostId, resCode: b.resCode } }, select: { phoneLast4: true } }) : null;
+  const typed = digits(phone);
+  return !!((lookup && lookup.phoneLast4 && typed.endsWith(lookup.phoneLast4))
+    || (digits(b.guestPhone).length >= 9 && typed.slice(-9) === digits(b.guestPhone).slice(-9)));
+}
+
+// The host's contact book: update the guest if they're known, else add them.
+async function saveToContactBook(hostId, name, email, phone) {
+  const typed = digits(phone);
+  const known = await prisma.guest.findFirst({ where: { hostId, OR: [{ email: { equals: email, mode: 'insensitive' } }, ...(typed.length >= 9 ? [{ phone: { contains: typed.slice(-9) } }] : [])] } });
+  if (known) await prisma.guest.update({ where: { id: known.id }, data: { name, email, phone } });
+  else await prisma.guest.create({ data: { hostId, name, email, phone } });
+}
+
+// POST /public/guestbook/:id/details — the Details tab, saved as soon as the
+// guest presses Next: their name and contact on the booking, their account
+// (made here if they're not signed in) and the host's contact book. The host
+// is told once the whole guestbook is saved.
+// { firstName, surname, email, phone, password?, code? }
+router.post('/:id/details', async (req, res, next) => {
+  try {
+    if (overLimit(`save:${req.ip}`, 15)) return tooMany(res);
+    const body = req.body || {};
+    const firstName = clean(body.firstName, 60), surname = clean(body.surname, 60);
+    const email = clean(body.email, 120).toLowerCase(), phone = clean(body.phone, 30);
+    if (!firstName || !surname) return res.status(400).json({ error: 'name_required', message: 'Please enter your first name and surname.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'email_required', message: 'Please enter a valid email address.' });
+    if (digits(phone).length < 9) return res.status(400).json({ error: 'phone_required', message: 'Please enter your mobile number, with the country code if outside South Africa.' });
+
+    const b = await prisma.booking.findFirst({ where: { id: String(req.params.id), ...openWhere() }, include: BOOKING_INCLUDE });
+    if (!b) return res.status(404).json({ error: 'not_found', message: 'We couldn’t find that stay. It may have ended or been cancelled.' });
+    let acct = req.guestId ? await prisma.guestAccount.findUnique({ where: { id: req.guestId } }) : null;
+    const ownTrip = !!(acct && (b.guestAccountId === acct.id || (acct.emailVerifiedAt && String(b.guestEmail || '').toLowerCase() === acct.email)));
+    if (!ownTrip && !codeMatches(b, cleanCode(body.code)) && !nameMatches(b, firstName, surname)) return res.status(403).json({ error: 'name_mismatch', message: 'That name doesn’t match the booking. Please use the name the stay was booked under.' });
+    if (lockedTo(b, acct)) return res.status(409).json({ error: 'already_done', message: 'This stay’s guestbook is already filled in. Sign in with the account that did it to change it.' });
+
+    let token = null;
+    if (!acct) {
+      const password = String(body.password || '');
+      if (password.length < 8) return res.status(400).json({ error: 'password_too_short', message: 'Please choose a password of at least 8 characters.' });
+      if (await prisma.guestAccount.findUnique({ where: { email } })) return res.status(409).json({ error: 'email_taken', message: 'You already have a SimonStays account with this email. Please sign in to continue.' });
+      acct = await prisma.guestAccount.create({ data: { email, passwordHash: await bcrypt.hash(password, 10), name: `${firstName} ${surname}`, phone } });
+      token = signGuest(acct);
+      require('./guestAuth').sendConfirmation(acct).catch(() => {});
+    } else if (!acct.name || !acct.phone) {
+      acct = await prisma.guestAccount.update({ where: { id: acct.id }, data: { name: acct.name || `${firstName} ${surname}`, phone: acct.phone || phone } });
+    }
+
+    const verified = ownTrip || await phoneMatches(b, phone);
+    await prisma.booking.update({
+      where: { id: b.id },
+      data: {
+        guestName: `${firstName} ${surname}`, guestEmail: b.guestEmail || email, guestPhone: phone,
+        guestbookAt: new Date(), guestbookVerified: verified, guestbookAccountId: acct.id,
+        ...(verified && !b.guestAccountId ? { guestAccountId: acct.id } : {}),
+      },
+    });
+    await saveToContactBook(b.hostId || b.unit.property.hostId, `${firstName} ${surname}`, email, phone);
+    res.json({ ok: true, verified, token, account: token ? { id: acct.id, email: acct.email, name: acct.name, phone: acct.phone, emailVerified: false } : undefined });
+  } catch (e) { next(e); }
+});
+
 // POST /public/guestbook/:id — save the guestbook for one stay.
 // { firstName, surname, email, phone, password?, code?, extras: {earlyCheckIn,…},
-//   cleans: ['YYYY-MM-DD'], notes, agreeCharges, payMethod: 'airbnb'|'card'|'eft' }
+//   cleans: ['YYYY-MM-DD'], notes, payMethod: 'airbnb'|'card'|'eft' }
+// Choosing how to pay is the guest's agreement to pay the total shown.
 router.post('/:id', async (req, res, next) => {
   try {
     if (overLimit(`save:${req.ip}`, 15)) return tooMany(res);
@@ -219,7 +286,6 @@ router.post('/:id', async (req, res, next) => {
     const chargedCleans = items.filter((l) => l.date).length;
     const payMethod = String(body.payMethod || '');
     if (charge > 0) {
-      if (!body.agreeCharges) return res.status(400).json({ error: 'agree_charges', message: 'Please confirm you’re happy to pay for the extras.' });
       if (!payMethodsFor(b).includes(payMethod)) return res.status(400).json({ error: 'pay_method', message: 'Please choose how you’d like to pay.' });
     }
 
@@ -236,14 +302,10 @@ router.post('/:id', async (req, res, next) => {
       acct = await prisma.guestAccount.update({ where: { id: acct.id }, data: { name: acct.name || `${firstName} ${surname}`, phone: acct.phone || phone } });
     }
 
-    // Verified: their own trip already, or the phone matches the booking's
-    // (a direct booking's full number, or the last 4 digits Airbnb sent us).
+    // Verified: their own trip already (or linked when the details were saved),
+    // or the phone matches the booking's.
     const hostId = b.hostId || b.unit.property.hostId;
-    const lookup = b.resCode ? await prisma.guestLookup.findUnique({ where: { hostId_resCode: { hostId, resCode: b.resCode } }, select: { phoneLast4: true } }) : null;
-    const typed = digits(phone);
-    const phoneOk = !!((lookup && lookup.phoneLast4 && typed.endsWith(lookup.phoneLast4))
-      || (digits(b.guestPhone).length >= 9 && typed.slice(-9) === digits(b.guestPhone).slice(-9)));
-    const verified = ownTrip || phoneOk;
+    const verified = ownTrip || b.guestAccountId === acct.id || await phoneMatches(b, phone);
 
     // Extras the guest unticked come off, unless the host added them or they're paid.
     const flag = (key) => haveExtra(b, key) || !!want[key];
@@ -266,10 +328,7 @@ router.post('/:id', async (req, res, next) => {
       },
     });
 
-    // The host's contact book: update the guest if they're known, else add them.
-    const known = await prisma.guest.findFirst({ where: { hostId, OR: [{ email: { equals: email, mode: 'insensitive' } }, ...(typed.length >= 9 ? [{ phone: { contains: typed.slice(-9) } }] : [])] } });
-    if (known) await prisma.guest.update({ where: { id: known.id }, data: { name: `${firstName} ${surname}`, email, phone } });
-    else await prisma.guest.create({ data: { hostId, name: `${firstName} ${surname}`, email, phone } });
+    await saveToContactBook(hostId, `${firstName} ${surname}`, email, phone);
 
     // Paying: start the card payment, or hand over the bank details.
     let payment = null, eft = null, payError = null;
