@@ -53,18 +53,42 @@ function adjustmentFor(rule, occupancyPct, nightISO, today) {
   return down > 0 ? -down : 0;
 }
 
-// Occupancy % per night for a bubble's units, between checkIn and checkOut.
+// Floating bookings (sold, not yet on a unit) that belong to this bubble: ones
+// tagged with a pricing group that has units in it, or untagged ones from a host
+// whose bubble units are all in this bubble. Each takes one unit that night.
+async function floatingFor(units, range) {
+  const hosts = [...new Set(units.map((u) => u.property.hostId))];
+  const groups = [...new Set(units.map((u) => u.pricingGroupId).filter(Boolean))];
+  if (!hosts.length) return [];
+  const rows = await prisma.booking.findMany({
+    where: { unitId: null, status: 'floating', hostId: { in: hosts }, ...range, OR: [{ pricingGroupId: { in: groups } }, { pricingGroupId: null }] },
+    select: { hostId: true, pricingGroupId: true, checkIn: true, checkOut: true },
+  });
+  if (!rows.some((r) => !r.pricingGroupId)) return rows;
+  // Untagged: only for a host whose bubble units are all in this one bubble.
+  const inBubbles = await prisma.bubbleMember.groupBy({ by: ['hostId', 'bubbleId'], where: { hostId: { in: hosts } } });
+  const oneBubble = new Set(hosts.filter((h) => inBubbles.filter((m) => m.hostId === h).length === 1));
+  return rows.filter((r) => r.pricingGroupId || oneBubble.has(r.hostId));
+}
+
+// Occupancy % per night for a bubble's units, between checkIn and checkOut:
+// units with a confirmed booking, plus the bubble's floating bookings, capped
+// at every unit full.
 async function occupancyByNight(unitIds, checkIn, checkOut) {
   const nights = eachNight(checkIn, checkOut);
   if (!unitIds.length || !nights.length) return {};
-  const bookings = await prisma.booking.findMany({
-    where: { unitId: { in: unitIds }, status: 'confirmed', checkIn: { lt: new Date(`${checkOut}T23:59:59Z`) }, checkOut: { gt: new Date(`${checkIn}T00:00:00Z`) } },
-    select: { unitId: true, checkIn: true, checkOut: true },
-  });
+  const range = { checkIn: { lt: new Date(`${checkOut}T23:59:59Z`) }, checkOut: { gt: new Date(`${checkIn}T00:00:00Z`) } };
+  const [bookings, units] = await Promise.all([
+    prisma.booking.findMany({ where: { unitId: { in: unitIds }, status: 'confirmed', ...range }, select: { unitId: true, checkIn: true, checkOut: true } }),
+    prisma.unit.findMany({ where: { id: { in: unitIds } }, select: { pricingGroupId: true, property: { select: { hostId: true } } } }),
+  ]);
+  const floating = await floatingFor(units, range);
+  const covers = (b, n) => ymd(b.checkIn) <= n && ymd(b.checkOut) > n;
   const out = {};
   for (const n of nights) {
-    const busy = new Set(bookings.filter((b) => ymd(b.checkIn) <= n && ymd(b.checkOut) > n).map((b) => b.unitId));
-    out[n] = Math.round((busy.size / unitIds.length) * 1000) / 10;
+    const busy = new Set(bookings.filter((b) => covers(b, n)).map((b) => b.unitId)).size;
+    const extra = floating.filter((b) => covers(b, n)).length;
+    out[n] = Math.round((Math.min(unitIds.length, busy + extra) / unitIds.length) * 1000) / 10;
   }
   return out;
 }
