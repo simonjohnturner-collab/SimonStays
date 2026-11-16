@@ -105,7 +105,8 @@ router.get('/geocode', async (req, res) => {
 
 // GET /public/properties?checkIn=&checkOut=&guests= — browse list.
 // With dates, only properties with a free unit for that stay are returned, and
-// stayFromCents is the cheapest available total for those dates.
+// stayFromCents is the cheapest available total for those dates, without the
+// refundable breakage deposit (shown at checkout), so the price doesn't look inflated.
 router.get('/properties', async (req, res, next) => {
   try {
     const { checkIn, checkOut, guests } = req.query;
@@ -132,7 +133,7 @@ router.get('/properties', async (req, res, next) => {
           anyFree = true;
           if (u.pricingGroup) {
             const q = quote(u.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1 });
-            if (q && (stayFromCents == null || q.totalCents < stayFromCents)) stayFromCents = q.totalCents;
+            if (q && (stayFromCents == null || q.rentalCents < stayFromCents)) stayFromCents = q.rentalCents;
           }
         }
         if (!anyFree) continue; // no free room for these dates → hide it
@@ -231,7 +232,7 @@ router.get('/units', async (req, res, next) => {
       if (filtering) {
         const av = await checkAvailability(u.id, iso(checkIn), iso(checkOut), null);
         if (!av.available) continue;
-        if (u.pricingGroup) { const q = quote(u.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1 }); if (q) stayFromCents = q.totalCents; }
+        if (u.pricingGroup) { const q = quote(u.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1 }); if (q) stayFromCents = q.rentalCents; } // without the breakage deposit
       }
       const cover = u.photos[0] || p.photos[0] || null;
       out.push({
