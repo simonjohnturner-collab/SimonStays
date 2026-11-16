@@ -82,16 +82,21 @@ function Bubble({ b, units, busy, run }) {
         {b.createdByMe && <button className="mini danger" disabled={busy} onClick={() => { if (window.confirm(`Delete the bubble “${b.name}”? Your units leave it and your rules for it are removed.`)) run(() => api.deleteBubble(b.id), 'Bubble deleted.'); }}>Delete</button>}
       </div>
 
-      <div className="bb-strip" title="How full the bubble is each night, and your price change">
+      <div className="bb-strip">
         {b.preview.map((d) => (
-          <div key={d.date} className={`bb-day${d.adjustPct > 0 ? ' up' : d.adjustPct < 0 ? ' down' : ''}`}>
+          <div key={d.date} className={`bb-day${d.adjustPct > 0 ? ' up' : d.adjustPct < 0 ? ' down' : ''}`}
+            title={`${dayLabel(d.date)}: ${d.booked} on units + ${d.floating} floating = ${Math.min(d.units, d.booked + d.floating)} of ${d.units} (${d.occupancyPct}%)${d.skipped ? `. ${d.skipped} untagged floating not counted` : ''}`}>
             <small>{dayLabel(d.date)}</small>
             <b>{Math.round(d.occupancyPct)}%</b>
+            <em>{Math.min(d.units, d.booked + d.floating)}/{d.units}{d.skipped ? ' ⚠' : ''}</em>
             <span>{d.adjustPct ? `${d.adjustPct > 0 ? '+' : ''}${d.adjustPct}%` : '·'}</span>
           </div>
         ))}
       </div>
-      <p className="muted small bb-strip-note">Next 14 nights: how full the bubble is, and your price change{b.myUnits.length ? '' : ' (once you add units)'}.</p>
+      <p className="muted small bb-strip-note">Next 14 nights: how full the bubble is (units booked, including floating bookings), and your price change{b.myUnits.length ? '' : ' (once you add units)'}. Hover a night for the details.</p>
+      {b.preview.some((d) => d.skipped) && (
+        <div className="msg-warn">⚠ Some floating bookings aren’t counted ({b.preview.filter((d) => d.skipped).map((d) => dayLabel(d.date)).join(', ')}). They have no group, and you have units in more than one bubble, so we can’t tell which bubble they belong to. Open each one and set <b>Show in group</b> to the group these units are in, or allocate it to a unit, and it will count.</div>
+      )}
 
       <h4>Your units in this bubble</h4>
       <div className="bb-units">

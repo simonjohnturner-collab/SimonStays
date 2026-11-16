@@ -6,7 +6,7 @@
 const express = require('express');
 const prisma = require('../lib/prisma');
 const { authHost } = require('../middleware/auth');
-const { occupancyByNight, adjustmentFor, cleanRules, todaySAST, eachNight } = require('../utils/bubbles');
+const { occupancyDetail, adjustmentFor, cleanRules, todaySAST, eachNight } = require('../utils/bubbles');
 
 const router = express.Router();
 router.use(authHost);
@@ -30,7 +30,7 @@ router.get('/', async (req, res, next) => {
     for (const b of bubbles) {
       const mine = b.members.filter((m) => m.hostId === hostId);
       const rule = b.rules[0] || null;
-      const occ = await occupancyByNight(b.members.map((m) => m.unitId), from, to);
+      const occ = await occupancyDetail(b.members.map((m) => m.unitId), from, to);
       out.push({
         id: b.id, name: b.name, area: b.area, description: b.description,
         createdByMe: b.createdByHostId === hostId,
@@ -39,7 +39,8 @@ router.get('/', async (req, res, next) => {
         otherUnits: b.members.length - mine.length,
         myUnits: mine.map((m) => ({ unitId: m.unitId, label: unitLabel(m.unit) })),
         rule: rule ? { active: rule.active, surge: rule.surge, drops: rule.drops } : null,
-        preview: eachNight(from, to).map((d) => ({ date: d, occupancyPct: occ[d] || 0, adjustPct: rule ? adjustmentFor(rule, occ[d] || 0, d, from) : 0 })),
+        preview: eachNight(from, to).map((d) => { const o = occ[d] || { pct: 0, booked: 0, floating: 0, skipped: 0, units: b.members.length };
+          return { date: d, occupancyPct: o.pct, booked: o.booked, floating: o.floating, skipped: o.skipped, units: o.units, adjustPct: rule ? adjustmentFor(rule, o.pct, d, from) : 0 }; }),
       });
     }
     res.json({

@@ -64,17 +64,25 @@ async function floatingFor(units, range) {
     where: { unitId: null, status: 'floating', hostId: { in: hosts }, ...range, OR: [{ pricingGroupId: { in: groups } }, { pricingGroupId: null }] },
     select: { hostId: true, pricingGroupId: true, checkIn: true, checkOut: true },
   });
-  if (!rows.some((r) => !r.pricingGroupId)) return rows;
+  if (!rows.some((r) => !r.pricingGroupId)) return { counted: rows, skipped: [] };
   // Untagged: only for a host whose bubble units are all in this one bubble.
   const inBubbles = await prisma.bubbleMember.groupBy({ by: ['hostId', 'bubbleId'], where: { hostId: { in: hosts } } });
   const oneBubble = new Set(hosts.filter((h) => inBubbles.filter((m) => m.hostId === h).length === 1));
-  return rows.filter((r) => r.pricingGroupId || oneBubble.has(r.hostId));
+  const ok = (r) => r.pricingGroupId || oneBubble.has(r.hostId);
+  return { counted: rows.filter(ok), skipped: rows.filter((r) => !ok(r)) };
 }
 
 // Occupancy % per night for a bubble's units, between checkIn and checkOut:
 // units with a confirmed booking, plus the bubble's floating bookings, capped
 // at every unit full.
 async function occupancyByNight(unitIds, checkIn, checkOut) {
+  const detail = await occupancyDetail(unitIds, checkIn, checkOut);
+  return Object.fromEntries(Object.entries(detail).map(([n, d]) => [n, d.pct]));
+}
+
+// The same, with each night's make-up: units booked, floating bookings counted,
+// and untagged floating bookings skipped (shown to the host so they can tag them).
+async function occupancyDetail(unitIds, checkIn, checkOut) {
   const nights = eachNight(checkIn, checkOut);
   if (!unitIds.length || !nights.length) return {};
   const range = { checkIn: { lt: new Date(`${checkOut}T23:59:59Z`) }, checkOut: { gt: new Date(`${checkIn}T00:00:00Z`) } };
@@ -86,9 +94,11 @@ async function occupancyByNight(unitIds, checkIn, checkOut) {
   const covers = (b, n) => ymd(b.checkIn) <= n && ymd(b.checkOut) > n;
   const out = {};
   for (const n of nights) {
-    const busy = new Set(bookings.filter((b) => covers(b, n)).map((b) => b.unitId)).size;
-    const extra = floating.filter((b) => covers(b, n)).length;
-    out[n] = Math.round((Math.min(unitIds.length, busy + extra) / unitIds.length) * 1000) / 10;
+    const booked = new Set(bookings.filter((b) => covers(b, n)).map((b) => b.unitId)).size;
+    const extra = floating.counted.filter((b) => covers(b, n)).length;
+    const skipped = floating.skipped.filter((b) => covers(b, n)).length;
+    const occupied = Math.min(unitIds.length, booked + extra);
+    out[n] = { pct: Math.round((occupied / unitIds.length) * 1000) / 10, units: unitIds.length, booked, floating: extra, skipped };
   }
   return out;
 }
@@ -112,4 +122,4 @@ async function bubbleAdjustments(unitId, checkIn, checkOut, { now = new Date() }
   return any ? { bubbleName: member.bubble.name, percents } : null;
 }
 
-module.exports = { bubbleAdjustments, occupancyByNight, adjustmentFor, cleanRules, todaySAST, eachNight, MAX_INCREASE, MAX_DECREASE };
+module.exports = { bubbleAdjustments, occupancyByNight, occupancyDetail, adjustmentFor, cleanRules, todaySAST, eachNight, MAX_INCREASE, MAX_DECREASE };
