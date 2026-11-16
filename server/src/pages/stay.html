@@ -209,6 +209,12 @@
   .q-surge span:last-child{ color:#b45309; }
   .q-deal{ color:var(--green-d); font-weight:600; }
   .qrow.q-night{ padding:0 0 2px 22px; font-size:13px; color:var(--muted); font-weight:400; }
+  .q-more > summary{ list-style:none; cursor:pointer; }
+  .q-more > summary::-webkit-details-marker{ display:none; }
+  .q-toggle{ font-size:12px; font-weight:600; color:var(--muted); text-decoration:underline; text-underline-offset:2px; margin-left:4px; }
+  .q-toggle::before{ content:'▸ '; text-decoration:none; display:inline-block; }
+  .q-more[open] .q-toggle::before{ content:'▾ '; }
+  .q-more{ margin:0; }
   .deal-tag{ display:inline-block; margin-left:6px; font-size:12px; font-weight:700; color:var(--green-d); background:#e8f6ec; border-radius:999px; padding:2px 8px; }
   .date-bar{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:12px 0 2px; padding:12px 14px; border:1px solid #cfe6d6; background:#f3faf5; border-radius:12px; font-size:14px; }
   .date-bar.taken{ display:block; border-color:#f0d9a8; background:#fff7e6; color:#8a5a00; }
@@ -937,14 +943,17 @@
       return { day:new Date(n.date+'T12:00:00Z').toLocaleDateString('en-ZA',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}).replace(',',''), pct:n.bubblePercent, cents:Math.abs(n.cents-n.beforeBubbleCents) };
     });
   }
-  function bubbleRows(q, up){
-    return bubbleNights(q, up).map(function(x){ return '<div class="qrow q-night"><span>'+esc(x.day)+' · '+(up?'+'+x.pct+'%':(-x.pct)+'% off')+'</span><span>'+(up?'+':'−')+rand(x.cents)+'</span></div>'; }).join('');
+  // One line for the total change, with the nights behind it folded away (tap to open).
+  function bubbleBlock(q, up){
+    var nights=bubbleNights(q, up), total=up?q.bubbleSurgeCents:q.bubbleDropCents;
+    return '<details class="q-more '+(up?'q-surge':'q-deal')+'"><summary class="qrow"><span>'+(up?'📈 Peak-demand pricing':'🏷️ Last-minute deal')+' <small class="q-toggle">by night</small></span><span>'+(up?'+':'−')+rand(total)+'</span></summary>'+
+      nights.map(function(x){ return '<div class="qrow q-night"><span>'+esc(x.day)+' · '+(up?'+'+x.pct+'%':(-x.pct)+'% off')+'</span><span>'+(up?'+':'−')+rand(x.cents)+'</span></div>'; }).join('')+'</details>';
   }
   function breakdownLines(q){
     var surge=q.bubbleSurgeCents||0, drop=q.bubbleDropCents||0;
     var lines='<div class="qrow"><span>'+q.nights+' night'+(q.nights>1?'s':'')+' @ '+rand(q.avgNightlyCents)+'</span><span>'+rand(q.accommodationCents-surge+drop)+'</span></div>';
-    if(surge) lines+='<div class="qrow q-surge"><span>📈 Peak-demand pricing</span><span>+'+rand(surge)+'</span></div>'+bubbleRows(q,true);
-    if(drop) lines+='<div class="qrow q-deal"><span>🏷️ Last-minute deal</span><span>−'+rand(drop)+'</span></div>'+bubbleRows(q,false);
+    if(surge) lines+=bubbleBlock(q,true);
+    if(drop) lines+=bubbleBlock(q,false);
     if(q.discountCents) lines+='<div class="qrow"><span>'+q.discountPercent+'% length discount</span><span>−'+rand(q.discountCents)+'</span></div>';
     if(q.cleaningCents) lines+='<div class="qrow"><span>Cleaning fee</span><span>'+rand(q.cleaningCents)+'</span></div>';
     if(q.earlyCents) lines+='<div class="qrow"><span>Early check-in</span><span>'+rand(q.earlyCents)+'</span></div>';
@@ -1094,8 +1103,9 @@
     var rows='';
     var bs=q.bubbleSurgeCents||0, bd=q.bubbleDropCents||0;
     rows+='<tr><td>'+q.nights+' night'+(q.nights>1?'s':'')+' @ '+rand(q.avgNightlyCents)+'</td><td>'+rand(q.accommodationCents-bs+bd)+'</td></tr>';
-    if(bs) rows+='<tr><td>Peak-demand pricing ('+bubbleNights(q,true).map(function(x){ return x.day+' +'+x.pct+'%'; }).join(' · ')+')</td><td>'+rand(bs)+'</td></tr>';
-    if(bd) rows+='<tr><td>Last-minute deal ('+bubbleNights(q,false).map(function(x){ return x.day+' '+(-x.pct)+'% off'; }).join(' · ')+')</td><td>−'+rand(bd)+'</td></tr>';
+    var nb=function(up){ var n=bubbleNights(q,up).length; return n+' night'+(n===1?'':'s'); };
+    if(bs) rows+='<tr><td>Peak-demand pricing ('+nb(true)+')</td><td>'+rand(bs)+'</td></tr>';
+    if(bd) rows+='<tr><td>Last-minute deal ('+nb(false)+')</td><td>−'+rand(bd)+'</td></tr>';
     if(q.discountCents) rows+='<tr><td>'+q.discountPercent+'% length discount</td><td>−'+rand(q.discountCents)+'</td></tr>';
     if(q.cleaningCents) rows+='<tr><td>Cleaning fee</td><td>'+rand(q.cleaningCents)+'</td></tr>';
     if(q.earlyCents) rows+='<tr><td>Early check-in</td><td>'+rand(q.earlyCents)+'</td></tr>';
