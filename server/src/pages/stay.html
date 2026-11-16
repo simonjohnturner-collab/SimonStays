@@ -207,6 +207,12 @@
   .q-surge span:last-child{ color:#b45309; }
   .q-deal{ color:var(--green-d); font-weight:600; }
   .deal-tag{ display:inline-block; margin-left:6px; font-size:12px; font-weight:700; color:var(--green-d); background:#e8f6ec; border-radius:999px; padding:2px 8px; }
+  .date-bar{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:12px 0 2px; padding:12px 14px; border:1px solid #cfe6d6; background:#f3faf5; border-radius:12px; font-size:14px; }
+  .date-bar.taken{ display:block; border-color:#f0d9a8; background:#fff7e6; color:#8a5a00; }
+  .date-bar-price{ margin-top:4px; font-size:16px; }
+  .date-bar-price small{ color:var(--muted); font-size:12px; }
+  .date-bar-go{ padding:10px 16px; font-weight:700; }
+  .surge-tag{ display:inline-block; margin-left:6px; font-size:12px; font-weight:700; color:#b45309; background:#fff1e6; border-radius:999px; padding:2px 8px; }
   .qrow{ display:flex; justify-content:space-between; padding:3px 0; }
   .qtot{ font-weight:800; font-size:18px; border-top:1px solid var(--line); margin-top:6px; padding-top:8px; }
   .frm{ display:grid; gap:8px; margin-top:12px; }
@@ -568,8 +574,15 @@
       var unit=(p.units||[]).find(function(x){return x.id===card.unitId;}) || (p.units||[])[0];
       if(unit) if(window.ssTrack) ssTrack('view_listing',{unitId:unit.id,propertyId:p.id,label:p.name+' · '+(unit.name||'')});
       STATE={ prop:p, unit:unit, month:startMonth(), booked:[], ciSel:null, coSel:null, quote:null };
+      // Dates already chosen in the search bar: start with them selected.
+      var sci=$('#ci').value, sco=$('#co').value;
+      if(sci&&sco&&sco>sci&&sci>=todayISO){ STATE.ciSel=sci; STATE.coSel=sco; var pm=sci.split('-'); STATE.month=new Date(+pm[0],+pm[1]-1,1); }
       renderDetail();
-      loadCal();
+      await loadCal();
+      if(STATE.ciSel&&STATE.coSel){
+        if(rangeHasBooked(STATE.ciSel,STATE.coSel)){ STATE.datesTaken={ci:STATE.ciSel,co:STATE.coSel}; STATE.ciSel=STATE.coSel=null; renderBookPanel(); renderDateBar(); }
+        else getQuote();
+      }
     }catch(e){ host.innerHTML=''; alert('Could not load this stay.'); }
   }
   // ---- Ask Simon: AI answers about this stay; unknowns go to the host ----
@@ -692,7 +705,7 @@
     var panes={ about:about, reviews:reviews, map:map, policy:policy };
 
     overlay.innerHTML='<div class="sheet"><div class="sheet-head"><h2>'+esc(p.name)+' · Unit '+esc(u.name||'')+'</h2><button class="x">&times;</button></div>'+
-      '<div class="sheet-body">'+gal+summary+
+      '<div class="sheet-body">'+gal+summary+'<div id="dateBar"></div>'+
       '<div class="d-tabs" role="tablist">'+tabs.map(function(t){ return '<button type="button" role="tab" data-tab="'+t[0]+'">'+esc(t[1])+'</button>'; }).join('')+'</div>'+
       tabs.map(function(t){ return '<div class="d-pane" data-pane="'+t[0]+'" hidden>'+panes[t[0]]+'</div>'; }).join('')+
       '<div class="ask-box" id="askBox"></div>'+
@@ -796,7 +809,7 @@
     if(!STATE.ciSel || (STATE.ciSel && STATE.coSel)){ STATE.ciSel=ds; STATE.coSel=null; STATE.quote=null; }
     else if(ds<=STATE.ciSel){ STATE.ciSel=ds; STATE.coSel=null; STATE.quote=null; }
     else if(rangeHasBooked(STATE.ciSel,ds)){ STATE.ciSel=ds; STATE.coSel=null; STATE.quote=null; }
-    else{ STATE.coSel=ds; getQuote(); }
+    else{ STATE.coSel=ds; STATE.datesTaken=null; getQuote(); }
     renderBookPanel();
   }
 
@@ -809,7 +822,23 @@
     renderSide();
   }
 
+  // Your dates and their price at the top of the stay, with a straight-to-booking
+  // button, so the calendar further down is only needed to change the dates.
+  function renderDateBar(){
+    var bar=$('#dateBar'); if(!bar) return;
+    var q=STATE.quote, fmt=function(d){ return new Date(d+'T12:00:00').toLocaleDateString('en-ZA',{weekday:'short',day:'numeric',month:'short'}); };
+    if(STATE.datesTaken&&!STATE.ciSel){ bar.innerHTML='<div class="date-bar taken">📅 '+fmt(STATE.datesTaken.ci)+' → '+fmt(STATE.datesTaken.co)+' isn’t available here. Pick other dates on the calendar below.</div>'; return; }
+    if(!STATE.ciSel||!STATE.coSel||!q){ bar.innerHTML=''; return; }
+    var deal=q.withoutBubble&&q.withoutBubble.rentalCents>q.rentalCents;
+    bar.innerHTML='<div class="date-bar"><div><b>📅 '+fmt(STATE.ciSel)+' → '+fmt(STATE.coSel)+'</b> <span class="muted">· '+q.nights+' night'+(q.nights===1?'':'s')+'</span>'+
+      '<div class="date-bar-price">'+(deal?'<s class="was">'+rand(q.withoutBubble.rentalCents)+'</s> ':'')+'<b>'+rand(q.rentalCents)+'</b> <small>total for your dates</small>'+
+      (deal?'<span class="deal-tag">🏷️ Last-minute deal</span>':'')+((q.bubbleSurgeCents||0)>0?'<span class="surge-tag">📈 High demand</span>':'')+'</div></div>'+
+      '<button class="date-bar-go" id="dateBarGo">Book these dates →</button></div>';
+    $('#dateBarGo').onclick=function(){ var c=$('#contBtn')||$('#reqBtn'); if(c){ c.click(); return; } var side=$('#side'); if(side) side.scrollIntoView({behavior:'smooth',block:'center'}); };
+  }
+
   function renderSide(){
+    renderDateBar();
     var side=$('#side'); if(!side) return;
     if(!STATE.ciSel||!STATE.coSel){ side.innerHTML='<p class="note">Click a check-in day, then a check-out day on the calendar.</p>'; return; }
     var q=STATE.quote;
@@ -899,7 +928,7 @@
   // Shared price breakdown (used on the calendar side and the checkout screen).
   function breakdownLines(q){
     var surge=q.bubbleSurgeCents||0, drop=q.bubbleDropCents||0;
-    var lines='<div class="qrow"><span>'+q.nights+' night'+(q.nights>1?'s':'')+' @ '+rand(q.avgNightlyCents)+'</span><span>'+(drop&&!surge?'<s class="was">'+rand(q.accommodationCents+drop)+'</s> ':'')+rand(q.accommodationCents-surge+drop)+'</span></div>';
+    var lines='<div class="qrow"><span>'+q.nights+' night'+(q.nights>1?'s':'')+' @ '+rand(q.avgNightlyCents)+'</span><span>'+rand(q.accommodationCents-surge+drop)+'</span></div>';
     if(surge) lines+='<div class="qrow q-surge"><span>📈 High demand (up to +'+q.bubbleSurgePercent+'%)</span><span>+'+rand(surge)+'</span></div>';
     if(drop) lines+='<div class="qrow q-deal"><span>🏷️ Last-minute deal (up to '+q.bubbleDropPercent+'% off)</span><span>−'+rand(drop)+'</span></div>';
     if(q.discountCents) lines+='<div class="qrow"><span>'+q.discountPercent+'% length discount</span><span>−'+rand(q.discountCents)+'</span></div>';
