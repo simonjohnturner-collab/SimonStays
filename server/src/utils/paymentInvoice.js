@@ -19,7 +19,11 @@ const nightsOf = (q) => q.nightLines.map((n) => ({ date: n.date, cents: n.cents,
 function quoteLines(q, adminFeeCents = 0) {
   const lines = [];
   const add = (description, amountCents, deposit = false, extra = {}) => { if (amountCents) lines.push({ description, amountCents, deposit, ...extra }); };
-  add(`${q.nights} night${q.nights === 1 ? '' : 's'} @ ${rand(q.avgNightlyCents)}`, q.accommodationCents, false, { nights: nightsOf(q) });
+  // Before any pricing-bubble change, which then has its own lines.
+  const surge = q.bubbleSurgeCents || 0, drop = q.bubbleDropCents || 0;
+  add(`${q.nights} night${q.nights === 1 ? '' : 's'} @ ${rand(q.avgNightlyCents)}`, q.accommodationCents - surge + drop, false, { nights: nightsOf(q) });
+  add(`High-demand price (up to +${q.bubbleSurgePercent || 0}%)`, surge);
+  add(`Last-minute deal (up to ${q.bubbleDropPercent || 0}% off)`, -drop);
   add(`${q.discountPercent}% length discount`, -q.discountCents);
   add('Cleaning fee', q.cleaningCents);
   add('Early check-in', q.earlyCents);

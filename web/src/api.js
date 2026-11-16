@@ -190,6 +190,12 @@ export const api = {
   deleteProvider: (id) => req('DELETE', `/providers/${id}`),
 
   // guest contact book
+  listBubbles: () => req('GET', '/bubbles'),
+  createBubble: (b) => req('POST', '/bubbles', b),
+  deleteBubble: (id) => req('DELETE', `/bubbles/${id}`),
+  addBubbleUnit: (id, unitId) => req('POST', `/bubbles/${id}/units`, { unitId }),
+  removeBubbleUnit: (id, unitId) => req('DELETE', `/bubbles/${id}/units/${unitId}`),
+  saveBubbleRules: (id, rule) => req('PUT', `/bubbles/${id}/rules`, rule),
   listGuests: (q = '') => req('GET', `/guests${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   createGuest: (data) => req('POST', '/guests', data),
   updateGuest: (id, data) => req('PUT', `/guests/${id}`, data),

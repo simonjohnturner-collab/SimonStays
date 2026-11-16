@@ -170,6 +170,51 @@ model ChannelReview {
   @@index([hostId])
 }
 
+// Pricing bubbles: similar units grouped across hosts (e.g. "Rosebank 2-bed")
+// so prices can follow the group's occupancy. Any host can see every bubble and
+// add their own units; each host sets their own rules for their own units. The
+// bubble only shares occupancy. Applied on the SimonStays shopfront only.
+model PricingBubble {
+  id              String         @id @default(uuid())
+  name            String
+  area            String? // e.g. "Rosebank"
+  description     String?
+  createdByHostId String
+  createdAt       DateTime       @default(now())
+  members         BubbleMember[]
+  rules           BubbleRule[]
+}
+
+// A unit in a bubble. A unit belongs to one bubble at most.
+model BubbleMember {
+  id        String        @id @default(uuid())
+  bubbleId  String
+  bubble    PricingBubble @relation(fields: [bubbleId], references: [id], onDelete: Cascade)
+  unitId    String        @unique
+  unit      Unit          @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  hostId    String
+  createdAt DateTime      @default(now())
+
+  @@index([bubbleId])
+}
+
+// One host's rules for their own units in a bubble.
+// surge: [{ occupancyPct, increasePct }]: the highest step reached applies.
+// drops: [{ withinDays, vacancyPct, decreasePct }]: for nights within that many
+// days, when at least that share of the bubble is empty; the biggest applies.
+model BubbleRule {
+  id        String        @id @default(uuid())
+  bubbleId  String
+  bubble    PricingBubble @relation(fields: [bubbleId], references: [id], onDelete: Cascade)
+  hostId    String
+  active    Boolean       @default(true)
+  surge     Json          @default("[]")
+  drops     Json          @default("[]")
+  updatedAt DateTime      @updatedAt
+
+  @@unique([bubbleId, hostId])
+}
+
 // What a guest uploads when creating an account. Private: only the SimonStays
 // admin can open these, never a host or another guest.
 model GuestDocument {
@@ -354,6 +399,7 @@ model Unit {
   propertyId   String
   property     Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   name         String
+  bubbleMember BubbleMember?
   capacity     Int?
   minNights    Int? // minimum nights per booking (null / 0 = no minimum)
   bedrooms     Int? // for form logic: repeat per-bedroom questions

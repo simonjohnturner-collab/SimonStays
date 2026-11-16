@@ -65,10 +65,14 @@ function nightFlex(rc, date) {
 }
 
 /**
- * quote(rc, { checkIn, checkOut, mattress, earlyCheckIn, lateCheckOut, cleans })
+ * quote(rc, { checkIn, checkOut, mattress, earlyCheckIn, lateCheckOut, cleans, overrides, bubble })
  * cleans = number of chargeable cleans (defaults to 1 — the checkout clean).
+ * bubble = { 'YYYY-MM-DD': percent } from a pricing bubble (shopfront only):
+ * applied to each night after its seasonal flex, never to a manually priced
+ * night. accommodationCents includes it; bubbleBaseCents is the price without
+ * it, and the surge and drop are reported separately so they can be shown.
  */
-function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, lateCheckOut = false, cleans = 1, overrides = null }) {
+function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, lateCheckOut = false, cleans = 1, overrides = null, bubble = null }) {
   if (!rc || !checkIn || !checkOut) return null;
   const nights = eachNight(checkIn, checkOut);
   const n = nights.length;
@@ -76,15 +80,23 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
 
   // Accommodation is pure nightly (weekend rate on Fri/Sat, or a manual override);
   // cleaning is a SEPARATE line item below — no longer bundled into the first night.
-  let accommodation = 0;
+  let accommodation = 0, bubbleBase = 0, surgeCents = 0, dropCents = 0, surgePct = 0, dropPct = 0;
   const nightLines = nights.map((d) => {
     const dISO = d.toISOString().slice(0, 10);
     const ov = overrides && overrides[dISO] != null ? overrides[dISO] : null;
     let base, flex, cents;
     if (ov != null) { base = ov; flex = 0; cents = ov; } // manual override = exact base, no flex
     else { base = nightlyRate(rc, d); flex = nightFlex(rc, d); cents = Math.round(base * (1 + flex / 100)); }
+    bubbleBase += cents;
+    const bp = ov == null && bubble && Number(bubble[dISO]) ? Number(bubble[dISO]) : 0;
+    const before = cents;
+    if (bp) {
+      cents = Math.round(cents * (1 + bp / 100));
+      if (bp > 0) { surgeCents += cents - before; surgePct = Math.max(surgePct, bp); }
+      else { dropCents += before - cents; dropPct = Math.max(dropPct, -bp); }
+    }
     accommodation += cents;
-    return { date: dISO, baseCents: base, flexPercent: flex, weekend: isWeekend(d), overridden: ov != null, cents };
+    return { date: dISO, baseCents: base, flexPercent: flex, weekend: isWeekend(d), overridden: ov != null, cents, ...(bp ? { bubblePercent: bp, beforeBubbleCents: before } : {}) };
   });
 
   let discountPercent = 0;
@@ -106,7 +118,8 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
   const rentalCents = accommodation - discountCents + cleaningCents + earlyCents + lateCents + mattressCents;
   const depositCents = breakageCents;
   const totalCents = rentalCents + depositCents;
-  const avgNightlyCents = Math.round(accommodation / n);
+  // The per-night price shown: before any bubble change (shown as its own line).
+  const avgNightlyCents = Math.round(bubbleBase / n);
 
   return {
     nights: n, avgNightlyCents,
@@ -116,6 +129,7 @@ function quote(rc, { checkIn, checkOut, mattress = false, earlyCheckIn = false, 
     // label the optional early/late line items.
     earlyFeeCents: rc.earlyCheckInCents || 0, lateFeeCents: rc.lateCheckOutCents || 0,
     rentalCents, depositCents, totalCents, nightLines,
+    bubbleBaseCents: bubbleBase, bubbleSurgeCents: surgeCents, bubbleDropCents: dropCents, bubbleSurgePercent: surgePct, bubbleDropPercent: dropPct,
   };
 }
 

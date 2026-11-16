@@ -1398,3 +1398,30 @@ button.bm-cancel:hover { background: #fdeaea; }
 .bm-extras-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
 .bm-extras-row { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; color: #374151; }
 .bm-extras-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+
+/* Pricing bubbles */
+.bb-wrap { max-width:960px; margin:0 auto; padding:16px 18px 50px; }
+.bb-intro { line-height:1.5; }
+.bb-new { display:flex; flex-direction:column; gap:8px; }
+.bb-new-row { display:flex; gap:8px; flex-wrap:wrap; }
+.bb-new-row input { flex:1 1 200px; }
+.bb-card h3 { margin:0; font-size:17px; }
+.bb-card h4 { margin:16px 0 6px; font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+.bb-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+.bb-strip { display:grid; grid-template-columns:repeat(14, minmax(46px, 1fr)); gap:4px; margin-top:12px; overflow-x:auto; }
+.bb-day { display:flex; flex-direction:column; align-items:center; gap:1px; padding:6px 2px; border-radius:8px; background:#f6f8fa; font-size:11px; }
+.bb-day small { color:var(--muted); white-space:nowrap; }
+.bb-day b { font-size:13px; }
+.bb-day span { color:var(--muted); font-weight:600; }
+.bb-day.up { background:#fff1e6; } .bb-day.up span { color:#b45309; }
+.bb-day.down { background:#e8f6ec; } .bb-day.down span { color:var(--green-d); }
+.bb-strip-note { margin:6px 0 0; }
+.bb-units { display:flex; flex-wrap:wrap; gap:6px; }
+.bb-chip { display:inline-flex; align-items:center; gap:4px; background:#eef6f0; color:var(--green-d); border-radius:999px; padding:4px 6px 4px 12px; font-size:13px; }
+.bb-chip button { background:transparent; color:var(--muted); padding:0 6px; font-size:15px; }
+.bb-add { display:flex; gap:8px; margin-top:8px; max-width:520px; }
+.bb-norule { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.bb-rules { display:flex; flex-direction:column; align-items:flex-start; gap:6px; }
+.bb-rule-title { font-weight:700; font-size:14px; margin-top:8px; }
+.bb-rule-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:14px; }
+.bb-rule-row input { width:72px; padding:5px 8px; }

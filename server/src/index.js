@@ -200,6 +200,7 @@ app.use('/documents', require('./routes/documents').hostRouter);
 app.use('/teach', require('./routes/teach'));
 app.use('/smartlocks', require('./routes/smartlocks'));
 app.use('/groups', require('./routes/groups'));
+app.use('/bubbles', require('./routes/bubbles')); // pricing bubbles (host)
 app.use('/properties', require('./routes/properties'));
 app.use('/units', require('./routes/units'));
 app.use('/market', require('./routes/market'));

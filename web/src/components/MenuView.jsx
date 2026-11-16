@@ -16,6 +16,7 @@ export default function MenuView({ isAdmin, onPropertiesAndUnits, onFindBooking,
     { title: 'Listings', items: [
       { icon: '🖼️', label: 'Listings', hint: 'Descriptions, photos, map pin, policies', to: '/listings' },
       { icon: '💲', label: 'Pricing', hint: 'Rate cards and pricing groups', to: '/listings/pricing' },
+      { icon: '🫧', label: 'Pricing bubbles', hint: 'Surge or drop prices with how full similar units are', to: '/listings/bubbles' },
       { icon: '📁', label: 'House documents', hint: 'Files guests get before they arrive', to: '/listings/documents' },
       { icon: '🔒', label: 'Smart locks', hint: 'Locks and guest access codes', to: '/listings/locks' },
     ] },

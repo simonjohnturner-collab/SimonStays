@@ -20,6 +20,7 @@ import TodayView from './TodayView.jsx';
 import FormChime from './FormChime.jsx';
 import ServiceProvidersView from './ServiceProvidersView.jsx';
 import GuestBookView from './GuestBookView.jsx';
+import BubblesView from './BubblesView.jsx';
 import PaymentHistoryView from './PaymentHistoryView.jsx';
 import SmartLockView from './SmartLockView.jsx';
 import AccountView from './AccountView.jsx';
@@ -242,7 +243,7 @@ export default function Main() {
     : path.startsWith('/inbox') ? 'inbox'
     : 'menu';
 
-  const LISTING_TABS = [['/listings', 'Listings'], ['/listings/pricing', 'Pricing'], ['/listings/documents', 'House documents'], ['/listings/locks', 'Smart locks']];
+  const LISTING_TABS = [['/listings', 'Listings'], ['/listings/pricing', 'Pricing'], ['/listings/bubbles', 'Pricing bubbles'], ['/listings/documents', 'House documents'], ['/listings/locks', 'Smart locks']];
   const MONEY_TABS = [['/money', 'Payouts'], ['/money/invoices', 'Invoices'], ['/money/billing', 'Billing details']];
   const tabs = (items, extra) => (
     <div className="section-tabs" role="tablist">
@@ -310,6 +311,8 @@ export default function Main() {
     );
   } else if (path === '/listings') {
     screen = <>{tabs(LISTING_TABS, <button className="section-tabs-extra" onClick={() => setDrawer('property')}>Properties &amp; units</button>)}<ListingsView onClose={toCalendar} /></>;
+  } else if (path === '/listings/bubbles') {
+    screen = <>{tabs(LISTING_TABS)}<BubblesView /></>;
   } else if (path === '/listings/pricing') {
     screen = <>{tabs(LISTING_TABS)}<RateCardMatrix onClose={toCalendar} /></>;
   } else if (path === '/listings/documents') {

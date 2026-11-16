@@ -19,6 +19,21 @@ const { nextRef } = require('../utils/bookingRef');
 const { addProof } = require('../utils/attachments');
 
 const { eftFor } = require('../utils/eft');
+const { bubbleAdjustments } = require('../utils/bubbles');
+
+// A shopfront quote, with the unit's pricing-bubble surge or drop. When a bubble
+// changes the price, withoutBubble holds the price it would otherwise be (for the
+// struck-through "was" price on a drop).
+async function shopQuote(unitId, rc, opts) {
+  const adj = await bubbleAdjustments(unitId, opts.checkIn, opts.checkOut).catch((e) => { console.error('[bubbles]', e.message); return null; });
+  const q = quote(rc, { ...opts, bubble: adj ? adj.percents : null });
+  if (q && adj) {
+    const plain = quote(rc, opts);
+    q.withoutBubble = { rentalCents: plain.rentalCents, totalCents: plain.totalCents };
+    q.bubbleName = adj.bubbleName;
+  }
+  return q;
+}
 
 // Build + send the guest's invoice email. Non-blocking; swallows its own errors.
 async function emailInvoice(data) {
@@ -132,7 +147,7 @@ router.get('/properties', async (req, res, next) => {
           if (!av.available) continue;
           anyFree = true;
           if (u.pricingGroup) {
-            const q = quote(u.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1 });
+            const q = await shopQuote(u.id, u.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1 });
             if (q && (stayFromCents == null || q.rentalCents < stayFromCents)) stayFromCents = q.rentalCents;
           }
         }
@@ -228,11 +243,18 @@ router.get('/units', async (req, res, next) => {
     const out = [];
     for (const { u, p } of best.values()) {
       if (minGuests && u.capacity && u.capacity < minGuests) continue;
-      let stayFromCents = null;
+      let stayFromCents = null, stayWasCents = null;
       if (filtering) {
         const av = await checkAvailability(u.id, iso(checkIn), iso(checkOut), null);
         if (!av.available) continue;
-        if (u.pricingGroup) { const q = quote(u.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1 }); if (q) stayFromCents = q.rentalCents; } // without the breakage deposit
+        if (u.pricingGroup) {
+          const q = await shopQuote(u.id, u.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1 });
+          if (q) {
+            stayFromCents = q.rentalCents; // without the breakage deposit
+            // A bubble price drop: the usual price, to show struck through.
+            if (q.withoutBubble && q.withoutBubble.rentalCents > q.rentalCents) stayWasCents = q.withoutBubble.rentalCents;
+          }
+        }
       }
       const cover = u.photos[0] || p.photos[0] || null;
       out.push({
@@ -243,7 +265,7 @@ router.get('/units', async (req, res, next) => {
         coverPhotoId: cover ? cover.id : null,
         fromNightlyCents: fromNightlyCents(u.pricingGroup), hasPricing: !!u.pricingGroupId,
         minNights: u.minNights || 0,
-        stayFromCents,
+        stayFromCents, stayWasCents,
       });
     }
     res.json({ units: out, filtered: filtering });
@@ -275,7 +297,7 @@ router.post('/quote', async (req, res, next) => {
     if (!unit) return res.status(404).json({ error: 'not_found' });
     if (!unit.pricingGroup) return res.status(400).json({ error: 'no_pricing', message: 'This unit has no online pricing — please call to book.' });
     const overrides = await require('../utils/nightPrices').overridesFor(unit.id, iso(checkIn), iso(checkOut));
-    const q = quote(unit.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1, overrides, earlyCheckIn: !!earlyCheckIn, lateCheckOut: !!lateCheckOut });
+    const q = await shopQuote(unit.id, unit.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1, overrides, earlyCheckIn: !!earlyCheckIn, lateCheckOut: !!lateCheckOut });
     if (!q) return res.status(400).json({ error: 'invalid_dates' });
     res.json({ quote: q, minNights: unit.minNights || 0 });
   } catch (e) { next(e); }
@@ -304,7 +326,7 @@ router.post('/book', optionalGuest, async (req, res, next) => {
     }
 
     const bookOverrides = await require('../utils/nightPrices').overridesFor(unit.id, iso(b.checkIn), iso(b.checkOut));
-    const q = quote(unit.pricingGroup, { checkIn: iso(b.checkIn), checkOut: iso(b.checkOut), cleans: 1, overrides: bookOverrides, earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut });
+    const q = await shopQuote(unit.id, unit.pricingGroup, { checkIn: iso(b.checkIn), checkOut: iso(b.checkOut), cleans: 1, overrides: bookOverrides, earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut });
     if (!q) return res.status(400).json({ error: 'invalid_dates' });
     // Enforce the unit's minimum-night stay (server-side guard).
     if (unit.minNights && q.nights < unit.minNights) {
