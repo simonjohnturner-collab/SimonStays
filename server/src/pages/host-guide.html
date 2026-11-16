@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Host guide · SimonStays</title>
+<meta name="description" content="Step-by-step guide for SimonStays hosts: list your property, set prices and pricing bubbles, link your Airbnb calendar, manage cleaners and ratings, plus the host FAQ." />
+<link rel="icon" href="/favicon.svg" />
+<style>
+  /* Same family as the guest site (green, system type) with a bolder sales layout:
+     hero + live calendar sketch, feature grid, fee calculator, three steps, FAQ. */
+  :root{
+    --green:#1a7a3a; --green-d:#14622f; --green-soft:#e6f2ea; --green-line:#cfe6d6;
+    --ink:#1b2129; --muted:#5f6b76; --line:#e3e7ea; --bg:#f7f8f6; --card:#fff;
+    --air:#e0565b; --bdc:#2f5fb3; --ls:#e08a1e; --ss:#1a7a3a;
+  }
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  @media (prefers-reduced-motion: reduce){ html{ scroll-behavior:auto; } *{ animation:none !important; transition:none !important; } }
+  body{ margin:0; font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); line-height:1.55; }
+  a{ color:var(--green); text-decoration:none; }
+  .in{ max-width:1120px; margin:0 auto; padding-left:max(18px, env(safe-area-inset-left)); padding-right:max(18px, env(safe-area-inset-right)); }
+  h1,h2,h3{ margin:0; line-height:1.12; text-wrap:balance; letter-spacing:-.02em; }
+
+  header.top{ background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:30; }
+  .top-in{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding-block:12px; }
+  .brand{ font-weight:800; font-size:22px; color:var(--green); letter-spacing:-.5px; }
+  .brand span{ color:var(--ink); }
+  .top-links{ display:flex; gap:8px; align-items:center; }
+  .pill{ border:1px solid #d6dbd8; border-radius:999px; padding:7px 14px; font-weight:600; font-size:14px; color:var(--ink); white-space:nowrap; }
+  .pill:hover{ background:#f1f3f2; }
+  .btn{ display:inline-flex; align-items:center; gap:8px; background:var(--green); color:#fff; border-radius:10px; padding:13px 20px; font-weight:700; font-size:16px; }
+  .btn:hover{ background:var(--green-d); }
+  .btn.alt{ background:#fff; color:var(--ink); border:1px solid #d6dbd8; }
+  .btn.alt:hover{ background:#f1f3f2; }
+  :focus-visible{ outline:3px solid #8cc9a0; outline-offset:2px; border-radius:8px; }
+
+  /* Hero */
+  .hero{ background:linear-gradient(180deg,#fff 0%, var(--bg) 100%); border-bottom:1px solid var(--line); }
+  .hero-in{ display:grid; grid-template-columns:1.05fr .95fr; gap:40px; align-items:center; padding-block:56px 60px; }
+  .eyebrow{ font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--green); }
+  .hero h1{ font-size:clamp(34px,5vw,54px); margin:10px 0 16px; }
+  .hero h1 em{ font-style:normal; color:var(--green); }
+  .lede{ font-size:19px; color:var(--muted); max-width:34em; margin:0 0 26px; }
+  .cta-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .trust{ display:flex; gap:18px; flex-wrap:wrap; margin-top:22px; font-size:14px; color:var(--muted); }
+  .trust b{ color:var(--ink); }
+
+  /* Calendar sketch: three channels feeding one board */
+  .board{ background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:0 18px 50px rgba(20,60,35,.10); padding:16px; min-width:0; }
+  .board-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .board-head b{ font-size:15px; }
+  .synced{ font-size:12px; font-weight:700; color:var(--green); background:var(--green-soft); border-radius:999px; padding:3px 10px; }
+  .synced::before{ content:""; display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green); margin-right:6px; vertical-align:1px; animation:pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse{ 50%{ opacity:.25; } }
+  .days{ display:grid; grid-template-columns:62px repeat(10,1fr); font-size:11px; color:var(--muted); text-align:center; margin-bottom:4px; }
+  .row{ display:grid; grid-template-columns:62px repeat(10,1fr); align-items:center; height:34px; border-top:1px solid #f0f2f1; position:relative; }
+  .row .u{ font-size:12px; font-weight:700; text-align:left; }
+  .bar{ position:absolute; top:6px; height:22px; border-radius:6px; color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; padding:0 8px; white-space:nowrap; overflow:hidden; }
+  .bar.air{ background:var(--air); } .bar.bdc{ background:var(--bdc); } .bar.ls{ background:var(--ls); } .bar.ss{ background:var(--ss); }
+  .legend{ display:flex; gap:12px; flex-wrap:wrap; margin-top:12px; font-size:12px; color:var(--muted); }
+  .legend i{ display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
+
+  section.band{ padding-block:64px; }
+  .sec-head{ max-width:640px; margin-bottom:30px; }
+  .sec-head h2{ font-size:clamp(28px,3.6vw,38px); margin:8px 0 10px; }
+  .sec-head p{ color:var(--muted); font-size:17px; margin:0; }
+
+  /* Features */
+  .features{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  .feat{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:22px; display:flex; flex-direction:column; gap:10px; min-width:0; }
+  .feat .ic{ width:44px; height:44px; border-radius:12px; background:var(--green-soft); color:var(--green); display:grid; place-items:center; }
+  .feat .ic svg{ width:24px; height:24px; }
+  .feat h3{ font-size:19px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .feat p{ margin:0; color:var(--muted); }
+  .feat ul{ margin:2px 0 0; padding-left:18px; color:var(--muted); font-size:15px; }
+  .soon{ font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:#9a5b00; background:#fff1d6; border-radius:999px; padding:3px 9px; }
+  .feat.wide{ grid-column:span 3; flex-direction:row; align-items:center; gap:22px; background:var(--green); color:#fff; border:0; }
+  .feat.wide .ic{ background:rgba(255,255,255,.16); color:#fff; flex:none; }
+  .feat.wide p{ color:#d9efe0; }
+  .feat.wide h3{ font-size:22px; }
+  .feat.wide.smart{ background:#fff; color:inherit; border:2px solid var(--green); }
+  .feat.wide.smart .ic{ background:var(--green-soft); color:var(--green); }
+  .feat.wide.smart p{ color:inherit; opacity:.85; }
+  .soon.new{ color:#fff; background:var(--green); }
+  .band.simon .simon-in{ display:grid; grid-template-columns:1.3fr 1fr; gap:32px; align-items:center; }
+  @media (max-width:760px){ .band.simon .simon-in{ grid-template-columns:1fr; gap:8px; } }
+
+  /* Fee */
+  .fee{ background:#fff; border-block:1px solid var(--line); }
+  .fee-grid{ display:grid; grid-template-columns:.9fr 1.1fr; gap:40px; align-items:center; }
+  .big-pct{ font-size:clamp(84px,12vw,140px); font-weight:800; letter-spacing:-.05em; line-height:.9; color:var(--green); }
+  .big-pct small{ display:block; font-size:22px; letter-spacing:0; color:var(--ink); margin-top:10px; font-weight:700; }
+  .fee-points{ list-style:none; padding:0; margin:18px 0 0; display:flex; flex-direction:column; gap:10px; }
+  .fee-points li{ padding-left:28px; position:relative; }
+  .fee-points li::before{ content:"✓"; position:absolute; left:0; top:0; width:20px; height:20px; border-radius:50%; background:var(--green-soft); color:var(--green); font-weight:800; font-size:12px; display:grid; place-items:center; }
+  .calc{ background:var(--bg); border:1px solid var(--line); border-radius:16px; padding:22px; }
+  .calc label{ font-weight:700; display:block; margin-bottom:8px; }
+  .calc-in{ display:flex; align-items:center; gap:10px; }
+  .calc-in span{ font-weight:800; font-size:22px; }
+  .calc input[type=number]{ font:inherit; font-size:22px; font-weight:700; padding:10px 12px; border:1px solid #cfd6d2; border-radius:10px; width:100%; background:#fff; font-variant-numeric:tabular-nums; }
+  .calc input[type=range]{ width:100%; margin:16px 0 6px; accent-color:var(--green); }
+  .split{ display:flex; height:16px; border-radius:999px; overflow:hidden; margin:14px 0 16px; }
+  .split .you{ background:var(--green); flex:9; } .split .us{ background:#a8d5b6; flex:1; }
+  .calc-rows{ display:grid; gap:8px; font-variant-numeric:tabular-nums; }
+  .calc-rows div{ display:flex; justify-content:space-between; gap:12px; }
+  .calc-rows .you-get{ border-top:1px solid #d6dbd8; padding-top:10px; font-size:20px; font-weight:800; }
+  .calc-rows .you-get b{ color:var(--green); }
+  .calc .note{ font-size:13px; color:var(--muted); margin:12px 0 0; }
+
+  /* Steps */
+  .steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; counter-reset:s; }
+  .step{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:22px; }
+  .step .n{ font-size:44px; font-weight:800; color:var(--green); line-height:1; letter-spacing:-.04em; }
+  .step h3{ font-size:18px; margin:10px 0 6px; }
+  .step p{ margin:0; color:var(--muted); }
+
+  /* FAQ */
+  .faq{ display:grid; grid-template-columns:1fr 1fr; gap:12px 28px; }
+  .faq details{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .faq summary{ font-weight:700; cursor:pointer; list-style:none; display:flex; justify-content:space-between; gap:12px; }
+  .faq summary::after{ content:"+"; color:var(--green); font-weight:800; }
+  .faq details[open] summary::after{ content:"–"; }
+  .faq p{ margin:10px 0 0; color:var(--muted); }
+
+  .closing{ background:var(--green); color:#fff; text-align:center; }
+  .closing h2{ font-size:clamp(28px,4vw,42px); margin-bottom:10px; }
+  .closing p{ color:#d9efe0; font-size:18px; margin:0 auto 24px; max-width:36em; }
+  .closing .btn{ background:#fff; color:var(--green-d); }
+  .closing .btn:hover{ background:#eef6f0; }
+  .closing .btn.alt{ background:transparent; color:#fff; border-color:rgba(255,255,255,.5); }
+  .closing .btn.alt:hover{ background:rgba(255,255,255,.1); }
+  .closing .cta-row{ justify-content:center; }
+
+  footer{ padding-block:28px; color:var(--muted); font-size:14px; }
+  footer p{ margin:4px 0; }
+
+  @media (max-width:900px){
+    .hero-in, .fee-grid{ grid-template-columns:1fr; gap:30px; }
+    .features{ grid-template-columns:1fr 1fr; }
+    .feat.wide{ grid-column:span 2; }
+    .steps{ grid-template-columns:1fr; }
+    .faq{ grid-template-columns:1fr; }
+  }
+  @media (max-width:600px){
+    .hero-in{ padding-block:36px 40px; }
+    .features{ grid-template-columns:1fr; }
+    .feat.wide{ grid-column:auto; flex-direction:column; align-items:flex-start; }
+    .top-links .pill.hide-sm{ display:none; }
+    section.band{ padding-block:46px; }
+    .days, .row{ grid-template-columns:44px repeat(10,1fr); }
+  }
+
+  /* Host guide */
+  .g-hero{ padding-block:48px 8px; }
+  .g-hero h1{ font-size:clamp(32px,4.4vw,48px); line-height:1.08; letter-spacing:-.02em; margin:10px 0 14px; }
+  .g-hero .lede{ max-width:720px; }
+  .g-toc{ display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
+  .g-toc a{ font-size:14px; font-weight:600; padding:6px 12px; border-radius:999px; background:var(--green-soft); color:var(--green-d); text-decoration:none; }
+  .g-toc a:hover{ background:var(--green-line); }
+  .g-before{ padding-block:28px 40px; }
+  .g-card{ background:#fff; border:2px solid var(--green); border-radius:16px; padding:24px 26px; }
+  .g-card h2{ margin:0; font-size:22px; }
+  .g-steps{ list-style:none; padding:0; margin:0; counter-reset:g; display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .g-steps li{ counter-increment:g; position:relative; background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px 20px 18px 74px; }
+  .g-steps li::before{ content:counter(g); position:absolute; left:20px; top:18px; width:38px; height:38px; border-radius:50%; background:var(--green); color:#fff; font-weight:800; font-size:18px; display:grid; place-items:center; }
+  .g-steps h3{ margin:0 0 4px; font-size:18px; }
+  .g-steps .where{ margin:0 0 8px; font-size:13px; font-weight:700; color:var(--green-d); }
+  .g-steps p{ margin:0; color:#374151; line-height:1.55; }
+  .g-steps p + p{ margin-top:0; }
+  .g-optional{ margin-top:16px; padding:14px 18px; border-radius:14px; background:var(--green-soft); border:1px solid var(--green-line); }
+  .g-topic{ font-size:20px; margin:34px 0 12px; scroll-margin-top:80px; }
+  .g-faq-band{ padding-top:24px; }
+  @media (max-width:760px){ .g-steps{ grid-template-columns:1fr; } .g-steps li{ padding-left:66px; } .g-steps li::before{ left:16px; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="in top-in">
+    <a class="brand" href="/">Simon<span>Stays</span></a>
+    <nav class="top-links" aria-label="Main">
+      <a class="pill hide-sm" href="/">Find a stay</a>
+      <a class="pill" href="/hosting/">Sign in to hosting</a>
+    </nav>
+  </div>
+</header>
+
+<section class="g-hero">
+  <div class="in">
+    <div class="eyebrow">Host guide</div>
+    <h1>From sign-up to your first booking</h1>
+    <p class="lede">Everything you need to get your apartment or house live on SimonStays, in the order to do it. Most hosts are done in an afternoon. When you sign in, the <b>Getting started</b> checklist on your Today screen ticks off each step as you go.</p>
+    <nav class="g-toc" aria-label="On this page">
+      <a href="#before">Before you start</a><a href="#steps">The 10 steps</a><a href="#faq-listing">Listing</a><a href="#faq-pricing">Pricing</a><a href="#faq-bubbles">Pricing bubbles</a><a href="#faq-airbnb">Airbnb &amp; calendars</a><a href="#faq-cleaners">Cleaners</a><a href="#faq-guests">Guests &amp; messages</a><a href="#faq-ratings">Ratings</a><a href="#faq-money">Payments</a>
+    </nav>
+  </div>
+</section>
+
+<section class="band g-before" id="before">
+  <div class="in">
+    <div class="g-card">
+      <h2>Before you start, have these ready</h2>
+      <ul class="fee-points">
+        <li><b>10 or more photos</b> per unit: bright, landscape, every room, plus the building and the view</li>
+        <li><b>A description</b> of the place and the area. Your Airbnb description is a good start</li>
+        <li><b>Your rates:</b> nightly price, cleaning fee, any weekly or monthly discount, and a breakage deposit</li>
+        <li><b>Your Airbnb calendar link</b> for each unit (we show you where to find it)</li>
+        <li><b>Your bank details</b>, so we can pay you out</li>
+        <li><b>Your cleaner’s name and WhatsApp number</b></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="steps" style="padding-top:0">
+  <div class="in">
+    <div class="sec-head">
+      <div class="eyebrow">Step by step</div>
+      <h2>The 10 steps to go live</h2>
+      <p>Sign in at <a href="/hosting/">simonstays.co.za/hosting</a>. “Menu” is in the top bar.</p>
+    </div>
+    <ol class="g-steps">
+      <li>
+        <h3>Add your property and units</h3>
+        <p class="where">Menu → Properties &amp; units</p>
+        <p>A <b>property</b> is the building or house. A <b>unit</b> is each place guests book inside it, like “Unit 304”. A house you let as a whole is one property with one unit. For each unit, fill in how many it sleeps, bedrooms and bathrooms.</p>
+      </li>
+      <li>
+        <h3>Upload your photos</h3>
+        <p class="where">Menu → Listings → your property → Photos</p>
+        <p>Shoot in daylight with the curtains open and the lights on. Hold the phone landscape, tidy every surface, and photograph each room from a corner. Add the bathroom, kitchen, view, parking and building. Tap <b>★</b> on your best photo to make it the cover: it’s the first thing guests see.</p>
+      </li>
+      <li>
+        <h3>Describe the place and the area</h3>
+        <p class="where">Menu → Listings → description</p>
+        <p>Open with what makes it special, then the practical bits: beds, Wi-Fi, backup power, parking, security. Finish with the area: what’s within walking distance and how far the airport, malls and offices are. Each unit can add its own description too.</p>
+      </li>
+      <li>
+        <h3>Drop the map pin</h3>
+        <p class="where">Menu → Listings → Location</p>
+        <p>Type your address to zoom in, then click the map exactly on the building and press <b>Save location</b>. Guests search by area, so a pin in the right place puts you in front of the right people.</p>
+      </li>
+      <li>
+        <h3>Fill in the practical details</h3>
+        <p class="where">Menu → Listings → each unit</p>
+        <p>Check-in and checkout times, Wi-Fi name and password, parking bay, security, backup power and water, and a minimum stay if you have one. Guests see the Wi-Fi and parking only once they’ve booked and paid.</p>
+      </li>
+      <li>
+        <h3>Set your prices</h3>
+        <p class="where">Menu → Pricing</p>
+        <p>Create a <b>pricing group</b> with your nightly rate, an optional weekend rate, the cleaning fee, weekly and monthly discounts, the breakage deposit, and fees for early check-in, late checkout and an extra mattress. Add seasonal increases for busy times. Then <b>assign your units</b> to the group: units in a group share its prices.</p>
+      </li>
+      <li>
+        <h3>Link your Airbnb calendar</h3>
+        <p class="where">Menu → Listings → each unit → iCal calendar link</p>
+        <p>Paste the unit’s Airbnb calendar link so Airbnb bookings appear on your SimonStays calendar. Then copy the unit’s <b>Lock link</b> into Airbnb’s “Import calendar”, so a night booked on SimonStays closes on Airbnb too. Booking.com and LekkeSlaap work the same way.</p>
+      </li>
+      <li>
+        <h3>Choose how guests book, and your cancellation policy</h3>
+        <p class="where">Menu → Listings → How guests book</p>
+        <p><b>Instant booking</b> (guests book and pay straight away), <b>instant for 5-star guests</b> (everyone else sends a request), or <b>request to book</b> (you approve every booking). The standard cancellation policy is filled in for you; change it if yours is different.</p>
+      </li>
+      <li>
+        <h3>Add your bank details and your cleaners</h3>
+        <p class="where">Menu → Billing details · Menu → Team</p>
+        <p>Your bank details are how we pay you out, and they appear on your invoices. Add each cleaner with their WhatsApp number and the properties they clean. They’ll get a reminder the night before every checkout.</p>
+      </li>
+      <li>
+        <h3>Set up your guest messages, then go live</h3>
+        <p class="where">Inbox → Scheduled</p>
+        <p>Start from the ready-made ideas: a booking confirmation, check-in details the day before, and your <b>guestbook link</b> so guests fill in their details and order extras. Then search for your place on <a href="/">simonstays.co.za</a> to see it the way guests do, and share the link.</p>
+      </li>
+    </ol>
+    <div class="g-optional">
+      <b>Optional, and worth it: join a pricing bubble.</b> Menu → Pricing bubbles. Your price rises when your area is busy and drops when it’s quiet. <a href="#faq-bubbles">How it works ↓</a>
+    </div>
+  </div>
+</section>
+
+<section class="band g-faq-band">
+  <div class="in">
+    <div class="sec-head">
+      <div class="eyebrow">Host FAQ</div>
+      <h2>Answers to the questions hosts ask</h2>
+      <p>Can’t find yours? Email <a href="mailto:support@simonstays.co.za">support@simonstays.co.za</a> or call 078 511 9336.</p>
+    </div>
+
+    <h3 class="g-topic" id="faq-listing">Listing your property</h3>
+    <div class="faq">
+      <details><summary>What’s the difference between a property and a unit?</summary><p>The property is the building or house, with its address, map pin and description. Units are the places inside it that guests book, each with its own photos, beds, prices and calendar. A house let as a whole is one property with one unit.</p></details>
+      <details><summary>How many photos should I upload?</summary><p>At least 10 per unit, and up to around 25. Listings with bright, complete photo sets get far more bookings. The ★ photo is your cover on the search page.</p></details>
+      <details><summary>Can I copy my Airbnb listing?</summary><p>Yes. Paste your Airbnb description into SimonStays and tidy it up, then upload the same photos. Keep both listings: SimonStays brings you extra direct bookings on top.</p></details>
+      <details><summary>When do guests see the Wi-Fi password and door code?</summary><p>Only once their booking is confirmed and fully paid.</p></details>
+    </div>
+
+    <h3 class="g-topic" id="faq-pricing">Pricing</h3>
+    <div class="faq">
+      <details><summary>How is a stay priced?</summary><p>Each night’s rate (your weekend rate on Fridays and Saturdays, plus any seasonal increase), then the weekly or monthly discount, then the cleaning fee and any extras. The breakage deposit is added at checkout and refunded after the stay if there’s no damage.</p></details>
+      <details><summary>What’s a pricing group?</summary><p>A set of prices that several units share, so you change one rate card instead of each unit. Give similar units the same group, and different ones their own.</p></details>
+      <details><summary>Can I set a price for one particular night?</summary><p>Yes. On the calendar, open the unit’s month view, select the nights and set a price. A hand-set night keeps exactly that price.</p></details>
+      <details><summary>Why does the search page show a lower price than checkout?</summary><p>Search results show the stay without the refundable breakage deposit. Guests see the deposit added at checkout, with a note that it comes back after the stay.</p></details>
+    </div>
+
+    <h3 class="g-topic" id="faq-bubbles">Pricing bubbles (smart pricing)</h3>
+    <div class="faq">
+      <details><summary>What is a pricing bubble?</summary><p>A group of similar places in the same area, like “Rosebank 2-bed”, from any host. SimonStays watches how full the bubble is each night, and your prices move with it, using your own rules.</p></details>
+      <details><summary>How do I set the rules?</summary><p>Menu → Pricing bubbles, then add your units and set your steps. For example: when the bubble is 70% booked, +5%; 80%, +10%; 90%, +20%. And for quiet nights: if it’s 80% empty within 3 days, drop 10%. Start from the suggested rules and adjust.</p></details>
+      <details><summary>Can other hosts see or change my prices?</summary><p>No. Other hosts in a bubble see how many units are in it and how full it is, never which units are yours or what you charge. Each host’s rules only change their own units.</p></details>
+      <details><summary>What do guests see?</summary><p>On a busy night, a “High demand” line at checkout. On a last-minute drop, your usual price struck through next to the lower one, with a “Last-minute deal” tag on the search page.</p></details>
+      <details><summary>Does it change my Airbnb prices?</summary><p>No. Bubbles apply to bookings on SimonStays only. Airbnb prices stay as you set them in Airbnb.</p></details>
+    </div>
+
+    <h3 class="g-topic" id="faq-airbnb">Airbnb and your calendars</h3>
+    <div class="faq">
+      <details><summary>Where do I find my Airbnb calendar link?</summary><p>In Airbnb, open the listing’s calendar, go to its availability settings and find <b>Connect calendars</b> (sometimes “Sync calendars”). Choose <b>Export calendar</b> and copy the link that ends in .ics. Paste it into the unit’s “iCal calendar link” on SimonStays.</p></details>
+      <details><summary>How do I stop Airbnb selling a night booked on SimonStays?</summary><p>Copy the unit’s <b>Lock link</b> from SimonStays and add it in Airbnb under Connect calendars → <b>Import calendar</b>. Airbnb then blocks those nights.</p></details>
+      <details><summary>How often do calendars update?</summary><p>SimonStays checks every 30 minutes. Airbnb reads the Lock link on its own schedule, usually within a few hours, so for a last-minute booking it’s worth blocking the night in Airbnb by hand too.</p></details>
+      <details><summary>Do I have to leave Airbnb?</summary><p>No. Most hosts keep Airbnb and Booking.com. SimonStays keeps the calendars in step and adds direct bookings on top, with no SimonStays fee on your Airbnb bookings.</p></details>
+    </div>
+
+    <h3 class="g-topic" id="faq-cleaners">Cleaners</h3>
+    <div class="faq">
+      <details><summary>How do my cleaners know when to come?</summary><p>Choose the checkout cleaner on each booking (Cleaning tab). At 7pm the night before checkout they get a WhatsApp reminder with your notes, such as “strip the sofa bed”. You can also send it straight away.</p></details>
+      <details><summary>Do cleaners need an app or a login?</summary><p>No. They get a link on WhatsApp and fill in a room-by-room checklist on their phone, with photos. You see each clean under Reports.</p></details>
+      <details><summary>Can they claim for what they buy?</summary><p>Yes. They photograph the till slip; SimonStays reads it, so you see what was bought and what you owe.</p></details>
+      <details><summary>What about mid-stay cleans?</summary><p>Add them on the booking’s Cleaning tab with a date and cleaner. Guests can also ask for them in the guestbook, priced at your in-stay clean rate.</p></details>
+    </div>
+
+    <h3 class="g-topic" id="faq-guests">Guests and messages</h3>
+    <div class="faq">
+      <details><summary>How do I message guests?</summary><p>From the Inbox, or the booking’s Message button. Guests read your messages in their SimonStays inbox and get an email copy.</p></details>
+      <details><summary>What are scheduled messages?</summary><p>Messages that go out by themselves: when a booking is confirmed, before check-in, after checkout. Shortcuts like [First Name], [Check In Time] and [Wifi Password] fill in for each booking.</p></details>
+      <details><summary>What’s the guestbook?</summary><p>A short form at simonstays.co.za/guestbook where guests confirm their details, add special requests and order extras (early check-in, late checkout, a mattress, mid-stay cleans), and pay by card or EFT. Add the [Guestbook Link] shortcut to a scheduled message. It works for Airbnb guests too.</p></details>
+    </div>
+
+    <h3 class="g-topic" id="faq-ratings">Ratings and reviews</h3>
+    <div class="faq">
+      <details><summary>How do guests rate a stay?</summary><p>The day after checkout, guests who booked on SimonStays get an invitation to rate cleanliness, accuracy, engagement and value, and to write a review. Ratings show on your listing and the search page.</p></details>
+      <details><summary>Can I rate my guests?</summary><p>Yes, in Inbox → Reviews, for 30 days after checkout. Guest ratings let you offer instant booking to 5-star guests only, if you choose.</p></details>
+      <details><summary>Can my Airbnb reviews show on SimonStays?</summary><p>They can. Your Airbnb reviews can be brought across so new guests see your track record. Email support@simonstays.co.za to set it up for your listings.</p></details>
+    </div>
+
+    <h3 class="g-topic" id="faq-money">Payments and payouts</h3>
+    <div class="faq">
+      <details><summary>What does SimonStays cost?</summary><p>10% of each booking a guest makes and pays for on SimonStays. No sign-up cost, no monthly fee, and nothing on your Airbnb, Booking.com or own direct bookings.</p></details>
+      <details><summary>How do guests pay?</summary><p>By card through Paygate’s secure page, or by EFT. Dates are only held once the money is in. Guests can also split a stay 50/50 (half now, half before check-in).</p></details>
+      <details><summary>How do I get paid?</summary><p>We pay out to the bank account in your Billing details, minus the 10% fee. Every payout is itemised under Menu → Payouts.</p></details>
+      <details><summary>What about the breakage deposit?</summary><p>It’s collected with the booking and refunded after checkout if there’s no damage. It isn’t a booking fee, so there’s no 10% on it.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="band closing">
+  <div class="in">
+    <h2>Ready when you are</h2>
+    <p>Create your account and follow the checklist. Simon has hosted for more than 20 years, and he’s a message away if you get stuck.</p>
+    <div class="cta-row">
+      <a class="btn" href="/hosting/?signup">Start hosting →</a>
+      <a class="btn alt" href="/host">Why host with SimonStays</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="in">
+    <p><b>SimonStays</b> is a trading name owned, controlled and managed by <b>Catwalk Investments</b> (registration number 1999/010697/07).</p>
+    <p><a href="/privacy">Privacy Policy</a> &middot; <a href="/terms">Terms &amp; Conditions</a> &middot; Questions? <a href="mailto:support@simonstays.co.za">support@simonstays.co.za</a> &middot; 078 511 9336</p>
+  </div>
+</footer>
+
+<script src="/assets/track.js"></script>
+</body>
+</html>

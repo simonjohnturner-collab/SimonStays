@@ -1425,3 +1425,19 @@ button.bm-cancel:hover { background: #fdeaea; }
 .bb-rule-title { font-weight:700; font-size:14px; margin-top:8px; }
 .bb-rule-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:14px; }
 .bb-rule-row input { width:72px; padding:5px 8px; }
+
+/* Getting started (new hosts, on Today) */
+.onb { background:#fff; border:2px solid var(--green); border-radius:14px; padding:14px 16px; margin:0 0 16px; }
+.onb-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+.onb-head h3 { margin:0 0 2px; font-size:17px; }
+.onb-bar { height:6px; background:#eef1f4; border-radius:999px; margin:10px 0 6px; overflow:hidden; }
+.onb-bar span { display:block; height:100%; background:var(--green); border-radius:999px; }
+.onb-steps { list-style:none; padding:0; margin:6px 0 0; display:flex; flex-direction:column; gap:4px; }
+.onb-steps li { display:flex; align-items:center; gap:12px; padding:8px 6px; border-radius:10px; }
+.onb-steps li.next { background:#f3faf5; }
+.onb-steps li.done .onb-txt b { color:var(--muted); text-decoration:line-through; font-weight:600; }
+.onb-n { width:26px; height:26px; flex:none; border-radius:50%; display:grid; place-items:center; font-weight:700; font-size:13px; background:#eef1f4; color:var(--ink); }
+.onb-steps li.done .onb-n { background:var(--green); color:#fff; }
+.onb-txt { display:flex; flex-direction:column; gap:1px; flex:1; min-width:0; }
+.onb-steps button { flex:none; padding:6px 12px; font-size:13px; }
+.onb-foot { margin:10px 0 0; }

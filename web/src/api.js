@@ -190,6 +190,7 @@ export const api = {
   deleteProvider: (id) => req('DELETE', `/providers/${id}`),
 
   // guest contact book
+  onboarding: () => req('GET', '/onboarding'),
   listBubbles: () => req('GET', '/bubbles'),
   createBubble: (b) => req('POST', '/bubbles', b),
   deleteBubble: (id) => req('DELETE', `/bubbles/${id}`),

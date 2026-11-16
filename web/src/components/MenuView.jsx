@@ -8,6 +8,7 @@ export default function MenuView({ isAdmin, onPropertiesAndUnits, onFindBooking,
       { icon: '📋', label: 'Reports', hint: 'Cleans, repairs, damage and purchases', to: '/reports' },
       { icon: '🧰', label: 'Team', hint: 'Cleaners, contractors and what they earn per clean', to: '/team' },
       { icon: '📇', label: 'Guests', hint: 'Your guest contact book', to: '/guests' },
+      { icon: '📘', label: 'Host guide', hint: 'Step-by-step setup and answers to common questions', href: 'https://simonstays.co.za/host/guide' },
     ] },
     { title: 'Bookings', items: [
       { icon: '📅', label: 'Find or add a booking', hint: 'Search every booking, or add one', run: onFindBooking },
@@ -42,7 +43,7 @@ export default function MenuView({ isAdmin, onPropertiesAndUnits, onFindBooking,
           <h2>{g.title}</h2>
           <div className="menu-grid">
             {g.items.map((it) => (
-              <button key={it.label} className="menu-card" onClick={() => (it.run ? it.run() : navigate(it.to))}>
+              <button key={it.label} className="menu-card" onClick={() => (it.run ? it.run() : it.href ? window.open(it.href, '_blank', 'noopener') : navigate(it.to))}>
                 <span className="menu-ic" aria-hidden="true">{it.icon}</span>
                 <span className="menu-txt"><b>{it.label}</b><span>{it.hint}</span></span>
               </button>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { today, addDays, ymd } from '../dates.js';
 import { navigate } from '../router.js';
+import GettingStarted from './GettingStarted.jsx';
 
 // Hosting › Today: the day at a glance. Who leaves and arrives, what's waiting
 // (reports, guest messages, Ask Simon questions) and money still owed — the
@@ -51,6 +52,7 @@ export default function TodayView({ properties, teachCount = 0, onOpenBooking })
 
   return (
     <div className="today">
+      <GettingStarted />
       <div className="today-head">
         <h1>{new Date().toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })}</h1>
         <p className="muted">

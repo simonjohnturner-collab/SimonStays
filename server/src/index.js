@@ -116,6 +116,14 @@ app.get(['/terms', '/terms.html', '/terms-and-conditions'], (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, must-revalidate');
   res.type('html').send(termsHtml);
 });
+// The host guide: step-by-step setup and the host FAQ (public, linked from the
+// host page, the site footer and the host app's Menu).
+const hostGuideHtml = fs.readFileSync(path.join(__dirname, 'pages/host-guide.html'), 'utf8');
+app.get(['/host/guide', '/host-guide', '/host/faq'], (req, res) => {
+  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'");
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  res.type('html').send(hostGuideHtml);
+});
 // "Why host with SimonStays": the sales page for owners, linked from the guest site.
 const hostPitchHtml = fs.readFileSync(path.join(__dirname, 'pages/host.html'), 'utf8');
 app.get(['/host', '/why-host', '/become-a-host'], (req, res) => {
@@ -201,6 +209,7 @@ app.use('/teach', require('./routes/teach'));
 app.use('/smartlocks', require('./routes/smartlocks'));
 app.use('/groups', require('./routes/groups'));
 app.use('/bubbles', require('./routes/bubbles')); // pricing bubbles (host)
+app.use('/onboarding', require('./routes/onboarding')); // a new host's Getting started checklist
 app.use('/properties', require('./routes/properties'));
 app.use('/units', require('./routes/units'));
 app.use('/market', require('./routes/market'));
