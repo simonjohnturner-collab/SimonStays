@@ -22,8 +22,12 @@ function quoteLines(q, adminFeeCents = 0) {
   // Before any pricing-bubble change, which then has its own lines.
   const surge = q.bubbleSurgeCents || 0, drop = q.bubbleDropCents || 0;
   add(`${q.nights} night${q.nights === 1 ? '' : 's'} @ ${rand(q.avgNightlyCents)}`, q.accommodationCents - surge + drop, false, { nights: nightsOf(q) });
-  add(`High-demand price (up to +${q.bubbleSurgePercent || 0}%)`, surge);
-  add(`Last-minute deal (up to ${q.bubbleDropPercent || 0}% off)`, -drop);
+  // Named with each night's change, e.g. "Peak-demand pricing (Fri 20 Nov +5%, Sat 21 Nov +10%)".
+  const day = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const per = (up) => (q.nightLines || []).filter((n) => n.bubblePercent && (up ? n.bubblePercent > 0 : n.bubblePercent < 0))
+    .map((n) => `${day(n.date).replace(',', '')} ${up ? `+${n.bubblePercent}%` : `${-n.bubblePercent}% off`}`).join(' · ');
+  add(`Peak-demand pricing (${per(true)})`, surge);
+  add(`Last-minute deal (${per(false)})`, -drop);
   add(`${q.discountPercent}% length discount`, -q.discountCents);
   add('Cleaning fee', q.cleaningCents);
   add('Early check-in', q.earlyCents);
