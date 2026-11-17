@@ -27,6 +27,7 @@ export default function MenuView({ isAdmin, onPropertiesAndUnits, onFindBooking,
       { icon: '🏢', label: 'Billing details', hint: 'Company and bank details on your invoices', to: '/money/billing' },
     ] },
     { title: 'Insights', items: [
+      { icon: '👀', label: 'Listing traffic', hint: 'How often your listings are seen, opened and booked', to: '/insights/traffic' },
       { icon: '📈', label: 'Market watch', hint: 'How full the competition is', to: '/insights' },
     ] },
     { title: 'You', items: [

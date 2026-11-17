@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import TrafficView from './TrafficView.jsx';
+import AdminBubbles from './AdminBubbles.jsx';
 import { api, guestDocumentFile } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { fmtR, randToCents } from '../money.js';
@@ -36,7 +37,7 @@ export default function AdminView({ onClose }) {
       </header>
 
       <div className="msg-tabs">
-        {[['overview', '📊 Overview'], ['hosts', '👥 Hosts'], ['guests', '🧳 Guests'], ['properties', '🏠 Properties'], ['transactions', '💳 Transactions'], ['refunds', '↩️ Refunds'], ['messages', '💬 Messages'], ['traffic', '📈 Traffic']].map(([k, label]) => (
+        {[['overview', '📊 Overview'], ['hosts', '👥 Hosts'], ['guests', '🧳 Guests'], ['properties', '🏠 Properties'], ['transactions', '💳 Transactions'], ['refunds', '↩️ Refunds'], ['messages', '💬 Messages'], ['traffic', '📈 Traffic'], ['bubbles', '🫧 Bubbles']].map(([k, label]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>
         ))}
       </div>
@@ -50,6 +51,7 @@ export default function AdminView({ onClose }) {
         {tab === 'refunds' && <Refunds hostFilter={hostFilter} HostPicker={HostPicker} />}
         {tab === 'messages' && <Messages hostFilter={hostFilter} HostPicker={HostPicker} />}
         {tab === 'traffic' && <TrafficView />}
+        {tab === 'bubbles' && <AdminBubbles />}
       </div>
     </div>
   );

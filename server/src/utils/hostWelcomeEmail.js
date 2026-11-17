@@ -67,7 +67,7 @@ function hostWelcomeEmail(host = {}) {
 
     <div style="background:#e6f2ea;border-radius:12px;padding:16px 18px;margin-bottom:14px">
       <b style="color:#14622f">New: smart pricing</b>
-      <p style="margin:6px 0 0;line-height:1.55;font-size:14px">Add your units to a pricing bubble (Menu → Pricing bubbles). Your SimonStays prices rise when your area is busy and drop when it’s quiet, by rules you set. Nobody else ever sees or changes your prices.</p>
+      <p style="margin:6px 0 0;line-height:1.55;font-size:14px">Add your units to a pricing bubble (Menu → Pricing bubbles). Your SimonStays prices rise when your area is busy and drop when it’s quiet, by rules you set. Your rules stay private, and nobody else can change your prices.</p>
     </div>
     <p style="margin:0 0 10px;line-height:1.55;font-size:14px"><b>Cleaners.</b> Add them under Menu → Team. They get a WhatsApp reminder the night before each checkout, and a photo checklist on their phone. No app needed.</p>
     <p style="margin:0 0 10px;line-height:1.55;font-size:14px"><b>Ratings.</b> Guests who book on SimonStays are invited to rate their stay the day after checkout, and you rate them in Inbox → Reviews. Want your Airbnb reviews shown too? Just reply to this email.</p>

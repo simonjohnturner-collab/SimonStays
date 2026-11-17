@@ -193,6 +193,7 @@ app.get(['/', '/stay', '/book', '/guestbook', '/stays/:propertyId', '/stays/:pro
 
 app.use('/auth', require('./routes/auth'));
 app.use('/admin/traffic', require('./routes/adminTraffic'));
+app.use('/admin/bubbles', require('./routes/adminBubbles'));
 app.use('/admin', require('./routes/admin'));
 app.use('/account', require('./routes/account'));
 app.use('/email', require('./routes/email'));
@@ -210,6 +211,7 @@ app.use('/smartlocks', require('./routes/smartlocks'));
 app.use('/groups', require('./routes/groups'));
 app.use('/bubbles', require('./routes/bubbles')); // pricing bubbles (host)
 app.use('/onboarding', require('./routes/onboarding')); // a new host's Getting started checklist
+app.use('/traffic', require('./routes/hostTraffic')); // a host's own listing traffic
 app.use('/properties', require('./routes/properties'));
 app.use('/units', require('./routes/units'));
 app.use('/market', require('./routes/market'));

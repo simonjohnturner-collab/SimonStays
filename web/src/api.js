@@ -191,6 +191,9 @@ export const api = {
 
   // guest contact book
   onboarding: () => req('GET', '/onboarding'),
+  hostTraffic: (days = 30) => req('GET', `/traffic?days=${days}`),
+  adminBubbles: () => req('GET', '/admin/bubbles'),
+  flagBubbleUnit: (id, unitId, reason) => req('POST', `/bubbles/${id}/units/${unitId}/flag`, { reason }),
   listBubbles: () => req('GET', '/bubbles'),
   createBubble: (b) => req('POST', '/bubbles', b),
   deleteBubble: (id) => req('DELETE', `/bubbles/${id}`),

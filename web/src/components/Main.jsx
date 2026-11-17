@@ -28,6 +28,7 @@ import DocumentsView from './DocumentsView.jsx';
 import { BusinessDetails } from './BillerSettings.jsx';
 import AdminView from './AdminView.jsx';
 import MarketView from './MarketView.jsx';
+import HostTrafficView from './HostTrafficView.jsx';
 import MessagesView from './MessagesView.jsx';
 
 const WINDOW_DAYS = 35;
@@ -244,6 +245,7 @@ export default function Main() {
     : 'menu';
 
   const LISTING_TABS = [['/listings', 'Listings'], ['/listings/pricing', 'Pricing'], ['/listings/bubbles', 'Pricing bubbles'], ['/listings/documents', 'House documents'], ['/listings/locks', 'Smart locks']];
+  const INSIGHT_TABS = [['/insights', 'Market watch'], ['/insights/traffic', 'Listing traffic']];
   const MONEY_TABS = [['/money', 'Payouts'], ['/money/invoices', 'Invoices'], ['/money/billing', 'Billing details']];
   const tabs = (items, extra) => (
     <div className="section-tabs" role="tablist">
@@ -354,7 +356,9 @@ export default function Main() {
   } else if (path === '/money/billing') {
     screen = <>{tabs(MONEY_TABS)}<PaymentHistoryView onClose={toCalendar} /><BusinessDetails onClose={() => navigate('/money')} /></>;
   } else if (path === '/insights') {
-    screen = <MarketView onClose={toCalendar} />;
+    screen = <>{tabs(INSIGHT_TABS)}<MarketView onClose={toCalendar} /></>;
+  } else if (path === '/insights/traffic') {
+    screen = <>{tabs(INSIGHT_TABS)}<HostTrafficView /></>;
   } else if (path === '/settings') {
     screen = <AccountView onClose={toCalendar} />;
   } else if (path === '/admin' && isAdmin) {

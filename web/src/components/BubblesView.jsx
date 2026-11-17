@@ -39,8 +39,8 @@ export default function BubblesView() {
     <div className="bb-wrap">
       <p className="muted small bb-intro">
         Group similar units, yours and other hosts’, into a bubble. Your SimonStays prices then follow how full the
-        bubble is, using <b>your own rules</b>. Other hosts see how many units are in a bubble, never which of yours or what you charge.
-        Changes apply to direct bookings on simonstays.co.za only, on top of your rate card.
+        bubble is, using <b>your own rules</b>. Every host in a bubble sees its listings, so you can check they’re like-for-like;
+        your rules stay private and nobody else can change your prices. Changes apply to direct bookings on simonstays.co.za only, on top of your rate card.
       </p>
       {msg && <div className={`msg ${msg.kind}`}>{msg.text}</div>}
 
@@ -98,15 +98,25 @@ function Bubble({ b, units, busy, run }) {
         <div className="msg-warn">⚠ Some floating bookings aren’t counted ({b.preview.filter((d) => d.skipped).map((d) => dayLabel(d.date)).join(', ')}). They have no group, and you have units in more than one bubble, so we can’t tell which bubble they belong to. Open each one and set <b>Show in group</b> to the group these units are in, or allocate it to a unit, and it will count.</div>
       )}
 
-      <h4>Your units in this bubble</h4>
-      <div className="bb-units">
-        {b.myUnits.length === 0 && <span className="muted small">None yet.</span>}
-        {b.myUnits.map((u) => (
-          <span key={u.unitId} className="bb-chip">{u.label}
-            <button type="button" title="Take out of this bubble" disabled={busy} onClick={() => run(() => api.removeBubbleUnit(b.id, u.unitId))}>×</button>
-          </span>
-        ))}
-      </div>
+      <h4>Listings in this bubble</h4>
+      {b.listings.length === 0 ? <p className="muted small">None yet. Add one of yours below.</p> : (
+        <table className="tr-table bb-listings">
+          <thead><tr><th>Listing</th><th>Host</th><th className="num">Beds</th><th className="num">Sleeps</th><th></th></tr></thead>
+          <tbody>{b.listings.map((l) => (
+            <tr key={l.unitId} className={l.mine ? 'mine' : ''}>
+              <td><a href={l.url} target="_blank" rel="noreferrer" title="Open the public listing">{l.label} ↗</a></td>
+              <td>{l.mine ? <b>You</b> : l.hostName}</td>
+              <td className="num">{l.bedrooms ?? '—'}</td><td className="num">{l.sleeps ?? '—'}</td>
+              <td className="num">{l.mine
+                ? <button type="button" className="mini" title="Take out of this bubble" disabled={busy} onClick={() => run(() => api.removeBubbleUnit(b.id, l.unitId))}>Remove</button>
+                : <button type="button" className="mini" title="Email this host asking them to take it out" disabled={busy} onClick={() => {
+                    const reason = window.prompt(`Why doesn’t ${l.label} fit “${b.name}”? We’ll email ${l.hostName} your note and ask them to take it out.`);
+                    if (reason && reason.trim()) run(() => api.flagBubbleUnit(b.id, l.unitId, reason.trim()), `We’ve emailed ${l.hostName} about ${l.label}.`);
+                  }}>Ask to remove</button>}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      )}
       <div className="bb-add">
         <select value={adding} onChange={(e) => setAdding(e.target.value)}>
           <option value="">Add one of your units…</option>
@@ -115,7 +125,6 @@ function Bubble({ b, units, busy, run }) {
         </select>
         <button className="mini" disabled={busy || !adding} onClick={() => run(async () => { await api.addBubbleUnit(b.id, adding); setAdding(''); })}>Add</button>
       </div>
-      {b.otherUnits > 0 && <p className="muted small">Plus {b.otherUnits} unit{b.otherUnits === 1 ? '' : 's'} from other hosts.</p>}
 
       <h4>Your rules</h4>
       {!rule ? (
