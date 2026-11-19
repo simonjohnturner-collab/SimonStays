@@ -423,8 +423,8 @@
         <button type="button" id="growSignup">Sign up</button>
       </div>
       <div class="grow-offer">
-        <b>🤝 Earn R1 000 per host</b>
-        <span>Refer a new host and earn R1 000 the first time they take a booking.</span>
+        <b>🤝 Earn R1&nbsp;000 per host</b>
+        <span>Refer a new host and earn R1&nbsp;000 the first time they take a booking.</span>
         <button type="button" class="alt" id="growRefer">Get your referral link</button>
       </div>
     </div>
@@ -1207,7 +1207,7 @@
     if(!GTOKEN){ AFTER_AUTH=openRefer; openAuth('login', null, 'Sign in (or create an account) to get your referral link.'); return; }
     var host=$('#detail'), overlay=el('div','overlay');
     overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
-    overlay.innerHTML='<div class="sheet" style="max-width:520px"><div class="sheet-head"><h2>🤝 Refer a host, earn R1 000</h2><button class="x">&times;</button></div><div class="sheet-body"><p class="note">Loading…</p></div></div>';
+    overlay.innerHTML='<div class="sheet" style="max-width:520px"><div class="sheet-head"><h2>🤝 Refer a host, earn R1&nbsp;000</h2><button class="x">&times;</button></div><div class="sheet-body"><p class="note">Loading…</p></div></div>';
     host.innerHTML=''; host.appendChild(overlay);
     overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
     var body=overlay.querySelector('.sheet-body');
@@ -1215,7 +1215,7 @@
     if(!GROW||!GROW.link){ body.innerHTML='<div class="msg err">Could not load your link. Please try again.</div>'; return; }
     var st={ signed_up:'Signed up · waiting for their first booking', earned:'Earned · we’ll pay you shortly', paid:'Paid ✓' };
     var wa='https://wa.me/?text='+encodeURIComponent('Do you have an apartment or house to let? Host it on SimonStays: synced calendars, guest payments and cleaner management, for 10% of SimonStays bookings only. Sign up here: '+GROW.link);
-    body.innerHTML='<p style="margin:0 0 6px;line-height:1.55">Know someone with an apartment or house to let? Send them your link. When they sign up through it and take their first paid booking on SimonStays, <b>you earn R1 000</b>.</p>'+
+    body.innerHTML='<p style="margin:0 0 6px;line-height:1.55">Know someone with an apartment or house to let? Send them your link. When they sign up through it and take their first paid booking on SimonStays, <b>you earn R1&nbsp;000</b>.</p>'+
       '<div class="ref-box"><input id="refLink" readonly value="'+esc(GROW.link)+'"><button id="refCopy">Copy</button></div>'+
       '<a class="cta-btn" style="display:block;text-align:center;text-decoration:none" href="'+wa+'" target="_blank" rel="noopener">Share on WhatsApp</a>'+
       '<h3 class="sec">Your referrals</h3>'+
