@@ -236,6 +236,16 @@
   .grow-offer button.alt{ background:#fff; color:var(--green-d); border:1px solid #a9d4b8; }
   .grow-offer .ok{ color:var(--green-d); font-weight:600; font-size:13px; }
   @media (max-width:760px){ .grow{ grid-template-columns:1fr; } .grow-offers{ grid-template-columns:1fr; } }
+  /* Wide screens: the placard moves into the empty margin left of the listings,
+     so the stays sit right under the search bar. */
+  @media (min-width:1680px){
+    .wrap{ position:relative; }
+    .grow{ position:absolute; top:16px; right:calc(100% + 6px); width:250px; margin:0; padding:16px; grid-template-columns:1fr; gap:12px; }
+    .grow-head{ flex-direction:column; align-items:flex-start; gap:6px; }
+    .grow-ic{ font-size:30px; }
+    .grow h2{ font-size:18px; }
+    .grow-offers{ grid-template-columns:1fr; gap:10px; }
+  }
   .ref-box{ display:flex; gap:8px; margin:10px 0; }
   .ref-box input{ flex:1; font-family:ui-monospace,Menlo,monospace; font-size:13px; }
   .q-welcome{ color:var(--green-d); font-weight:600; }
