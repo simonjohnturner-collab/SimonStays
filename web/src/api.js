@@ -53,6 +53,15 @@ export function photoUrl(id) { return `${BASE}/photos/${id}`; }
 // sign-in); guests normally report damage from their trip.
 export function formLink(type, hostId) { return `${BASE}/${type === 'clean' ? 'team/clean' : type === 'repair' ? 'team/repair' : 'report'}?host=${encodeURIComponent(hostId)}`; }
 
+// A referral code from the link a new host came through (/host?ref=CODE),
+// kept by the public site in localStorage, or still in this page's address.
+function referralCode() {
+  try {
+    const fromUrl = new URLSearchParams(window.location.search).get('ref');
+    return (fromUrl || localStorage.getItem('ss_ref') || '').trim() || undefined;
+  } catch { return undefined; }
+}
+
 async function req(method, path, body) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -75,13 +84,16 @@ async function req(method, path, body) {
 
 export const api = {
   // auth
-  register: (email, password, name) => req('POST', '/auth/register', { email, password, name }),
+  register: (email, password, name) => req('POST', '/auth/register', { email, password, name, ref: referralCode() }),
+  myReferral: () => req('GET', '/auth/referral'),
+  adminReferrals: () => req('GET', '/admin/referrals'),
+  markReferralPaid: (id) => req('POST', `/admin/referrals/${id}/paid`),
   login: (email, password) => req('POST', '/auth/login', { email, password }),
   me: () => req('GET', '/auth/me'),
   // One account: a travelling session for this host (finds or creates the guest side).
   guestSession: () => req('POST', '/auth/guest-session'),
   // A signed-in guest (token from the travelling side) opens a hosting account.
-  becomeHost: (guestToken) => fetch(`${BASE}/public/account/become-host`, { method: 'POST', headers: { Authorization: `Bearer ${guestToken}` } })
+  becomeHost: (guestToken) => fetch(`${BASE}/public/account/become-host`, { method: 'POST', headers: { Authorization: `Bearer ${guestToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: referralCode() }) })
     .then(async (r) => { const d = await r.json().catch(() => ({})); if (!r.ok) { const e = new Error(d.error || `HTTP ${r.status}`); e.data = d; throw e; } return d; }),
 
   // super-admin: list all hosts + sign in as one

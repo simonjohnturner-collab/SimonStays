@@ -377,4 +377,41 @@ router.get('/messages/:bookingId', async (req, res) => {
   });
 });
 
+// GET /admin/referrals — every host referral: who referred whom, and whether the
+// R1 000 is earned (the new host's first paid SimonStays stay is over) or paid.
+router.get('/referrals', async (req, res, next) => {
+  try {
+    const r = require('../utils/referrals');
+    await r.refreshEarned();
+    const rows = await prisma.hostReferral.findMany({ orderBy: { createdAt: 'desc' } });
+    const hostIds = [...new Set(rows.flatMap((x) => [x.referredHostId, x.referrerHostId]).filter(Boolean))];
+    const acctIds = [...new Set(rows.map((x) => x.referrerGuestAccountId).filter(Boolean))];
+    const [hosts, accts] = await Promise.all([
+      prisma.host.findMany({ where: { id: { in: hostIds } }, select: { id: true, name: true, email: true, contactPhone: true } }),
+      prisma.guestAccount.findMany({ where: { id: { in: acctIds } }, select: { id: true, name: true, email: true, phone: true } }),
+    ]);
+    const who = (h) => (h ? { name: h.name || null, email: h.email, phone: h.contactPhone || h.phone || null } : null);
+    res.json({
+      referrals: rows.map((x) => ({
+        id: x.id, code: x.code, status: x.status, amountCents: x.amountCents, createdAt: x.createdAt, earnedAt: x.earnedAt, paidAt: x.paidAt,
+        referred: who(hosts.find((h) => h.id === x.referredHostId)),
+        referrer: who(x.referrerHostId ? hosts.find((h) => h.id === x.referrerHostId) : accts.find((a) => a.id === x.referrerGuestAccountId)),
+        referrerKind: x.referrerHostId ? 'host' : 'guest',
+      })),
+    });
+  } catch (e) { next(e); }
+});
+
+// POST /admin/referrals/:id/paid — the reward has been paid (again to undo).
+router.post('/referrals/:id/paid', async (req, res, next) => {
+  try {
+    const x = await prisma.hostReferral.findUnique({ where: { id: String(req.params.id) } });
+    if (!x) return res.status(404).json({ error: 'not_found' });
+    if (x.status === 'signed_up') return res.status(400).json({ error: 'not_earned', message: 'Not earned yet: the new host hasn’t had a paid SimonStays stay.' });
+    const paid = x.status !== 'paid';
+    const updated = await prisma.hostReferral.update({ where: { id: x.id }, data: { status: paid ? 'paid' : 'earned', paidAt: paid ? new Date() : null } });
+    res.json({ referral: updated });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

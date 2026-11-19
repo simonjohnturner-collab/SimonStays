@@ -8,6 +8,7 @@ export default function MenuView({ isAdmin, onPropertiesAndUnits, onFindBooking,
       { icon: '📋', label: 'Reports', hint: 'Cleans, repairs, damage and purchases', to: '/reports' },
       { icon: '🧰', label: 'Team', hint: 'Cleaners, contractors and what they earn per clean', to: '/team' },
       { icon: '📇', label: 'Guests', hint: 'Your guest contact book', to: '/guests' },
+      { icon: '🤝', label: 'Refer a host', hint: 'Earn R1 000 when a host you refer takes their first booking', to: '/refer' },
       { icon: '📘', label: 'Host guide', hint: 'Step-by-step setup and answers to common questions', href: 'https://simonstays.co.za/host/guide' },
     ] },
     { title: 'Bookings', items: [

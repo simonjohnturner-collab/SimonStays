@@ -1455,3 +1455,14 @@ button.bm-cancel:hover { background: #fdeaea; }
 .bb-listings tr.mine td { background:#f3faf5; }
 .bb-listings a { color:var(--green-d); }
 .ab-list { display:flex; flex-direction:column; gap:12px; }
+
+/* Refer a host */
+.ref-wrap { max-width:760px; margin:0 auto; padding:16px 18px 50px; display:flex; flex-direction:column; gap:14px; }
+.ref-card { border:2px solid var(--green); }
+.ref-card h3 { margin:0 0 6px; }
+.ref-card p { margin:0 0 12px; line-height:1.55; }
+.ref-link { display:flex; gap:8px; }
+.ref-link input { flex:1; font-family:ui-monospace, Menlo, monospace; font-size:13px; }
+.ref-wa { display:inline-block; margin-top:10px; font-weight:600; color:#128c4a; }
+.ref-st { font-weight:600; }
+.ref-st.earned { color:#b45309; } .ref-st.paid { color:var(--green-d); }

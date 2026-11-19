@@ -28,6 +28,7 @@ function quoteLines(q, adminFeeCents = 0) {
   add(`Last-minute deal (${count(false)})`, -drop);
   add(`${q.discountPercent}% length discount`, -q.discountCents);
   add('Cleaning fee', q.cleaningCents);
+  add(`Welcome discount (${q.welcomePercent || 5}% off your first booking)`, -(q.welcomeDiscountCents || 0));
   add('Early check-in', q.earlyCents);
   add('Late checkout', q.lateCents);
   add('Extra mattress', q.mattressCents);

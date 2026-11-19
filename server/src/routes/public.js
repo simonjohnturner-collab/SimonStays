@@ -20,6 +20,7 @@ const { addProof } = require('../utils/attachments');
 
 const { eftFor } = require('../utils/eft');
 const { bubbleAdjustments } = require('../utils/bubbles');
+const { welcomeEligible, applyWelcome } = require('../utils/referrals');
 
 // A shopfront quote, with the unit's pricing-bubble surge or drop. When a bubble
 // changes the price, withoutBubble holds the price it would otherwise be (for the
@@ -288,8 +289,9 @@ router.get('/units/:unitId/calendar', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /public/quote — { unitId, checkIn, checkOut }
-router.post('/quote', async (req, res, next) => {
+// POST /public/quote — { unitId, checkIn, checkOut }. A signed-in guest due the
+// welcome discount sees it taken off.
+router.post('/quote', optionalGuest, async (req, res, next) => {
   try {
     const { unitId, checkIn, checkOut, earlyCheckIn, lateCheckOut } = req.body || {};
     if (!unitId || !checkIn || !checkOut) return res.status(400).json({ error: 'unitId_dates_required' });
@@ -299,6 +301,7 @@ router.post('/quote', async (req, res, next) => {
     const overrides = await require('../utils/nightPrices').overridesFor(unit.id, iso(checkIn), iso(checkOut));
     const q = await shopQuote(unit.id, unit.pricingGroup, { checkIn: iso(checkIn), checkOut: iso(checkOut), cleans: 1, overrides, earlyCheckIn: !!earlyCheckIn, lateCheckOut: !!lateCheckOut });
     if (!q) return res.status(400).json({ error: 'invalid_dates' });
+    if (req.guestId && await welcomeEligible(req.guestId)) applyWelcome(q);
     res.json({ quote: q, minNights: unit.minNights || 0 });
   } catch (e) { next(e); }
 });
@@ -327,6 +330,8 @@ router.post('/book', optionalGuest, async (req, res, next) => {
 
     const bookOverrides = await require('../utils/nightPrices').overridesFor(unit.id, iso(b.checkIn), iso(b.checkOut));
     const q = await shopQuote(unit.id, unit.pricingGroup, { checkIn: iso(b.checkIn), checkOut: iso(b.checkOut), cleans: 1, overrides: bookOverrides, earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut });
+    // 5% off a fully signed-up guest's first SimonStays booking (SimonStays bears it).
+    if (q && req.guestId && await welcomeEligible(req.guestId)) applyWelcome(q);
     if (!q) return res.status(400).json({ error: 'invalid_dates' });
     // Enforce the unit's minimum-night stay (server-side guard).
     if (unit.minNights && q.nights < unit.minNights) {
@@ -363,6 +368,7 @@ router.post('/book', optionalGuest, async (req, res, next) => {
         unitId: unit.id, hostId: unit.property.hostId, source: 'website', status: 'pending',
         guestName: b.guestName, ref, billingDetails: billing,
         guestEmail, guestPhone, recommendedBy: (b.recommendedBy || '').trim() || null,
+        welcomeDiscountCents: q.welcomeDiscountCents || null,
         totalCents: payableCents, splitFeeCents: split ? SPLIT_FEE_CENTS : null, guestAccountId,
         termsAcceptedAt: b.acceptedTerms ? new Date() : null,
         checkIn: dateOnly(iso(b.checkIn)), checkOut: dateOnly(iso(b.checkOut)),

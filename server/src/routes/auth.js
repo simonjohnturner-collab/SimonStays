@@ -6,9 +6,10 @@ const { authHost, isAdminEmail } = require('../middleware/auth');
 
 const router = express.Router();
 
-// POST /auth/register { email, password, name }
+// POST /auth/register { email, password, name, ref } — ref: a referral code from
+// the link they signed up through (/host?ref=CODE).
 router.post('/register', async (req, res) => {
-  const { email, password, name } = req.body || {};
+  const { email, password, name, ref } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'email_and_password_required' });
   if (String(password).length < 8) return res.status(400).json({ error: 'password_too_short' });
 
@@ -19,6 +20,7 @@ router.post('/register', async (req, res) => {
   const host = await prisma.host.create({
     data: { email: email.toLowerCase(), passwordHash, name: name || null },
   });
+  if (ref) await require('../utils/referrals').recordReferral(host, ref);
   res.status(201).json({ token: sign(host), host: publicHost(host) });
 });
 
@@ -31,6 +33,15 @@ router.post('/login', async (req, res) => {
   const ok = await bcrypt.compare(password, host.passwordHash);
   if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
   res.json({ token: sign(host), host: publicHost(host) });
+});
+
+// GET /auth/referral — this host's referral link and who they've referred.
+router.get('/referral', authHost, async (req, res, next) => {
+  try {
+    const r = require('../utils/referrals');
+    const code = await r.codeFor({ hostId: req.hostId });
+    res.json({ code, link: code ? r.linkFor(code) : null, rewardCents: r.REFERRAL_CENTS, referrals: await r.referralsOf({ hostId: req.hostId }) });
+  } catch (e) { next(e); }
 });
 
 // GET /auth/me

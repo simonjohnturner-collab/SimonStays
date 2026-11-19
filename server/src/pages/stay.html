@@ -222,6 +222,23 @@
   .date-bar-price small{ color:var(--muted); font-size:12px; }
   .date-bar-go{ padding:10px 16px; font-weight:700; }
   .surge-tag{ display:inline-block; margin-left:6px; font-size:12px; font-weight:700; color:#b45309; background:#fff1e6; border-radius:999px; padding:2px 8px; }
+  /* The growth placard */
+  .grow{ margin:16px 0 4px; padding:18px 20px; border-radius:16px; background:linear-gradient(135deg,#eef6f0,#f7fbf8); border:1px solid #cfe6d6; display:grid; grid-template-columns:minmax(220px,1fr) 2fr; gap:18px; align-items:center; }
+  .grow-head{ display:flex; gap:12px; align-items:center; }
+  .grow-ic{ font-size:34px; line-height:1; }
+  .grow h2{ margin:0; font-size:20px; letter-spacing:-.2px; }
+  .grow-head p{ margin:2px 0 0; color:var(--muted); font-size:14px; }
+  .grow-offers{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .grow-offer{ background:#fff; border:1px solid #d9eadf; border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:4px; }
+  .grow-offer b{ font-size:15px; }
+  .grow-offer span{ font-size:13px; color:#374151; line-height:1.45; flex:1; }
+  .grow-offer button{ align-self:flex-start; margin-top:6px; padding:7px 14px; font-weight:700; }
+  .grow-offer button.alt{ background:#fff; color:var(--green-d); border:1px solid #a9d4b8; }
+  .grow-offer .ok{ color:var(--green-d); font-weight:600; font-size:13px; }
+  @media (max-width:760px){ .grow{ grid-template-columns:1fr; } .grow-offers{ grid-template-columns:1fr; } }
+  .ref-box{ display:flex; gap:8px; margin:10px 0; }
+  .ref-box input{ flex:1; font-family:ui-monospace,Menlo,monospace; font-size:13px; }
+  .q-welcome{ color:var(--green-d); font-weight:600; }
   .qrow{ display:flex; justify-content:space-between; padding:3px 0; }
   .qtot{ font-weight:800; font-size:18px; border-top:1px solid var(--line); margin-top:6px; padding-top:8px; }
   .frm{ display:grid; gap:8px; margin-top:12px; }
@@ -387,6 +404,21 @@
       <div class="fld sb"><label>&nbsp;</label><button id="searchBtn">Search</button></div>
     </div>
   </div>
+  <section class="grow" id="grow" aria-labelledby="growTitle">
+    <div class="grow-head"><span class="grow-ic">🌱</span><div><h2 id="growTitle">SimonStays wants to grow</h2><p>Help us, and we’ll thank you for it.</p></div></div>
+    <div class="grow-offers">
+      <div class="grow-offer" id="growGuest">
+        <b>🎁 5% off your first booking</b>
+        <span>Sign up as a guest and get 5% off your first stay.</span>
+        <button type="button" id="growSignup">Sign up</button>
+      </div>
+      <div class="grow-offer">
+        <b>🤝 Earn R1 000 per host</b>
+        <span>Refer a new host and earn R1 000 the first time they take a booking.</span>
+        <button type="button" class="alt" id="growRefer">Get your referral link</button>
+      </div>
+    </div>
+  </section>
   <div class="toolbar">
     <div class="count" id="count">Loading stays…</div>
     <div class="toggle">
@@ -406,7 +438,8 @@
       <li class="hc-new"><b>Smart pricing <em>(new)</em></b><span>Join a pricing bubble: your price rises when demand is high and drops when it’s quiet</span></li>
       <li><b>Calendar sync</b><span>Airbnb, Booking.com and LekkeSlaap kept in step</span></li>
       <li><b>Guest payments</b><span>Card and EFT taken for you; dates held once paid</span></li>
-      <li><b>Cleaners sorted</b><span>Reminders, photo checklists, till slips read for you</span></li>
+      <li><b>Cleaner management</b><span>An agent records every checkout form and reads the invoices for cleaning products, so you see what was spent</span></li>
+      <li><b>Site traffic, managed</b><span>See how often your listings are seen, opened and booked</span></li>
       <li><b>One board</b><span>Every unit, every channel, today’s check-ins and checkouts</span></li>
       <li><b>Smart locks <em>(soon)</em></b><span>A door code for each guest’s stay</span></li>
       <li><b>Invoicing</b><span>Invoices emailed and paid online</span></li>
@@ -827,7 +860,7 @@
   async function getQuote(){
     if(!STATE.ciSel||!STATE.coSel) return;
     try{
-      var r=await fetch(API+'/public/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unitId:STATE.unit.id,checkIn:STATE.ciSel,checkOut:STATE.coSel,earlyCheckIn:!!STATE.early,lateCheckOut:!!STATE.late})});
+      var r=await fetch(API+'/public/quote',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({unitId:STATE.unit.id,checkIn:STATE.ciSel,checkOut:STATE.coSel,earlyCheckIn:!!STATE.early,lateCheckOut:!!STATE.late})});
       var d=await r.json(); STATE.quote=d.quote||null; STATE.quoteErr=d.quote?null:(d.message||'No price available for these dates.');
     }catch(e){ STATE.quote=null; STATE.quoteErr='Could not price these dates.'; }
     renderSide();
@@ -956,6 +989,7 @@
     if(drop) lines+=bubbleBlock(q,false);
     if(q.discountCents) lines+='<div class="qrow"><span>'+q.discountPercent+'% length discount</span><span>−'+rand(q.discountCents)+'</span></div>';
     if(q.cleaningCents) lines+='<div class="qrow"><span>Cleaning fee</span><span>'+rand(q.cleaningCents)+'</span></div>';
+    if(q.welcomeDiscountCents) lines+='<div class="qrow q-welcome"><span>🎁 Welcome discount ('+(q.welcomePercent||5)+'% off your first booking)</span><span>−'+rand(q.welcomeDiscountCents)+'</span></div>';
     if(q.earlyCents) lines+='<div class="qrow"><span>Early check-in</span><span>'+rand(q.earlyCents)+'</span></div>';
     if(q.lateCents) lines+='<div class="qrow"><span>Late checkout</span><span>'+rand(q.lateCents)+'</span></div>';
     lines+='<div class="qrow" style="border-top:1px solid var(--line);margin-top:4px;padding-top:6px"><span>Rental subtotal</span><span>'+rand(q.rentalCents)+'</span></div>';
@@ -1108,6 +1142,7 @@
     if(bd) rows+='<tr><td>Last-minute deal ('+nb(false)+')</td><td>−'+rand(bd)+'</td></tr>';
     if(q.discountCents) rows+='<tr><td>'+q.discountPercent+'% length discount</td><td>−'+rand(q.discountCents)+'</td></tr>';
     if(q.cleaningCents) rows+='<tr><td>Cleaning fee</td><td>'+rand(q.cleaningCents)+'</td></tr>';
+    if(q.welcomeDiscountCents) rows+='<tr><td>Welcome discount ('+(q.welcomePercent||5)+'% off your first booking)</td><td>−'+rand(q.welcomeDiscountCents)+'</td></tr>';
     if(q.earlyCents) rows+='<tr><td>Early check-in</td><td>'+rand(q.earlyCents)+'</td></tr>';
     if(q.lateCents) rows+='<tr><td>Late checkout</td><td>'+rand(q.lateCents)+'</td></tr>';
     rows+='<tr class="sub"><td>Rental subtotal</td><td>'+rand(q.rentalCents)+'</td></tr>';
@@ -1143,7 +1178,45 @@
   function hasHosting(){ try{ return !!localStorage.getItem('staysync_token'); }catch(e){ return false; } }
   function authHeaders(){ return GTOKEN?{'Authorization':'Bearer '+GTOKEN}:{}; }
 
+  // ---- Growth: 5% off a first booking, and R1 000 for referring a host ----
+  var GROW=null; // { welcomeEligible, link, ... } for the signed-in guest
+  async function loadGrow(){
+    if(!GTOKEN){ GROW=null; renderGrow(); return; }
+    try{ var r=await fetch(API+'/public/account/referral',{headers:authHeaders()}); GROW=r.ok?await r.json():null; }catch(e){ GROW=null; }
+    renderGrow();
+  }
+  function renderGrow(){
+    var g=$('#growGuest'); if(!g) return;
+    if(!GTOKEN){ g.innerHTML='<b>🎁 5% off your first booking</b><span>Sign up as a guest and get 5% off your first stay.</span><button type="button" id="growSignup">Sign up</button>'; }
+    else if(GROW&&GROW.welcomeEligible){ g.innerHTML='<b>🎁 Your 5% is ready</b><span>It comes off automatically when you book your first stay. Thanks for joining!</span><span class="ok">✓ Signed up</span>'; }
+    else if(GROW){ g.innerHTML='<b>🎁 5% off your first booking</b><span>Finish your account (confirm your email, add your photo and ID) to unlock it. It applies to your first SimonStays booking.</span><span class="ok">✓ Signed up</span>'; }
+    var su=$('#growSignup'); if(su) su.onclick=function(){ AFTER_AUTH=null; openAuth('register', null, 'Sign up to get 5% off your first booking.'); };
+    var rf=$('#growRefer'); if(rf) rf.onclick=openRefer;
+  }
+  async function openRefer(){
+    if(!GTOKEN){ AFTER_AUTH=openRefer; openAuth('login', null, 'Sign in (or create an account) to get your referral link.'); return; }
+    var host=$('#detail'), overlay=el('div','overlay');
+    overlay.onclick=function(e){ if(e.target===overlay) host.innerHTML=''; };
+    overlay.innerHTML='<div class="sheet" style="max-width:520px"><div class="sheet-head"><h2>🤝 Refer a host, earn R1 000</h2><button class="x">&times;</button></div><div class="sheet-body"><p class="note">Loading…</p></div></div>';
+    host.innerHTML=''; host.appendChild(overlay);
+    overlay.querySelector('.x').onclick=function(){ host.innerHTML=''; };
+    var body=overlay.querySelector('.sheet-body');
+    await loadGrow();
+    if(!GROW||!GROW.link){ body.innerHTML='<div class="msg err">Could not load your link. Please try again.</div>'; return; }
+    var st={ signed_up:'Signed up · waiting for their first booking', earned:'Earned · we’ll pay you shortly', paid:'Paid ✓' };
+    var wa='https://wa.me/?text='+encodeURIComponent('Do you have an apartment or house to let? Host it on SimonStays: synced calendars, guest payments and cleaner management, for 10% of SimonStays bookings only. Sign up here: '+GROW.link);
+    body.innerHTML='<p style="margin:0 0 6px;line-height:1.55">Know someone with an apartment or house to let? Send them your link. When they sign up through it and take their first paid booking on SimonStays, <b>you earn R1 000</b>.</p>'+
+      '<div class="ref-box"><input id="refLink" readonly value="'+esc(GROW.link)+'"><button id="refCopy">Copy</button></div>'+
+      '<a class="cta-btn" style="display:block;text-align:center;text-decoration:none" href="'+wa+'" target="_blank" rel="noopener">Share on WhatsApp</a>'+
+      '<h3 class="sec">Your referrals</h3>'+
+      ((GROW.referrals||[]).length?(GROW.referrals.map(function(r){ return '<div class="qrow"><span>'+esc(r.name)+'</span><span class="note">'+esc(st[r.status]||r.status)+'</span></div>'; }).join('')):'<p class="note">Nobody yet. Hosts who sign up through your link appear here.</p>')+
+      '<p class="note small" style="margin-top:12px">The reward is paid by EFT once the host you referred has had their first paid SimonStays stay. We’ll contact you for your bank details.</p>';
+    var inp=body.querySelector('#refLink');
+    body.querySelector('#refCopy').onclick=function(){ inp.select(); try{ navigator.clipboard.writeText(inp.value); this.textContent='Copied ✓'; }catch(e){ document.execCommand('copy'); this.textContent='Copied ✓'; } };
+  }
+
   function renderAcct(){
+    loadGrowSoon();
     var box=$('#acctBox'); if(!box) return;
     if(GUEST){
       var who=GUEST.name?esc(GUEST.name.split(' ')[0]):'account';
@@ -2004,7 +2077,11 @@
   }
   window.addEventListener('popstate', routeFromPath);
 
-  loadSession(); renderAcct(); refreshAccount();
+  // Sign-in changes re-check the growth offers (once, shortly after).
+  var GROW_T=null; function loadGrowSoon(){ clearTimeout(GROW_T); GROW_T=setTimeout(loadGrow, 50); }
+  // A referral link (?ref=CODE): keep it, so hosting sign-up credits the referrer.
+  (function(){ try{ var r=new URLSearchParams(location.search).get('ref'); if(r&&/^[A-Za-z0-9]{4,12}$/.test(r)) localStorage.setItem('ss_ref', r.toUpperCase()); }catch(e){} })();
+  loadSession(); renderAcct(); refreshAccount(); renderGrow();
   refreshUnread(); setInterval(refreshUnread, 60000);
   if(/[?&]messages\b/.test(location.search)) openInbox();
   // The link from a guest's first email, to set up their account.

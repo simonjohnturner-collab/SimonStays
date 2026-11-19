@@ -350,6 +350,15 @@
 
 <script src="/assets/track.js"></script>
 <script>
+  // A referral link (/host?ref=CODE): keep the code so the hosting sign-up credits the referrer.
+  (function(){ try{
+    var r=new URLSearchParams(location.search).get('ref');
+    if(r&&/^[A-Za-z0-9]{4,12}$/.test(r)) localStorage.setItem('ss_ref', r.toUpperCase());
+    var code=localStorage.getItem('ss_ref');
+    if(code) document.querySelectorAll('a[href^="/hosting/?signup"]').forEach(function(a){ a.href='/hosting/?signup&ref='+encodeURIComponent(code); });
+  }catch(e){} })();
+</script>
+<script>
   (function(){
     var FEE = 0.10;
     var amt = document.getElementById('amt'), rng = document.getElementById('amtRange');

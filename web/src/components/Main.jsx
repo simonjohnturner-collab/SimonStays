@@ -29,6 +29,7 @@ import { BusinessDetails } from './BillerSettings.jsx';
 import AdminView from './AdminView.jsx';
 import MarketView from './MarketView.jsx';
 import HostTrafficView from './HostTrafficView.jsx';
+import ReferView from './ReferView.jsx';
 import MessagesView from './MessagesView.jsx';
 
 const WINDOW_DAYS = 35;
@@ -357,6 +358,8 @@ export default function Main() {
     screen = <>{tabs(MONEY_TABS)}<PaymentHistoryView onClose={toCalendar} /><BusinessDetails onClose={() => navigate('/money')} /></>;
   } else if (path === '/insights') {
     screen = <>{tabs(INSIGHT_TABS)}<MarketView onClose={toCalendar} /></>;
+  } else if (path === '/refer') {
+    screen = <ReferView />;
   } else if (path === '/insights/traffic') {
     screen = <>{tabs(INSIGHT_TABS)}<HostTrafficView /></>;
   } else if (path === '/settings') {

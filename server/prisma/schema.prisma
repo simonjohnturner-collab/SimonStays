@@ -18,6 +18,7 @@ model Host {
   name         String?
   contactPhone String?
   cleaners     Json          @default("[]") // list of cleaner names for dropdowns
+  referralCode String?       @unique // their link for referring a new host: /host?ref=CODE
   // Payout details — where SimonStays pays this host out for the bookings it collects.
   payoutMethod        String? // e.g. "Bank transfer (EFT)"
   payoutBankName      String?
@@ -115,6 +116,7 @@ model GuestAccount {
   resetTokenHash String? // SHA-256 of the emailed reset link's token; never the token itself
   resetExpiresAt DateTime?
   emailVerifiedAt DateTime? // until set, this account can't see trips booked with its email
+  referralCode String? @unique // their link for referring a new host: /host?ref=CODE
   verifyTokenHash String? // SHA-256 of the emailed confirmation link's token
   verifySentAt    DateTime?
   createdAt    DateTime  @default(now())
@@ -213,6 +215,26 @@ model BubbleRule {
   updatedAt DateTime      @updatedAt
 
   @@unique([bubbleId, hostId])
+}
+
+// A new host who signed up through someone's referral link. The referrer (a
+// guest account or a host) earns amountCents once the new host's first paid
+// SimonStays stay is over; the admin pays it by hand and marks it paid.
+model HostReferral {
+  id                     String    @id @default(uuid())
+  code                   String
+  referrerGuestAccountId String?
+  referrerHostId         String?
+  referredHostId         String    @unique
+  status                 String    @default("signed_up") // signed_up | earned | paid
+  amountCents            Int       @default(100000)
+  earnedAt               DateTime?
+  earnedBookingId        String?
+  paidAt                 DateTime?
+  createdAt              DateTime  @default(now())
+
+  @@index([referrerGuestAccountId])
+  @@index([referrerHostId])
 }
 
 // What a guest uploads when creating an account. Private: only the SimonStays
@@ -596,6 +618,7 @@ model Booking {
   guestEmail   String?
   guestPhone   String?
   recommendedBy String? // who referred this guest, so the host can thank them
+  welcomeDiscountCents Int? // the 5% first-booking discount for a fully signed-up guest; SimonStays bears it, not the host
   // Guestbook: the guest's own details form (/guestbook), mainly for Airbnb guests.
   guestNotes         String? // the guest's special instructions, from the guestbook
   guestbookAt        DateTime? // when the guest last completed the guestbook

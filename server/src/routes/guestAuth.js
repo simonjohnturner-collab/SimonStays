@@ -89,6 +89,7 @@ router.post('/become-host', authGuest, async (req, res, next) => {
     if (existing) return res.status(409).json({ error: 'host_exists', message: 'You already have a hosting account. Sign in with your hosting password.' });
     if (!acct.emailVerifiedAt) return res.status(403).json({ error: 'email_unverified', message: 'Please confirm your email first. We’ve sent you a link.' });
     const host = await prisma.host.create({ data: { email: acct.email, passwordHash: acct.passwordHash, name: acct.name || null, contactPhone: acct.phone || null } });
+    if ((req.body || {}).ref) await require('../utils/referrals').recordReferral(host, req.body.ref);
     res.status(201).json({ token: sign(host), host: { id: host.id, email: host.email, name: host.name } });
   } catch (e) { next(e); }
 });
@@ -207,6 +208,16 @@ router.post('/change-password', authGuest, async (req, res, next) => {
       data: { passwordHash: await bcrypt.hash(newPassword, 10), resetTokenHash: null, resetExpiresAt: null },
     });
     res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// GET /public/account/referral — this guest's link for referring a new host,
+// and who they've referred so far.
+router.get('/referral', authGuest, async (req, res, next) => {
+  try {
+    const r = require('../utils/referrals');
+    const code = await r.codeFor({ guestAccountId: req.guestId });
+    res.json({ code, link: code ? r.linkFor(code) : null, rewardCents: r.REFERRAL_CENTS, welcomeEligible: await r.welcomeEligible(req.guestId), referrals: await r.referralsOf({ guestAccountId: req.guestId }) });
   } catch (e) { next(e); }
 });
 
