@@ -21,6 +21,7 @@ export default function MenuView({ isAdmin, onPropertiesAndUnits, onFindBooking,
       { icon: '🫧', label: 'Pricing bubbles', hint: 'Surge or drop prices with how full similar units are', to: '/listings/bubbles' },
       { icon: '📁', label: 'House documents', hint: 'Files guests get before they arrive', to: '/listings/documents' },
       { icon: '🔒', label: 'Smart locks', hint: 'Locks and guest access codes', to: '/listings/locks' },
+      { icon: '🏘️', label: 'Township Stays', hint: 'Your plan, credit and the tenants who asked for your details', to: '/listings/township' },
     ] },
     { title: 'Money', items: [
       { icon: '💰', label: 'Payouts', hint: 'SimonStays bookings, fees and what you’re paid', to: '/money' },

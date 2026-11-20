@@ -127,7 +127,7 @@ export const api = {
 
   // properties + units
   listProperties: () => req('GET', '/properties'),
-  createProperty: (name, address) => req('POST', '/properties', { name, address }),
+  createProperty: (name, address, kind) => req('POST', '/properties', { name, address, kind }),
   updateProperty: (id, name) => req('PATCH', `/properties/${id}`, { name }),
   setCleanRate: (id, cleanRateCents) => req('PATCH', `/properties/${id}`, { cleanRateCents }),
   reorderProperties: (ids) => req('PUT', '/properties/reorder', { ids }),
@@ -172,6 +172,18 @@ export const api = {
 
   // listings (descriptions + photos) for the property/unit content manager
   getListings: () => req('GET', '/listings'),
+
+  // Township Stays: the host's plan, credit, payments and leads
+  township: () => req('GET', '/host-township'),
+  townshipPlan: (data) => req('PATCH', '/host-township/plan', data), // { plan, monthlyCapCents }
+  townshipTopup: (amountCents) => req('POST', '/host-township/topup', { amountCents }),
+  townshipPayMonth: () => req('POST', '/host-township/pay-month'),
+  // Township Stays: Platform admin
+  adminTownship: () => req('GET', '/admin/township'),
+  adminTownshipSettings: (data) => req('PUT', '/admin/township/settings', data),
+  adminTownshipListing: (id, data) => req('PATCH', `/admin/township/listings/${id}`, data),
+  adminTownshipCredit: (hostId, amountCents, note) => req('POST', `/admin/township/hosts/${hostId}/credit`, { amountCents, note }),
+  adminTownshipMonth: (id, note) => req('POST', `/admin/township/listings/${id}/month`, { note }),
   saveProperty: (id, data) => req('PATCH', `/properties/${id}`, data), // { name, address, description }
   saveUnit: (id, data) => req('PATCH', `/units/${id}`, data), // { name, capacity, description }
   addPropertyPhoto: (propertyId, payload) => req('POST', `/photos/property/${propertyId}`, payload),

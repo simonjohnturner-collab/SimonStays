@@ -46,6 +46,16 @@ model Host {
   messages         Message[]
   knowledge        KnowledgeEntry[]
   askQuestions     AskQuestion[]
+  // ---- Township Stays billing (see utils/township.js) ----
+  tsPlan            String? // monthly (a fee per listing per month) | click (prepaid credit, each contact click costs)
+  tsCreditCents     Int       @default(0) // prepaid credit for the click plan
+  tsMonthlyCapCents Int? // most the host will spend on clicks in a calendar month (null = no limit)
+  tsActivatedAt     DateTime? // first successful payment: listings can go live from here
+  tsVaultId         String? // Paygate vault token of the saved card (monthly auto-charge)
+  tsCardLabel       String? // e.g. "Visa 4242", for the host's screen
+  tsCapNotified     String? // 'YYYY-MM' the host was last told their clicks are switched off
+  townshipLeads     TownshipLead[]
+  townshipPayments  TownshipPayment[]
 }
 
 // A host's connection to a smart-lock cloud provider (RemoteLock). Holds the
@@ -368,6 +378,22 @@ model Property {
   cancellationPolicy String? // shown on the shopfront; falls back to the standard policy
   cleanRateCents Int?    // what a cleaner is paid per checkout clean here (the day's fee), in cents
   bookingMode    String  @default("instant") // instant | rated (instant for guests rated 5 stars by hosts, else a request) | request (host approves every booking)
+  // ---- Township Stays: kind 'township' is a longer rental listed on /township,
+  // with no units or bookings. Tenants pay nothing; the host pays to be found. ----
+  kind              String    @default("stay") // stay | township
+  areaName          String? // e.g. "Soweto, Orlando West"
+  areaDescription   String? // the neighbourhood: transport, shops, schools, safety
+  monthlyRentCents  Int?
+  weeklyRentCents   Int?
+  depositCents      Int?
+  contactName       String? // shown to a tenant who asks for contact details
+  contactPhone      String?
+  contactEmail      String?
+  tsHidden          Boolean   @default(false) // the host has taken it off Township Stays
+  tsMonthlyFeeCents Int? // admin override of the monthly listing fee
+  tsClickFeeCents   Int? // admin override of the per-click fee
+  tsPaidUntil       DateTime? // monthly plan: live until then
+  townshipLeads     TownshipLead[]
   sortOrder   Int      @default(0) // manual order on the board (lower = higher up)
   createdAt   DateTime @default(now())
   units       Unit[]
@@ -1065,4 +1091,56 @@ model PageEvent {
   @@index([guestAccountId])
   @@index([type, at])
   @@index([unitId])
+}
+
+// Platform-wide settings Simon sets in Platform admin (key -> JSON value),
+// e.g. township.monthlyFeeCents / township.clickFeeCents.
+model PlatformSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// Someone who asked for a Township Stay's contact details. 'open' = the host
+// paid (or is on the monthly plan) and the tenant saw the details; 'locked' =
+// the host's clicks were switched off, so the tenant asked to be contacted and
+// their details unlock (and are charged) when the host tops up.
+model TownshipLead {
+  id             String    @id @default(uuid())
+  propertyId     String
+  property       Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  hostId         String
+  host           Host      @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  guestAccountId String?
+  name           String?
+  phone          String?
+  email          String?
+  message        String?
+  status         String    @default("open") // open | locked
+  feeCents       Int       @default(0) // what this click cost the host
+  chargedAt      DateTime? // when the fee came off their credit (counts toward that month's maximum)
+  createdAt      DateTime  @default(now())
+
+  @@index([hostId, createdAt])
+  @@index([propertyId, guestAccountId])
+}
+
+// A host's Township Stays payment: credit top-up or a month of listing fees.
+model TownshipPayment {
+  id          String    @id @default(uuid())
+  hostId      String
+  host        Host      @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  kind        String // topup | monthly
+  method      String    @default("card") // card (Paygate page) | vault (saved card) | admin (added by hand)
+  amountCents Int
+  propertyIds Json      @default("[]") // monthly: the listings this month pays for
+  status      String    @default("pending") // pending | COMPLETE | DECLINED | CANCELLED | ...
+  providerRef String?   @unique
+  note        String?
+  raw         Json?
+  appliedAt   DateTime? // when the credit / months were added (exactly once)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([hostId, createdAt])
 }

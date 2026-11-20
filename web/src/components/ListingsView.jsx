@@ -1,5 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, photoUrl } from '../api.js';
+import { navigate } from '../router.js';
+
+// A rand amount kept in cents. The text is held locally so "12." can be typed.
+function RandInput({ cents, onChange, onBlur, placeholder }) {
+  const show = (c) => (c == null ? '' : String(c / 100));
+  const [text, setText] = useState(show(cents));
+  useEffect(() => { setText((t) => (Math.round(Number(t) * 100) === cents || (t === '' && cents == null) ? t : show(cents))); }, [cents]);
+  return (
+    <input inputMode="decimal" placeholder={placeholder} value={text}
+      onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ''); setText(v); onChange(v === '' ? null : Math.round(Number(v) * 100)); }}
+      onBlur={onBlur} />
+  );
+}
+
+// What a Township Stay still needs before it can go live (matches server/src/utils/township.js).
+function townshipMissing(p) {
+  const m = [];
+  if (!String(p.name || '').trim()) m.push('a name');
+  if (!p.monthlyRentCents && !p.weeklyRentCents) m.push('a monthly or weekly rent');
+  if (!p.contactPhone && !p.contactEmail) m.push('a contact phone or email');
+  if (!(p.photos || []).length) m.push('at least one photo');
+  return m;
+}
 
 // Must match server/src/utils/policy.js (shown on the shopfront when a property
 // hasn't set its own). Pre-filled here so hosts can tweak per listing.
@@ -144,13 +167,14 @@ export default function ListingsView({ onClose }) {
   const [dirty, setDirty] = useState(false); // unsaved edits pending
   const [saving, setSaving] = useState(false);
   const [calBusy, setCalBusy] = useState(null); // unit id whose calendar is saving
+  const [ts, setTs] = useState(null); // Township Stays status (plan, which listings are live)
 
   async function load() {
     const r = await api.getListings();
     setProperties(r.properties);
     setSelectedId((cur) => (cur && r.properties.some((p) => p.id === cur) ? cur : r.properties[0]?.id || null));
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); api.township().then(setTs).catch(() => {}); }, []);
 
   // ---- local edits (kept in state; saved on the Save button) ----
   const editProp = (pid, patch) => { setDirty(true); setProperties((ps) => ps.map((p) => (p.id === pid ? { ...p, ...patch } : p))); };
@@ -164,7 +188,14 @@ export default function ListingsView({ onClose }) {
       latitude: p.latitude ?? null, longitude: p.longitude ?? null,
       cancellationPolicy: p.cancellationPolicy ?? '',
       bookingMode: p.bookingMode || 'instant',
+      ...(p.kind === 'township' ? {
+        areaName: p.areaName || '', areaDescription: p.areaDescription || '',
+        monthlyRentCents: p.monthlyRentCents ?? null, weeklyRentCents: p.weeklyRentCents ?? null, depositCents: p.depositCents ?? null,
+        contactName: p.contactName || '', contactPhone: p.contactPhone || '', contactEmail: p.contactEmail || '',
+        tsHidden: !!p.tsHidden,
+      } : {}),
     });
+    if (p.kind === 'township') api.township().then(setTs).catch(() => {});
     if (!quiet) flash('Saved.');
   }
   async function saveUnit(u, quiet) {
@@ -260,11 +291,15 @@ export default function ListingsView({ onClose }) {
   }
 
   // ---- property & unit management (moved here from the old property menu) ----
-  async function addProperty() {
-    const name = window.prompt('New property name');
+  async function addProperty(kind) {
+    const township = kind === 'township';
+    const name = window.prompt(township ? 'Name of your Township Stay (e.g. Room in Orlando West)' : 'New property name');
     if (!name || !name.trim()) return;
-    try { const r = await api.createProperty(name.trim()); await load(); if (r && r.property) setSelectedId(r.property.id); flash('Property added.'); }
-    catch (e) { setMsg(e.message); }
+    try {
+      const r = await api.createProperty(name.trim(), undefined, township ? 'township' : undefined);
+      await load(); if (r && r.property) setSelectedId(r.property.id);
+      flash(township ? 'Township Stay added.' : 'Property added.');
+    } catch (e) { setMsg(e.message); }
   }
   async function addUnit(pid) {
     const name = window.prompt('New unit name (e.g. 23, or Main)');
@@ -290,6 +325,94 @@ export default function ListingsView({ onClose }) {
     try { await api.reorderProperties(ids); await load(); } catch (e) { setMsg(e.message); }
   }
 
+  // A Township Stay: a longer rental on SimonStays Township Stays. No units or
+  // bookings: photos, the area, the place, rents and the contact details tenants unlock.
+  function townshipDetail(p) {
+    const missing = townshipMissing(p);
+    const info = ts && (ts.listings || []).find((x) => x.id === p.id);
+    const live = !!(info && info.live);
+    const planNote = !ts ? '' : !ts.plan ? 'Choose a plan (monthly fee or pay per click) on your Township Stays page.'
+      : ts.plan === 'monthly' && !live && !missing.length && !p.tsHidden ? 'Pay this month’s listing fee on your Township Stays page.'
+      : ts.plan === 'click' && !ts.activated ? 'Load credit on your Township Stays page.' : '';
+    return (
+      <section key={p.id} className="listing-card">
+        <div className="listing-head">
+          <input className="listing-name" placeholder="Listing name, e.g. Room in Orlando West" value={p.name} onChange={(e) => editProp(p.id, { name: e.target.value })} />
+          <button className="ghost save" onClick={() => saveProp(p)}>💾 Save</button>
+        </div>
+        <div className={`ts-status ${live ? 'ok' : ''}`}>
+          {p.tsHidden ? 'Hidden: tenants can’t see this listing.'
+            : live ? 'Live on SimonStays Township Stays.'
+            : <>Not live yet.{missing.length ? ` It still needs ${missing.join(', ')}.` : ''} {planNote}</>}
+          {' '}<a onClick={() => navigate('/listings/township')}>Plan, credit and leads →</a>
+        </div>
+        <div className="listing-prop-actions">
+          <label className="small" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input type="checkbox" checked={!p.tsHidden}
+              onChange={(e) => { const np = { ...p, tsHidden: !e.target.checked }; editProp(p.id, { tsHidden: np.tsHidden }); autoSaveProp(np); }} />
+            Show on Township Stays
+          </label>
+          <span className="spacer" />
+          <button className="mini danger" onClick={() => removeProperty(p)}>🗑 Delete listing</button>
+        </div>
+
+        <div className="attr-section">
+          <div className="attr-head">Photos <span className="muted small">— the first one is the cover</span></div>
+          <PhotoGrid photos={p.photos} busy={busyPhoto === p.id}
+            onAdd={(files) => addPhotos('property', p.id, null, files)}
+            onCover={(id) => coverPhoto('property', p.id, null, id)}
+            onReorder={(ids) => reorderPhotos('property', p.id, null, ids)}
+            onDelete={(id) => deletePhoto('property', p.id, null, id)} />
+        </div>
+
+        <div className="attr-section">
+          <div className="attr-head">The area</div>
+          <div className="attr-grid">
+            <label className="attr wide">Area <span className="muted small">— township and section</span>
+              <input value={p.areaName || ''} placeholder="e.g. Soweto, Orlando West" onChange={(e) => editProp(p.id, { areaName: e.target.value })} onBlur={() => autoSaveProp(p)} /></label>
+          </div>
+          <textarea className="listing-desc" rows={4} placeholder="About the area: taxis and transport, shops, schools, clinics, how safe it is…"
+            value={p.areaDescription || ''} onChange={(e) => editProp(p.id, { areaDescription: e.target.value })} onBlur={() => autoSaveProp(p)} />
+        </div>
+
+        <div className="attr-section">
+          <div className="attr-head">The place</div>
+          <textarea className="listing-desc" rows={5} placeholder="About the place: a room or the whole house, beds, bathroom, kitchen, electricity and water, parking, house rules…"
+            value={p.description || ''} onChange={(e) => editProp(p.id, { description: e.target.value })} onBlur={() => autoSaveProp(p)} />
+        </div>
+
+        <div className="attr-section">
+          <div className="attr-head">Pricing <span className="muted small">— in rand</span></div>
+          <div className="attr-grid">
+            <label className="attr">Monthly rent<RandInput cents={p.monthlyRentCents ?? null} placeholder="e.g. 3500" onChange={(c) => editProp(p.id, { monthlyRentCents: c })} onBlur={() => autoSaveProp(p)} /></label>
+            <label className="attr">Weekly rent<RandInput cents={p.weeklyRentCents ?? null} placeholder="optional" onChange={(c) => editProp(p.id, { weeklyRentCents: c })} onBlur={() => autoSaveProp(p)} /></label>
+            <label className="attr">Deposit<RandInput cents={p.depositCents ?? null} placeholder="e.g. 3500" onChange={(c) => editProp(p.id, { depositCents: c })} onBlur={() => autoSaveProp(p)} /></label>
+          </div>
+        </div>
+
+        <div className="attr-section">
+          <div className="attr-head">Contact details <span className="muted small">— hidden until a tenant taps Contact details</span></div>
+          <div className="attr-grid">
+            <label className="attr">Name<input value={p.contactName || ''} placeholder="Who tenants should ask for" onChange={(e) => editProp(p.id, { contactName: e.target.value })} onBlur={() => autoSaveProp(p)} /></label>
+            <label className="attr">Phone<input value={p.contactPhone || ''} placeholder="e.g. 072 123 4567" onChange={(e) => editProp(p.id, { contactPhone: e.target.value })} onBlur={() => autoSaveProp(p)} /></label>
+            <label className="attr wide">Email<input type="email" value={p.contactEmail || ''} placeholder="optional" onChange={(e) => editProp(p.id, { contactEmail: e.target.value })} onBlur={() => autoSaveProp(p)} /></label>
+          </div>
+        </div>
+
+        <div className="attr-section">
+          <div className="attr-head">Location <span className="muted small">— optional; click the map to drop a pin</span></div>
+          <MapPicker lat={p.latitude} lng={p.longitude} onPick={(la, ln) => editProp(p.id, { latitude: la, longitude: ln })} />
+          <div className="map-coords">
+            {p.latitude != null && p.longitude != null
+              ? <>📍 {p.latitude}, {p.longitude} <button className="mini" onClick={() => editProp(p.id, { latitude: null, longitude: null })}>Clear pin</button></>
+              : <span className="muted small">No pin dropped yet.</span>}
+          </div>
+          <button className="ghost save" style={{ marginTop: 10 }} onClick={() => saveProp(p)}>💾 Save location</button>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <div className="invoices-view">
       <header className="topbar">
@@ -306,25 +429,38 @@ export default function ListingsView({ onClose }) {
       {!properties ? <p className="muted small" style={{ padding: 16 }}>Loading…</p> : properties.length === 0 ? (
         <div style={{ padding: 16 }}>
           <p className="muted small">No properties yet.</p>
-          <button onClick={addProperty}>➕ Add a property</button>
+          <button onClick={() => addProperty()}>➕ Add a property</button>{' '}
+          <button className="secondary" onClick={() => addProperty('township')}>➕ Add a Township Stay</button>
         </div>
       ) : (
         <div className="listings-layout">
           <aside className="listings-index">
             <div className="listings-index-head">Properties</div>
-            {properties.map((p) => (
+            {properties.filter((p) => p.kind !== 'township').map((p) => (
               <button key={p.id} className={`listings-index-item ${p.id === selectedId ? 'active' : ''}`} onClick={() => setSelectedId(p.id)}>
                 <span className="li-name">{p.name || 'Untitled property'}</span>
                 <span className="li-sub">{p.units.length} unit{p.units.length === 1 ? '' : 's'}{p.photos.length ? ` · ${p.photos.length} photo${p.photos.length === 1 ? '' : 's'}` : ''}</span>
               </button>
             ))}
-            <button className="li-add" onClick={addProperty}>➕ Add a property</button>
+            <button className="li-add" onClick={() => addProperty()}>➕ Add a property</button>
+            <div className="listings-index-head" style={{ marginTop: 14 }}>Township Stays</div>
+            {properties.filter((p) => p.kind === 'township').map((p) => {
+              const live = ts && (ts.listings || []).find((x) => x.id === p.id)?.live;
+              return (
+                <button key={p.id} className={`listings-index-item ${p.id === selectedId ? 'active' : ''}`} onClick={() => setSelectedId(p.id)}>
+                  <span className="li-name">{p.name || 'Untitled Township Stay'}</span>
+                  <span className="li-sub">{p.tsHidden ? 'Hidden' : live ? 'Live on Township Stays' : 'Not live yet'}{p.photos.length ? ` · ${p.photos.length} photo${p.photos.length === 1 ? '' : 's'}` : ''}</span>
+                </button>
+              );
+            })}
+            <button className="li-add" onClick={() => addProperty('township')}>➕ Add a Township Stay</button>
           </aside>
 
           <div className="listings-detail">
             {(() => {
               const p = properties.find((x) => x.id === selectedId) || properties[0];
               if (!p) return null;
+              if (p.kind === 'township') return townshipDetail(p);
               return (
                 <section key={p.id} className="listing-card">
                   <div className="listing-head">

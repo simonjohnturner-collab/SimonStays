@@ -1471,3 +1471,32 @@ button.bm-cancel:hover { background: #fdeaea; }
 .bm-extend-row { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px; margin-top:8px; padding:10px; border:1px dashed var(--line); border-radius:8px; }
 .bm-extend-row label { margin:0; }
 .bm-extend-row p { flex-basis:100%; margin:0; }
+
+/* ---- Township Stays (host screen + listing status) ---- */
+.ts-status { margin: 8px 0 12px; padding: 9px 11px; border-radius: 9px; background: #fff7e6; border: 1px solid #f0d9a8; color: #7a5300; font-size: 13px; }
+.ts-status.ok { background: #eef6f0; border-color: #cfe6d6; color: var(--brand, #1a7a3a); }
+.ts-status a, .ts-head a { font-weight: 700; cursor: pointer; }
+.ts-body { padding: 16px; display: grid; gap: 14px; max-width: 920px; }
+.ts-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.ts-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.ts-big { font-size: 22px; font-weight: 800; }
+.ts-pill { display: inline-block; font-size: 11.5px; font-weight: 700; border-radius: 999px; padding: 2px 9px; margin-left: 8px; }
+.ts-pill.ok { background: #e8f6ec; color: var(--brand, #1a7a3a); }
+.ts-pill.off { background: #fdecec; color: #a12d2d; }
+.ts-plans { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ts-plan { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+.ts-plan.on { border-color: var(--brand, #1a7a3a); background: #eef6f0; }
+.ts-plan input { width: auto; margin-top: 3px; }
+.ts-plan > span { display: flex; flex-direction: column; gap: 3px; }
+.ts-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ts-amt { width: 110px; }
+.ts-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.ts-table th { text-align: left; font-size: 11.5px; color: var(--muted); font-weight: 700; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.ts-table td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.ts-table tr.locked td { background: #fffaf0; }
+.ts-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ts-locked { margin-bottom: 10px; padding: 9px 11px; border-radius: 9px; background: #fff7e6; border: 1px solid #f0d9a8; color: #7a5300; font-size: 13px; }
+@media (max-width: 640px) {
+  .ts-plans { grid-template-columns: 1fr; }
+  .ts-table { display: block; overflow-x: auto; }
+}

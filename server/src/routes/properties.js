@@ -5,10 +5,11 @@ const { authHost, requireOwnedProperty } = require('../middleware/auth');
 const router = express.Router();
 router.use(authHost);
 
-// GET /properties — all of the host's properties, with units.
+// GET /properties — the host's bookable properties, with units. Township Stays
+// (no units, no bookings) live on Listings and /township, not the calendar.
 router.get('/', async (req, res) => {
   const properties = await prisma.property.findMany({
-    where: { hostId: req.hostId },
+    where: { hostId: req.hostId, kind: 'stay' },
     include: { units: { orderBy: { createdAt: 'asc' } } },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
   });
@@ -25,12 +26,12 @@ router.put('/reorder', async (req, res) => {
   res.json({ ok: true });
 });
 
-// POST /properties { name, address }
+// POST /properties { name, address, kind } — kind 'township' makes a Township Stay.
 router.post('/', async (req, res) => {
-  const { name, address } = req.body || {};
+  const { name, address, kind } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name_required' });
   const property = await prisma.property.create({
-    data: { hostId: req.hostId, name, address: address || null },
+    data: { hostId: req.hostId, name, address: address || null, kind: kind === 'township' ? 'township' : 'stay' },
   });
   res.status(201).json({ property });
 });
@@ -43,8 +44,13 @@ router.patch('/:id', requireOwnedProperty, async (req, res) => {
     address: b.address ?? req.property.address,
     description: b.description ?? req.property.description,
   };
-  ['security', 'access', 'checkInTime', 'checkOutTime', 'backupPower', 'backupWater', 'parkingNotes', 'cancellationPolicy']
-    .forEach((k) => { if (k in b) data[k] = b[k] === '' ? null : b[k]; });
+  ['security', 'access', 'checkInTime', 'checkOutTime', 'backupPower', 'backupWater', 'parkingNotes', 'cancellationPolicy',
+    'areaName', 'areaDescription', 'contactName', 'contactPhone', 'contactEmail']
+    .forEach((k) => { if (k in b) data[k] = b[k] === '' || b[k] == null ? null : String(b[k]); });
+  // Township Stay rents, in cents.
+  ['monthlyRentCents', 'weeklyRentCents', 'depositCents']
+    .forEach((k) => { if (k in b) data[k] = (b[k] === '' || b[k] == null) ? null : Math.max(0, Math.round(Number(b[k]))) || null; });
+  if ('tsHidden' in b) data.tsHidden = !!b.tsHidden;
   ['latitude', 'longitude'].forEach((k) => { if (k in b) data[k] = (b[k] === '' || b[k] == null) ? null : Number(b[k]); });
   if ('parkingBays' in b) data.parkingBays = (b.parkingBays === '' || b.parkingBays == null) ? null : Number(b.parkingBays);
   if ('bookingMode' in b && require('../utils/bookingMode').MODES.includes(b.bookingMode)) data.bookingMode = b.bookingMode;

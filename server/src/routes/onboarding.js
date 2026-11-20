@@ -14,7 +14,7 @@ router.get('/', async (req, res, next) => {
     const hostId = req.hostId;
     const [props, biller, providers, schedules, bubbles] = await Promise.all([
       prisma.property.findMany({
-        where: { hostId },
+        where: { hostId, kind: 'stay' },
         select: { description: true, latitude: true, _count: { select: { photos: true } },
           units: { select: { pricingGroupId: true, _count: { select: { photos: true, channels: { where: { importUrl: { not: null } } } } } } } },
       }),

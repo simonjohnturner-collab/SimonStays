@@ -45,6 +45,8 @@ app.use('/public/paygate', require('./routes/paygate'));
 app.use('/public/guestbook', require('./routes/guestbook'));
 // Ask Simon (AI guest Q&A on the shopfront) — public, rate-limited.
 app.use('/public/ask', require('./routes/ask'));
+// Township Stays: listings, contact clicks, host payments' Paygate return.
+app.use('/public/township', require('./routes/township').pub);
 // Public shopfront API (no auth) — mount before the auth'd catch-all routers.
 app.use('/public', require('./routes/public'));
 
@@ -185,7 +187,7 @@ app.get(['/privacy', '/privacy.html', '/privacy-policy'], (req, res) => {
 
 // Travelling: the guest site. Every screen has an address of its own; the page
 // opens the matching screen from the path (/trips/:id, /stays/:unitId, …).
-app.get(['/', '/stay', '/book', '/guestbook', '/stays/:propertyId', '/stays/:propertyId/:unitId', '/trips', '/trips/:bookingId', '/messages'], (req, res) => {
+app.get(['/', '/stay', '/book', '/guestbook', '/township', '/township/:listingId', '/stays/:propertyId', '/stays/:propertyId/:unitId', '/trips', '/trips/:bookingId', '/messages'], (req, res) => {
   res.setHeader('Content-Security-Policy', STAY_CSP);
   res.setHeader('Cache-Control', 'no-cache, must-revalidate'); // always serve the latest shopfront (map tiles, checkout, etc.)
   res.type('html').send(stayHtml);
@@ -194,6 +196,8 @@ app.get(['/', '/stay', '/book', '/guestbook', '/stays/:propertyId', '/stays/:pro
 app.use('/auth', require('./routes/auth'));
 app.use('/admin/traffic', require('./routes/adminTraffic'));
 app.use('/admin/bubbles', require('./routes/adminBubbles'));
+app.use('/admin/township', require('./routes/township').admin);
+app.use('/host-township', require('./routes/township').host); // not /township: that's the public page
 app.use('/admin', require('./routes/admin'));
 app.use('/account', require('./routes/account'));
 app.use('/email', require('./routes/email'));
@@ -310,6 +314,13 @@ if (require.main === module) {
     .catch((e) => console.error('[payments] expire failed', e.message));
   setTimeout(expireHolds, 90 * 1000);
   cron.schedule('41 * * * *', expireHolds);
+
+  // Daily 08:00: Township Stays monthly fees — charge saved cards that are due,
+  // or remind the host 3 days before and on the day.
+  cron.schedule('0 8 * * *', async () => {
+    try { console.log('[township] daily', JSON.stringify(await require('./utils/township').runDaily())); }
+    catch (e) { console.error('[township] daily failed', e.message); }
+  }, { timezone: 'Africa/Johannesburg' });
 
   // Scheduled guest messages ("2 days before check-in at 10:00", …). Checks every
   // 5 minutes; each schedule sends once per booking. Override with MESSAGE_CRON.

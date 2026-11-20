@@ -31,6 +31,7 @@ import MarketView from './MarketView.jsx';
 import HostTrafficView from './HostTrafficView.jsx';
 import ReferView from './ReferView.jsx';
 import MessagesView from './MessagesView.jsx';
+import TownshipView from './TownshipView.jsx';
 
 const WINDOW_DAYS = 35;
 const LAST_SYNC_KEY = 'staysync_last_sync';
@@ -245,7 +246,7 @@ export default function Main() {
     : path.startsWith('/inbox') ? 'inbox'
     : 'menu';
 
-  const LISTING_TABS = [['/listings', 'Listings'], ['/listings/pricing', 'Pricing'], ['/listings/bubbles', 'Pricing bubbles'], ['/listings/documents', 'House documents'], ['/listings/locks', 'Smart locks']];
+  const LISTING_TABS = [['/listings', 'Listings'], ['/listings/pricing', 'Pricing'], ['/listings/bubbles', 'Pricing bubbles'], ['/listings/documents', 'House documents'], ['/listings/locks', 'Smart locks'], ['/listings/township', 'Township Stays']];
   const INSIGHT_TABS = [['/insights', 'Market watch'], ['/insights/traffic', 'Listing traffic']];
   const MONEY_TABS = [['/money', 'Payouts'], ['/money/invoices', 'Invoices'], ['/money/billing', 'Billing details']];
   const tabs = (items, extra) => (
@@ -320,6 +321,8 @@ export default function Main() {
     screen = <>{tabs(LISTING_TABS)}<RateCardMatrix onClose={toCalendar} /></>;
   } else if (path === '/listings/documents') {
     screen = <>{tabs(LISTING_TABS)}<DocumentsView onClose={toCalendar} /></>;
+  } else if (path === '/listings/township') {
+    screen = <>{tabs(LISTING_TABS)}<TownshipView /></>;
   } else if (path === '/listings/locks') {
     screen = <>{tabs(LISTING_TABS)}<SmartLockView onClose={toCalendar} /></>;
   } else if (path === '/inbox' || (m = match('/inbox/:tab', path))) {

@@ -63,12 +63,14 @@ const txDate = (d = new Date()) => d.toISOString().replace('T', ' ').slice(0, 19
 
 // Start a transaction. Returns { payRequestId, form: { action, fields } } — the
 // browser posts the form to Paygate's payment page.
-async function initiate({ reference, amountCents, email, returnUrl, notifyUrl, user1 }) {
+// `vault: true` asks Paygate to save the card (needs Vault enabled on the merchant
+// account); query.trans then returns VAULT_ID for later charges (vaultCharge).
+async function initiate({ reference, amountCents, email, returnUrl, notifyUrl, user1, vault = false }) {
   const c = config();
   const f = {
     PAYGATE_ID: c.paygateId, REFERENCE: reference, AMOUNT: String(Math.round(amountCents)), CURRENCY: 'ZAR',
     RETURN_URL: returnUrl, TRANSACTION_DATE: txDate(), LOCALE: 'en-za', COUNTRY: 'ZAF', EMAIL: email,
-    NOTIFY_URL: notifyUrl, USER1: user1,
+    NOTIFY_URL: notifyUrl, USER1: user1, VAULT: vault ? '1' : undefined,
   };
   for (const k of Object.keys(f)) if (f[k] === undefined || f[k] === null || f[k] === '') delete f[k];
   f.CHECKSUM = checksum(INITIATE_ORDER.filter((k) => k in f).map((k) => f[k]), c.key);
@@ -223,7 +225,55 @@ async function payhostSelfTest({ refundImpl = refund } = {}) {
   return { ok: false, outcome: r.outcome, resultCode: code || null, message: r.message };
 }
 
+// Is card saving (Paygate Vault) switched on? Paygate enables Vault on the merchant
+// account; set PAYGATE_VAULT=on once they have. Charging a saved card later also
+// needs PayHost (PAYGATE_PAYHOST_PASSWORD).
+function vaultReady() {
+  const c = config();
+  return c.mode !== 'simulate' && /^(1|on|true|yes)$/i.test(String(process.env.PAYGATE_VAULT || '').trim()) && !!(c.paygateId && c.payhostPassword);
+}
+
+function vaultChargeEnvelope({ paygateId, password, vaultId, reference, amountCents, email, name }) {
+  const [first, ...rest] = String(name || 'SimonStays host').trim().split(/\s+/);
+  return '<?xml version="1.0" encoding="UTF-8"?>'
+    + '<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"><SOAP-ENV:Header/><SOAP-ENV:Body>'
+    + '<SinglePaymentRequest xmlns="http://www.paygate.co.za/PayHOST"><CardPaymentRequest>'
+    + `<Account><PayGateId>${xmlEsc(paygateId)}</PayGateId><Password>${xmlEsc(password)}</Password></Account>`
+    + `<Customer><FirstName>${xmlEsc(first || 'Host')}</FirstName><LastName>${xmlEsc(rest.join(' ') || first || 'Host')}</LastName><Email>${xmlEsc(email)}</Email></Customer>`
+    + `<VaultId>${xmlEsc(vaultId)}</VaultId><BudgetPeriod>0</BudgetPeriod>`
+    + `<Order><MerchantOrderId>${xmlEsc(reference)}</MerchantOrderId><Currency>ZAR</Currency><Amount>${Math.round(amountCents)}</Amount></Order>`
+    + '</CardPaymentRequest></SinglePaymentRequest></SOAP-ENV:Body></SOAP-ENV:Envelope>';
+}
+
+// Charge a saved card (PayHost CardPaymentRequest with a VaultId). Returns
+// { outcome: 'approved' | 'declined' | 'unclear', transactionId, message }.
+// 'unclear' (no reply, 3-D Secure asked for, anything unexpected) is never retried
+// automatically: the host gets a pay link instead.
+async function vaultCharge({ vaultId, reference, amountCents, email, name }, { fetchImpl = fetch, timeoutMs = 30000 } = {}) {
+  const c = config();
+  if (!vaultReady()) return { outcome: 'declined', message: 'Card saving is not switched on.' };
+  let res; let text;
+  try {
+    res = await fetchImpl(PAYHOST_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: 'SinglePayment' },
+      body: vaultChargeEnvelope({ paygateId: c.paygateId, password: c.payhostPassword, vaultId, reference, amountCents, email, name }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    text = await res.text();
+  } catch (e) { return { outcome: 'unclear', message: `No reply from Paygate (${e.message})` }; }
+  const status = tag(text, 'TransactionStatusCode');
+  const transactionId = tag(text, 'TransactionId');
+  const message = tag(text, 'ResultDescription') || tag(text, 'faultstring') || `HTTP ${res.status}`;
+  if (/<(?:[\w-]+:)?Redirect\b/.test(text)) return { outcome: 'unclear', transactionId, message: 'Paygate asked for 3-D Secure' };
+  if (status === '1') return { outcome: 'approved', transactionId, message };
+  if (status === '2' || status === '3' || status === '4') return { outcome: 'declined', transactionId, message };
+  console.warn('[paygate] vault charge unclear', reference, text.slice(0, 800));
+  return { outcome: 'unclear', transactionId, message };
+}
+
 module.exports = {
+  vaultReady, vaultCharge, vaultChargeEnvelope,
   payhostSelfTest,
   mode, config, ready, initiate, query, validPayload, checksum, md5, txDate, selfTest, STATUS, TEST, PROCESS_URL,
   refund, refundsReady, readRefundReply, refundEnvelope, PAYHOST_URL,

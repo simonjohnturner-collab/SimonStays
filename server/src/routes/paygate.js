@@ -13,7 +13,9 @@ router.post('/notify', express.text({ type: 'application/x-www-form-urlencoded',
   const raw = typeof req.body === 'string' ? req.body : '';
   res.type('text/plain').send('OK');
   try {
-    const r = await payments.handleNotify(raw);
+    let r = await payments.handleNotify(raw);
+    // Not a booking payment: a host's Township Stays top-up or monthly fee?
+    if (!r.ok && r.reason === 'unknown_payment') r = await require('../utils/township').handleNotify(raw);
     if (r.ok) console.log('[paygate] notify', r.outcome);
     else console.warn('[paygate] notify rejected:', r.reason);
   } catch (e) { console.error('[paygate] notify failed', e); }

@@ -130,6 +130,7 @@ router.get('/properties', async (req, res, next) => {
     const minGuests = guests ? Number(guests) : 0;
 
     const props = await prisma.property.findMany({
+      where: { kind: 'stay' }, // Township Stays have their own site
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       include: { photos: { orderBy: { sort: 'asc' } }, units: { include: unitInclude } },
     });
@@ -176,7 +177,7 @@ router.get('/properties', async (req, res, next) => {
 router.get('/properties/:id', async (req, res, next) => {
   try {
     const p = await prisma.property.findFirst({
-      where: { id: req.params.id },
+      where: { id: req.params.id, kind: 'stay' },
       include: { photos: { orderBy: { sort: 'asc' } }, units: { include: unitInclude } },
     });
     if (!p) return res.status(404).json({ error: 'not_found' });
@@ -219,6 +220,7 @@ router.get('/units', async (req, res, next) => {
     const minGuests = guests ? Number(guests) : 0;
 
     const props = await prisma.property.findMany({
+      where: { kind: 'stay' }, // Township Stays have their own site
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       include: { photos: { orderBy: { sort: 'asc' } }, units: { include: unitInclude } },
     });
@@ -596,7 +598,7 @@ router.get('/forms/units', async (req, res, next) => {
     if (!hostId) return res.json({ properties: [], cleaners: [] });
     const [properties, providers, host] = await Promise.all([
       prisma.property.findMany({
-        where: { hostId }, orderBy: { sortOrder: 'asc' },
+        where: { hostId, kind: 'stay' }, orderBy: { sortOrder: 'asc' },
         select: { id: true, name: true, cleanRateCents: true, units: { select: { id: true, name: true, bedrooms: true, bathrooms: true }, orderBy: { createdAt: 'asc' } } },
       }),
       prisma.serviceProvider.findMany({ where: { hostId, role: 'Cleaner' }, orderBy: { name: 'asc' }, select: { name: true } }),
@@ -694,7 +696,7 @@ router.get('/forms/:type', async (req, res, next) => {
     let template = await prisma.formTemplate.findFirst({ where: { hostId, type, active: true } });
     if (!template) template = { ...defaultTemplate(type), id: null };
     const properties = await prisma.property.findMany({
-      where: { hostId }, orderBy: { sortOrder: 'asc' },
+      where: { hostId, kind: 'stay' }, orderBy: { sortOrder: 'asc' },
       select: { id: true, name: true, units: { select: { id: true, name: true }, orderBy: { createdAt: 'asc' } } },
     });
     res.json({

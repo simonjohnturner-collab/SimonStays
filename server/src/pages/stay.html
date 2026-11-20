@@ -399,6 +399,36 @@
   .trip-inv:hover{ background:#efe4c6; }
   .paper-wrap{ background:#eceae4; border-radius:10px; padding:10px 0; overflow-x:auto; }
   .trip-report{ display:inline-block; margin-top:8px; margin-left:6px; font-size:14px; font-weight:600; color:#9a4b0b; }
+  /* ---- SimonStays | Township Stays switch, and the Township section ---- */
+  .sect-switch{ display:flex; gap:4px; margin:14px 0 0; padding:4px; background:#eef1f4; border-radius:12px; width:max-content; max-width:100%; }
+  .sect-switch a{ padding:8px 16px; border-radius:9px; font-weight:700; font-size:14px; color:var(--muted); white-space:nowrap; }
+  .sect-switch a.on{ background:#fff; color:var(--green-d); box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  #township{ display:none; }
+  body.ts-mode #township{ display:block; }
+  body.ts-mode .search-bar, body.ts-mode .promos, body.ts-mode .toolbar, body.ts-mode #results, body.ts-mode #map, body.ts-mode .host-cta{ display:none !important; }
+  .ts-banner{ margin:16px 0; padding:18px 20px; border-radius:16px; background:linear-gradient(135deg,#14622f,#1a7a3a); color:#fff; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .ts-banner h2{ margin:0 0 4px; font-size:20px; color:#fff; }
+  .ts-banner p{ margin:0; color:#d9efe0; font-size:14px; max-width:620px; line-height:1.45; }
+  .ts-banner a{ background:#fff; color:var(--green-d); font-weight:700; border-radius:8px; padding:10px 18px; white-space:nowrap; }
+  .ts-intro{ margin:4px 0 12px; }
+  .ts-intro h1{ margin:0 0 4px; font-size:24px; letter-spacing:-.3px; }
+  .ts-intro p{ margin:0; color:var(--muted); font-size:14px; }
+  .ts-find{ display:flex; gap:8px; margin:0 0 14px; max-width:520px; }
+  .ts-find input{ flex:1; }
+  .ts-price{ margin-top:8px; font-weight:700; }
+  .ts-price small{ color:var(--muted); font-weight:400; }
+  .ts-prices{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin:12px 0; }
+  .ts-prices div{ border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .ts-prices small{ display:block; color:var(--muted); font-size:12px; }
+  .ts-prices b{ font-size:18px; }
+  .ts-contact{ margin:14px 0; padding:14px; border:1px solid #cfe6d6; background:#f3faf5; border-radius:12px; }
+  .ts-contact .cta-btn{ margin-top:0; }
+  .ts-contact .who{ font-size:16px; font-weight:700; margin-bottom:6px; }
+  .ts-contact .ln{ display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; }
+  .ts-contact .ln a{ display:inline-block; padding:8px 14px; border-radius:8px; background:#fff; border:1px solid #cfe6d6; font-weight:700; }
+  .ts-contact textarea{ width:100%; min-height:70px; margin:8px 0; }
+  .ts-sec h3{ margin:16px 0 6px; font-size:16px; }
+  .ts-sec p{ margin:0; white-space:pre-wrap; line-height:1.5; color:#374151; }
 </style>
 </head>
 <body>
@@ -413,6 +443,20 @@
 </header>
 
 <div class="wrap">
+  <nav class="sect-switch" aria-label="Choose a section">
+    <a href="/" id="sectStays" class="on">SimonStays</a>
+    <a href="/township" id="sectTownship">Township Stays</a>
+  </nav>
+  <section id="township" aria-labelledby="tsTitle">
+    <div class="ts-banner">
+      <div><h2>Have a room or a home to rent?</h2><p>List it on SimonStays Township Stays. Add your photos and your price, and tenants in your area find you.</p></div>
+      <a href="/hosting/?signup">Register as a host</a>
+    </div>
+    <div class="ts-intro"><h1 id="tsTitle">Township Stays</h1><p>Rooms and homes to rent by the week or the month.</p></div>
+    <div class="ts-find"><input id="tsQ" placeholder="Search by area, e.g. Soweto" /></div>
+    <div class="count" id="tsCount"></div>
+    <div id="tsResults" class="grid" style="margin-top:10px"></div>
+  </section>
   <div class="search-bar">
     <div class="search">
       <div class="fld q"><label>Where to?</label><input id="q" placeholder="Search area, complex or address…" /></div>
@@ -2091,14 +2135,124 @@
     drawFind();
   }
 
+  // ---- Township Stays: longer rentals. Tenants sign in to see a host's contact details. ----
+  var TS_LIST=null;
+  function setSection(sect){
+    var t=(sect==='township');
+    document.body.classList.toggle('ts-mode', t);
+    $('#sectStays').classList.toggle('on', !t); $('#sectTownship').classList.toggle('on', t);
+    if(t && !TS_LIST) loadTownship();
+  }
+  $('#sectStays').onclick=function(e){ e.preventDefault(); setSection('stays'); $('#detail').innerHTML=''; setPath('/'); };
+  $('#sectTownship').onclick=function(e){ e.preventDefault(); setSection('township'); $('#detail').innerHTML=''; setPath('/township'); };
+  async function loadTownship(){
+    $('#tsCount').textContent='Loading…';
+    try{ var r=await fetch(API+'/public/township'); var d=await r.json(); TS_LIST=d.listings||[]; renderTownship(); }
+    catch(e){ $('#tsCount').textContent='Could not load Township Stays. Please refresh.'; }
+  }
+  function tsPrice(x){
+    if(x.monthlyRentCents) return rand(x.monthlyRentCents)+' <small>/ month</small>';
+    if(x.weeklyRentCents) return rand(x.weeklyRentCents)+' <small>/ week</small>';
+    return '<small>Ask the host</small>';
+  }
+  function renderTownship(){
+    var q=($('#tsQ').value||'').trim().toLowerCase();
+    var list=(TS_LIST||[]).filter(function(x){ return !q || [x.name,x.areaName,x.address].join(' ').toLowerCase().indexOf(q)>=0; });
+    $('#tsCount').textContent=list.length+' '+(list.length===1?'place':'places')+' to rent';
+    var box=$('#tsResults'); box.innerHTML='';
+    if(!list.length) box.appendChild(el('div','empty', q?'No places in that area yet. Try another search.':'No places listed yet. Check back soon.'));
+    list.forEach(function(x){
+      var c=el('div','card');
+      var img=x.coverPhotoId?('background-image:url('+API+'/photos/'+x.coverPhotoId+'?w=960)'):'';
+      c.innerHTML='<div class="ph" style="'+img+'"></div><div class="body"><div class="nm">'+esc(x.name)+'</div>'+
+        '<div class="sub">'+esc(x.areaName||x.address||'')+'</div>'+(x.hostName?'<div class="host-by">Listed by '+esc(x.hostName)+'</div>':'')+
+        '<div class="ts-price">'+tsPrice(x)+'</div></div>';
+      c.onclick=function(){ openTownship(x.id); };
+      box.appendChild(c);
+    });
+  }
+  $('#tsQ').addEventListener('input', function(){ if(TS_LIST) renderTownship(); });
+
+  async function openTownship(id){
+    setSection('township');
+    setPath('/township/'+encodeURIComponent(id));
+    var host=$('#detail'); host.innerHTML='<div class="overlay"><div class="sheet" style="max-width:820px"><div class="sheet-body"><p class="note">Loading…</p></div></div></div>';
+    host.firstChild.onclick=function(e){ if(e.target===host.firstChild) host.innerHTML=''; };
+    var x;
+    try{ var r=await fetch(API+'/public/township/'+encodeURIComponent(id)); if(!r.ok) throw new Error(); x=(await r.json()).listing; }
+    catch(e){ host.innerHTML='<div class="overlay"><div class="sheet" style="max-width:440px"><div class="sheet-head"><h2>Township Stays</h2><button class="x">&times;</button></div><div class="sheet-body"><p>This place is no longer listed.</p></div></div></div>';
+      host.querySelector('.x').onclick=function(){ host.innerHTML=''; }; return; }
+    if(window.ssTrack) ssTrack('view_listing',{propertyId:x.id,label:'Township · '+x.name});
+    var prices=[];
+    if(x.monthlyRentCents) prices.push('<div><small>Monthly rent</small><b>'+rand(x.monthlyRentCents)+'</b></div>');
+    if(x.weeklyRentCents) prices.push('<div><small>Weekly rent</small><b>'+rand(x.weeklyRentCents)+'</b></div>');
+    if(x.depositCents) prices.push('<div><small>Deposit</small><b>'+rand(x.depositCents)+'</b></div>');
+    host.innerHTML='<div class="overlay"><div class="sheet" style="max-width:820px"><div class="sheet-head"><h2>'+esc(x.name)+'</h2><button class="x">&times;</button></div><div class="sheet-body">'+
+      (x.photos&&x.photos.length?galleryHtml(x.photos.slice(0,5).map(function(pid){ return {id:pid}; })):'')+
+      '<div class="sub" style="color:var(--muted)">'+esc(x.areaName||x.address||'')+(x.hostName?' · Listed by '+esc(x.hostName):'')+'</div>'+
+      (prices.length?'<div class="ts-prices">'+prices.join('')+'</div>':'')+
+      '<div class="ts-contact" id="tsContact"></div>'+
+      (x.description?'<div class="ts-sec"><h3>The place</h3><p>'+esc(x.description)+'</p></div>':'')+
+      (x.areaDescription?'<div class="ts-sec"><h3>The area</h3><p>'+esc(x.areaDescription)+'</p></div>':'')+
+      (x.photos&&x.photos.length>5?'<div class="ts-sec"><h3>More photos</h3>'+galleryHtml(x.photos.slice(5).map(function(pid){ return {id:pid}; }))+'</div>':'')+
+    '</div></div></div>';
+    host.firstChild.onclick=function(e){ if(e.target===host.firstChild) host.innerHTML=''; };
+    host.querySelector('.x').onclick=function(){ host.innerHTML=''; };
+    host.querySelectorAll('.gallery img').forEach(function(img){ img.onclick=function(){ lightbox(img.getAttribute('data-full')); }; });
+    tsContactStart(x);
+  }
+  function tsContactStart(x){
+    var box=$('#tsContact'); if(!box) return;
+    box.innerHTML='<button class="cta-btn" id="tsReveal">Contact details</button><p class="note small" style="margin:8px 0 0">Free for tenants. Sign in to see the host’s phone number and email.</p>';
+    $('#tsReveal').onclick=function(){ tsReveal(x); };
+  }
+  async function tsReveal(x, phone){
+    if(!GTOKEN){ AFTER_AUTH=function(){ openTownship(x.id).then(function(){ tsReveal(x); }); }; openAuth('login', null, 'Sign in or create an account to see the host’s contact details. It’s free.'); return; }
+    var box=$('#tsContact'); if(!box) return;
+    box.innerHTML='<p class="note">One moment…</p>';
+    try{
+      var r=await fetch(API+'/public/township/'+encodeURIComponent(x.id)+'/contact',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify(phone?{phone:phone}:{})});
+      if(r.status===401){ clearSession(); return tsReveal(x); }
+      var d=await r.json();
+      if(!r.ok) throw new Error(d.message||'Could not get the contact details.');
+      if(d.status==='need_phone'){
+        box.innerHTML='<div class="who">Your phone number</div><p class="note small" style="margin:0">So the host can reach you too.</p><div class="frm"><input id="tsPhone" placeholder="e.g. 072 123 4567" autocomplete="tel" /></div><button class="cta-btn" id="tsPhoneGo">Show contact details</button>';
+        $('#tsPhoneGo').onclick=function(){ var v=($('#tsPhone').value||'').trim(); if(v.replace(/\D/g,'').length<9){ $('#tsPhone').focus(); return; } tsReveal(x, v); };
+        return;
+      }
+      if(d.status==='open'){
+        var c=d.contact||{}, tel=(c.phone||'').replace(/[^0-9+]/g,''), wa=tel.replace(/^0/,'27').replace(/^\+/,'');
+        box.innerHTML='<div class="who">'+esc(c.name||'The host')+'</div>'+
+          (c.phone?'<div>'+esc(c.phone)+'</div>':'')+(c.email?'<div>'+esc(c.email)+'</div>':'')+
+          '<div class="ln">'+(tel?'<a href="tel:'+esc(tel)+'">Call</a><a href="https://wa.me/'+esc(wa)+'" target="_blank" rel="noopener">WhatsApp</a>':'')+(c.email?'<a href="mailto:'+esc(c.email)+'">Email</a>':'')+'</div>'+
+          '<p class="note small" style="margin:8px 0 0">The host has your name and number too. Never pay a deposit before you’ve seen the place.</p>';
+        return;
+      }
+      // The host isn't taking enquiries through the button right now.
+      if(d.requested){ box.innerHTML='<div class="who">You’ve asked the host to contact you</div><p class="note" style="margin:0">They’ll be in touch.</p>'; return; }
+      box.innerHTML='<div class="who">The host isn’t sharing contact details right now</div><p class="note" style="margin:0">Ask them to contact you instead. We’ll let them know you’re interested.</p>'+
+        '<textarea id="tsMsg" placeholder="Optional: when you’d like to move in, how long for, who’ll stay…"></textarea><button class="cta-btn" id="tsAsk">Ask the host to contact me</button>';
+      $('#tsAsk').onclick=async function(){
+        this.disabled=true;
+        try{
+          var rr=await fetch(API+'/public/township/'+encodeURIComponent(x.id)+'/request',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({message:($('#tsMsg').value||'').trim()})});
+          var dd=await rr.json(); if(!rr.ok) throw new Error(dd.message||'Could not send that.');
+          box.innerHTML='<div class="who">Done</div><p class="note" style="margin:0">The host has been told you’re interested and will contact you.</p>';
+        }catch(e){ this.disabled=false; box.insertAdjacentHTML('beforeend','<div class="msg err">'+esc(e.message)+'</div>'); }
+      };
+    }catch(e){ box.innerHTML='<div class="msg err">'+esc(e.message)+'</div>'; }
+  }
+
   // ---- Every screen has an address: / · /stays/:property/:unit · /trips · /messages ----
   function setPath(p){ if(location.pathname!==p){ try{ history.pushState({ss:1},'',p); }catch(e){} if(window.ssTrack) ssTrack('pageview'); } }
   // Closing any screen (it empties #detail) puts the address back to the search page.
-  new MutationObserver(function(){ if(!$('#detail').children.length && location.pathname!=='/' && !/^\/(stay|book)$/.test(location.pathname)){ try{ history.pushState({ss:1},'','/'); }catch(e){} } })
+  new MutationObserver(function(){ var home=document.body.classList.contains('ts-mode')?'/township':'/'; if(!$('#detail').children.length && location.pathname!==home && !/^\/(stay|book)$/.test(location.pathname)){ try{ history.pushState({ss:1},'',home); }catch(e){} } })
     .observe($('#detail'),{childList:true});
   function routeFromPath(){
     var path=location.pathname, m;
-    if((m=/^\/stays\/([^/]+)(?:\/([^/]+))?$/.exec(path))) openUnit({ propertyId:decodeURIComponent(m[1]), unitId:m[2]?decodeURIComponent(m[2]):null });
+    setSection(/^\/township(\/|$)/.test(path)?'township':'stays');
+    if((m=/^\/township\/([^/]+)$/.exec(path))) openTownship(decodeURIComponent(m[1]));
+    else if((m=/^\/stays\/([^/]+)(?:\/([^/]+))?$/.exec(path))) openUnit({ propertyId:decodeURIComponent(m[1]), unitId:m[2]?decodeURIComponent(m[2]):null });
     else if(path==='/trips'||/^\/trips\//.test(path)) openTrips();
     else if(path==='/messages') openInbox();
     else if(path==='/guestbook') openGuestbook(new URLSearchParams(location.search).get('stay'));
