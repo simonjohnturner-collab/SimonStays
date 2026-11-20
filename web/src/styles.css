@@ -1466,3 +1466,8 @@ button.bm-cancel:hover { background: #fdeaea; }
 .ref-wa { display:inline-block; margin-top:10px; font-weight:600; color:#128c4a; }
 .ref-st { font-weight:600; }
 .ref-st.earned { color:#b45309; } .ref-st.paid { color:var(--green-d); }
+
+.bm-extend { margin-top:8px; }
+.bm-extend-row { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px; margin-top:8px; padding:10px; border:1px dashed var(--line); border-radius:8px; }
+.bm-extend-row label { margin:0; }
+.bm-extend-row p { flex-basis:100%; margin:0; }

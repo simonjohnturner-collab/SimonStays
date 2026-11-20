@@ -37,6 +37,12 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   const [hairDryer, setHairDryer] = useState(booking?.hairDryer || false);
   const addonCount = [earlyCheckIn, lateCheckOut, extraMattress, hairDryer].filter(Boolean).length;
   const [tab, setTab] = useState('guest');
+  // A channel booking (Airbnb etc.): its dates come from the channel's calendar and
+  // every sync resets them, so they can't be edited here. Extra nights become a
+  // separate direct booking, which the sync never touches.
+  const channel = editing && !['manual', 'website'].includes(booking.source);
+  const [extendTo, setExtendTo] = useState('');
+  const [extending, setExtending] = useState(false);
   const [gbLinked, setGbLinked] = useState(!!booking?.guestbookVerified);
   const [extrasPaidAt, setExtrasPaidAt] = useState(booking?.extrasPaidAt || null);
 
@@ -186,6 +192,23 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
     catch (e) { setMsg({ text: e.message, kind: 'err' }); } finally { setBusy(false); }
   }
 
+  async function extendStay() {
+    const from = booking.checkOut.slice(0, 10);
+    if (!extendTo || extendTo <= from) { setMsg({ text: 'Pick a new check-out after the current one.', kind: 'err' }); return; }
+    setBusy(true); setMsg(null); setConflicts(null);
+    try {
+      await api.createBooking(booking.unitId, {
+        guestName: guestName || booking.guestName, guestEmail: guestEmail.trim() || null, guestPhone: guestPhone.trim() || null,
+        checkIn: from, checkOut: extendTo, paymentStatus: 'unpaid',
+        comments: `Extension of ${sourceLabel} booking${booking.resCode ? ` ${booking.resCode}` : ''} (${booking.checkIn.slice(0, 10)} → ${from})`,
+      });
+      onSaved();
+    } catch (e) {
+      if (e.status === 409 && e.data?.conflicts) { setMsg({ text: '⛔ Those extra nights clash with another booking.', kind: 'err' }); setConflicts(e.data.conflicts); }
+      else setMsg({ text: e.message, kind: 'err' });
+    } finally { setBusy(false); }
+  }
+
   // The guest's WhatsApp confirmation, sent by hand: preview first, then send.
   const [waPreview, setWaPreview] = useState(null); // { preview, to } | { result } | { error }
   const waCall = async (method) => {
@@ -242,13 +265,23 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
           {guestRating !== undefined && <GuestRatingChip rating={guestRating} />}
         </div>
         {isFloating && !allocateUnitId && <div className="bm-note">Floating: not on a unit yet, so it blocks nothing.</div>}
-        {editing && !['manual', 'website'].includes(booking.source) && <div className="bm-note">Dates come from {sourceLabel}. Changes here don’t sync back.</div>}
+        {channel && <div className="bm-note">Dates come from {sourceLabel}: change them there. Staying longer off {sourceLabel}? Use <b>Extend stay</b> below.</div>}
 
         <label>Guest name<input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Guest name" /></label>
         <div className="bm-grid2">
-          <label>Check-in<input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} /></label>
-          <label>Check-out<input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} /></label>
+          <label>Check-in<input type="date" value={checkIn} readOnly={channel} className={channel ? 'ro' : ''} onChange={(e) => setCheckIn(e.target.value)} /></label>
+          <label>Check-out<input type="date" value={checkOut} readOnly={channel} className={channel ? 'ro' : ''} onChange={(e) => setCheckOut(e.target.value)} /></label>
         </div>
+        {channel && booking.unitId && (
+          !extending
+            ? <button type="button" className="mini bm-extend" onClick={() => setExtending(true)}>➕ Extend stay</button>
+            : <div className="bm-extend-row">
+                <label>New check-out<input type="date" min={booking.checkOut.slice(0, 10)} value={extendTo} onChange={(e) => setExtendTo(e.target.value)} /></label>
+                <button type="button" disabled={busy || !extendTo} onClick={extendStay}>Add the extra nights</button>
+                <button type="button" className="secondary" onClick={() => setExtending(false)}>Cancel</button>
+                <p className="muted small">Added as a direct booking for {guestName || 'this guest'} on this unit, so the {sourceLabel} sync leaves it alone. Charge the guest for it from that booking.</p>
+              </div>
+        )}
         {booking?.dayUse && <div className="muted small">Day use. Check-out shows the next morning so the clean falls then.</div>}
 
         <div className="bm-tabs" role="tablist">
