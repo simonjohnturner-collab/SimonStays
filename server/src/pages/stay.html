@@ -239,11 +239,22 @@
      so the stays sit right under the search bar. */
   @media (min-width:1680px){
     .wrap{ position:relative; }
-    .grow{ position:absolute; top:16px; right:calc(100% + 6px); width:250px; margin:0; padding:16px; grid-template-columns:1fr; gap:12px; }
+    .promos{ position:absolute; top:16px; right:calc(100% + 6px); width:250px; display:flex; flex-direction:column; gap:12px; }
+    .grow{ margin:0; padding:16px; grid-template-columns:1fr; gap:12px; }
+    .promos .eve{ margin:0; padding:16px; flex-direction:column; align-items:flex-start; gap:10px; }
+    .promos .eve h2{ font-size:18px; }
     .grow-head{ flex-direction:column; align-items:flex-start; gap:6px; }
     .grow h2{ font-size:18px; }
     .grow-offers{ grid-template-columns:1fr; gap:10px; }
   }
+  /* Eve teaser, under the growth placard */
+  .eve{ margin:12px 0 4px; padding:18px 20px; border-radius:16px; background:#111827; color:#f9fafb; display:flex; align-items:center; gap:18px; }
+  .eve-soon{ display:inline-block; font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#111827; background:#facc15; border-radius:999px; padding:3px 10px; }
+  .eve h2{ margin:6px 0 2px; font-size:20px; letter-spacing:-.2px; color:#fff; }
+  .eve-tag{ margin:0; font-size:14px; color:#d1d5db; }
+  .eve-pts{ margin:0; padding:0; list-style:none; display:grid; gap:6px; font-size:13px; color:#e5e7eb; line-height:1.4; }
+  .eve-pts b{ color:#fff; }
+  @media (max-width:760px){ .eve{ flex-direction:column; align-items:flex-start; gap:10px; } }
   .ref-box{ display:flex; gap:8px; margin:10px 0; }
   .ref-box input{ flex:1; font-family:ui-monospace,Menlo,monospace; font-size:13px; }
   .q-welcome{ color:var(--green-d); font-weight:600; }
@@ -412,12 +423,13 @@
       <div class="fld sb"><label>&nbsp;</label><button id="searchBtn">Search</button></div>
     </div>
   </div>
+  <div class="promos">
   <section class="grow" id="grow" aria-labelledby="growTitle">
     <div class="grow-head"><div><h2 id="growTitle">SimonStays wants to grow</h2><p>Help us, and we’ll thank you for it.</p></div></div>
     <div class="grow-offers">
       <div class="grow-offer" id="growGuest">
         <b>5% off your first booking</b>
-        <span>Sign up as a guest and get 5% off your first stay.</span>
+        <span>When you create a SimonStays account.</span>
         <button type="button" id="growSignup">Sign up</button>
       </div>
       <div class="grow-offer">
@@ -427,6 +439,19 @@
       </div>
     </div>
   </section>
+  <section class="eve" aria-labelledby="eveTitle">
+    <div>
+      <span class="eve-soon">Coming soon</span>
+      <h2 id="eveTitle">Eve e-hailing</h2>
+      <p class="eve-tag">A homegrown ride app, built to be fair.</p>
+    </div>
+    <ul class="eve-pts">
+      <li>Fair pay for drivers</li>
+      <li>Cashless</li>
+      <li>Invite only</li>
+    </ul>
+  </section>
+  </div>
   <div class="toolbar">
     <div class="count" id="count">Loading stays…</div>
     <div class="toggle">
@@ -1195,9 +1220,9 @@
   }
   function renderGrow(){
     var g=$('#growGuest'); if(!g) return;
-    if(!GTOKEN){ g.innerHTML='<b>5% off your first booking</b><span>Sign up as a guest and get 5% off your first stay.</span><button type="button" id="growSignup">Sign up</button>'; }
-    else if(GROW&&GROW.welcomeEligible){ g.innerHTML='<b>Your 5% is ready</b><span>It comes off automatically when you book your first stay. Thanks for joining!</span><span class="ok">✓ Signed up</span>'; }
-    else if(GROW){ g.innerHTML='<b>5% off your first booking</b><span>Finish your account (confirm your email, add your photo and ID) to unlock it. It applies to your first SimonStays booking.</span><span class="ok">✓ Signed up</span>'; }
+    if(!GTOKEN){ g.innerHTML='<b>5% off your first booking</b><span>When you create a SimonStays account.</span><button type="button" id="growSignup">Sign up</button>'; }
+    else if(GROW&&GROW.welcomeEligible){ g.innerHTML='<b>Your 5% is ready</b><span>It comes off your first stay automatically.</span><span class="ok">✓ Signed up</span>'; }
+    else if(GROW){ g.innerHTML='<b>5% off your first booking</b><span>Yours once your SimonStays account is complete.</span><span class="ok">✓ Signed up</span>'; }
     var su=$('#growSignup'); if(su) su.onclick=function(){ AFTER_AUTH=null; openAuth('register', null, 'Sign up to get 5% off your first booking.'); };
     var rf=$('#growRefer'); if(rf) rf.onclick=openRefer;
   }
