@@ -252,7 +252,7 @@
   .eve-soon{ display:inline-block; font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#111827; background:#facc15; border-radius:999px; padding:3px 10px; }
   .eve h2{ margin:6px 0 2px; font-size:20px; letter-spacing:-.2px; color:#fff; }
   .eve-tag{ margin:0; font-size:14px; color:#d1d5db; }
-  .eve-pts{ margin:0; padding:0; list-style:none; display:grid; gap:6px; font-size:13px; color:#e5e7eb; line-height:1.4; }
+  .eve-pts{ margin:8px 0 0; font-size:13px; color:#e5e7eb; line-height:1.4; }
   .eve-pts b{ color:#fff; }
   @media (max-width:760px){ .eve{ flex-direction:column; align-items:flex-start; gap:10px; } }
   .ref-box{ display:flex; gap:8px; margin:10px 0; }
@@ -429,7 +429,7 @@
     <div class="grow-offers">
       <div class="grow-offer" id="growGuest">
         <b>5% off your first booking</b>
-        <span>When you create a SimonStays account.</span>
+        <span>Yours once your SimonStays account is registered.</span>
         <button type="button" id="growSignup">Sign up</button>
       </div>
       <div class="grow-offer">
@@ -442,14 +442,10 @@
   <section class="eve" aria-labelledby="eveTitle">
     <div>
       <span class="eve-soon">Coming soon</span>
-      <h2 id="eveTitle">Eve e-hailing</h2>
-      <p class="eve-tag">A homegrown ride app, built to be fair.</p>
+      <h2 id="eveTitle">Ride Eve</h2>
+      <p class="eve-tag">A homegrown e-hailing app, built to be fair.</p>
+      <p class="eve-pts">Fair compensation for drivers · Cashless · Invite only</p>
     </div>
-    <ul class="eve-pts">
-      <li>Fair pay for drivers</li>
-      <li>Cashless</li>
-      <li>Invite only</li>
-    </ul>
   </section>
   </div>
   <div class="toolbar">
@@ -1220,9 +1216,9 @@
   }
   function renderGrow(){
     var g=$('#growGuest'); if(!g) return;
-    if(!GTOKEN){ g.innerHTML='<b>5% off your first booking</b><span>When you create a SimonStays account.</span><button type="button" id="growSignup">Sign up</button>'; }
+    if(!GTOKEN){ g.innerHTML='<b>5% off your first booking</b><span>Yours once your SimonStays account is registered.</span><button type="button" id="growSignup">Sign up</button>'; }
     else if(GROW&&GROW.welcomeEligible){ g.innerHTML='<b>Your 5% is ready</b><span>It comes off your first stay automatically.</span><span class="ok">✓ Signed up</span>'; }
-    else if(GROW){ g.innerHTML='<b>5% off your first booking</b><span>Yours once your SimonStays account is complete.</span><span class="ok">✓ Signed up</span>'; }
+    else if(GROW){ g.innerHTML='<b>5% off your first booking</b><span>Yours once your SimonStays account is registered.</span><span class="ok">✓ Signed up</span>'; }
     var su=$('#growSignup'); if(su) su.onclick=function(){ AFTER_AUTH=null; openAuth('register', null, 'Sign up to get 5% off your first booking.'); };
     var rf=$('#growRefer'); if(rf) rf.onclick=openRefer;
   }
