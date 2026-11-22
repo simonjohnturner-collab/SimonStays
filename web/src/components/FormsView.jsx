@@ -105,7 +105,7 @@ export default function FormsView({ onClose, properties = [], initialSubmissionI
   }, [forms]);
 
   return (
-    <div className="invoices-view">
+    <div className={`invoices-view${tab === 'submissions' ? ' reports-fixed' : ''}`}>
       <header className="topbar">
         <span className="host">Reports</span>
         <div className="forms-tabs">

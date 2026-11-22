@@ -1166,6 +1166,9 @@ button[role=radio].on { color:#e2a100; }
 .host-shell { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
 .host-screen { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .host-screen .app, .host-screen .invoices-view { min-height: calc(100vh - 57px); }
+/* Reports › Submissions: fixed to the screen so the list and the report scroll in
+   their own panes. Without this the window scrolls and the report header can't pin. */
+.invoices-view.reports-fixed, .host-screen .invoices-view.reports-fixed { height: calc(100vh - 57px); height: calc(100dvh - 57px); min-height: 0; }
 .hostnav { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: #fff; border-bottom: 1px solid var(--line); }
 .hostnav button { background: transparent; color: var(--ink); }
 .hostnav-brand { font-weight: 800; font-size: 21px; letter-spacing: -.5px; color: var(--green) !important; padding: 4px 6px !important; }
