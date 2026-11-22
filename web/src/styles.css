@@ -478,6 +478,11 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .sub-index-link:hover { background: #eef6f0; color: var(--green-d); }
 .sub-card { flex: 0 1 720px; max-width: 720px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
 @media (max-width: 860px) { .sub-layout { display: block; } .sub-index { display: none; } .sub-card { max-width: 720px; margin: 0 auto; } }
+/* Report header (type · unit · who/when · status) stays pinned while scrolling,
+   so screenshots of evidence always show the unit, clean and date. */
+.sub-sticky { position: sticky; top: -18px; z-index: 6; background: #fff; margin: -18px -18px 0; padding: 18px 18px 0; border-radius: 12px 12px 0 0; box-shadow: 0 6px 8px -8px rgba(0,0,0,.18); }
+.sub-sticky .photo-pick-bar { position: static; margin: 0 0 12px; }
+.sub-card [id^="secjump-"] { scroll-margin-top: 130px; }
 .sub-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 12px; }
 .sub-head h3 { margin: 6px 0 2px; font-size: 17px; }
 .sub-actions { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }

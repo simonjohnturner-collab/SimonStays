@@ -313,6 +313,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
               </aside>
             )}
           <div className="sub-card" ref={detailRef}>
+            <div className="sub-sticky">
             <div className="sub-head">
               <div>
                 <span className={`ftag ${sel.type}`}>{sel.type === 'damage' ? 'Damage / issue' : sel.type === 'repair' ? 'Repair report' : 'Checkout clean'}</span>
@@ -347,6 +348,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
                 </div>
               );
             })()}
+            </div>
 
             <div id="secjump-purchases">
               <PurchaseSummaryCard sub={sel} onUpdate={(patch) => setSel((x) => (x ? { ...x, ...patch } : x))} />
