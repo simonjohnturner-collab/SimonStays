@@ -217,7 +217,8 @@ router.get('/referral', authGuest, async (req, res, next) => {
   try {
     const r = require('../utils/referrals');
     const code = await r.codeFor({ guestAccountId: req.guestId });
-    res.json({ code, link: code ? r.linkFor(code) : null, rewardCents: r.REFERRAL_CENTS, welcomeEligible: await r.welcomeEligible(req.guestId), referrals: await r.referralsOf({ guestAccountId: req.guestId }) });
+    const welcome = await r.welcomeStatus(req.guestId); // { eligible, used, missing }
+    res.json({ code, link: code ? r.linkFor(code) : null, rewardCents: r.REFERRAL_CENTS, welcomeEligible: welcome.eligible, welcome, referrals: await r.referralsOf({ guestAccountId: req.guestId }) });
   } catch (e) { next(e); }
 });
 

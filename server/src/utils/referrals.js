@@ -1,7 +1,7 @@
 // Growth: the 5% welcome discount for fully signed-up guests, and the R1 000
 // reward for referring a new host.
 //
-// Welcome discount: 5% off the stay (not the breakage deposit) on a guest's
+// Welcome discount: 5% off the stay (not the cleaning fee or the breakage deposit) on a guest's
 // first SimonStays booking, once their account is complete (email confirmed,
 // photo and ID uploaded). SimonStays bears it: the host is paid on the full
 // price (see utils/fees.js).
@@ -20,14 +20,13 @@ const linkFor = (code) => `${SHOP()}/host?ref=${code}`;
 
 // ---- Welcome discount ----
 
-// Can this guest have the welcome discount? Their account is complete and they
-// haven't had a SimonStays booking yet (or one already holding the discount).
-async function welcomeEligible(guestAccountId) {
-  if (!guestAccountId) return false;
+// Where a guest stands with the welcome discount: { eligible, used, missing }.
+// missing lists what's still needed before booking: 'signin', 'email' (not
+// confirmed yet), 'photo', 'id'. used = they've already had a first booking.
+async function welcomeStatus(guestAccountId) {
+  if (!guestAccountId) return { eligible: false, used: false, missing: ['signin'] };
   const acct = await prisma.guestAccount.findUnique({ where: { id: guestAccountId }, include: { documents: { select: { kind: true } } } });
-  if (!acct || !acct.emailVerifiedAt) return false;
-  const kinds = new Set(acct.documents.map((d) => d.kind));
-  if (!kinds.has('photo') || !kinds.has('id')) return false;
+  if (!acct) return { eligible: false, used: false, missing: ['signin'] };
   const earlier = await prisma.booking.count({
     where: {
       source: 'website',
@@ -35,13 +34,41 @@ async function welcomeEligible(guestAccountId) {
       AND: [{ OR: [{ status: 'confirmed' }, { status: 'pending', welcomeDiscountCents: { gt: 0 } }] }],
     },
   });
-  return earlier === 0;
+  if (earlier > 0) return { eligible: false, used: true, missing: [] };
+  const kinds = new Set(acct.documents.map((d) => d.kind));
+  const missing = [];
+  if (!acct.emailVerifiedAt) missing.push('email');
+  if (!kinds.has('photo')) missing.push('photo');
+  if (!kinds.has('id')) missing.push('id');
+  return { eligible: missing.length === 0, used: false, missing };
 }
 
-// Take the welcome discount off a shopfront quote (in place). The deposit isn't discounted.
+// Can this guest have the welcome discount? Their account is complete and they
+// haven't had a SimonStays booking yet (or one already holding the discount).
+async function welcomeEligible(guestAccountId) {
+  return (await welcomeStatus(guestAccountId)).eligible;
+}
+
+// The discount a quote would get: 5% of the stay, leaving out the cleaning fee
+// (and the deposit, which isn't in rentalCents).
+const welcomeCentsOf = (q) => Math.max(0, Math.round(((q.rentalCents || 0) - (q.cleaningCents || 0)) * WELCOME_PERCENT / 100));
+
+// Price a shopfront quote for this guest (in place): take the discount off if
+// they're due it, and otherwise say what it would be and what's still needed,
+// so the booking page can tell them before they book. Not shown once used.
+async function welcomeForQuote(q, guestAccountId) {
+  if (!q) return q;
+  const s = await welcomeStatus(guestAccountId);
+  if (s.eligible) return applyWelcome(q);
+  if (!s.used) q.welcome = { percent: WELCOME_PERCENT, cents: welcomeCentsOf(q), missing: s.missing };
+  return q;
+}
+
+// Take the welcome discount off a shopfront quote (in place). Neither the
+// cleaning fee nor the deposit is discounted.
 function applyWelcome(q) {
   if (!q) return q;
-  const cents = Math.round(q.rentalCents * WELCOME_PERCENT / 100);
+  const cents = welcomeCentsOf(q);
   if (cents <= 0) return q;
   q.welcomeDiscountCents = cents;
   q.welcomePercent = WELCOME_PERCENT;
@@ -120,4 +147,4 @@ async function referralsOf({ guestAccountId, hostId }) {
   });
 }
 
-module.exports = { WELCOME_PERCENT, REFERRAL_CENTS, welcomeEligible, applyWelcome, codeFor, ownerOf, recordReferral, refreshEarned, referralsOf, linkFor };
+module.exports = { WELCOME_PERCENT, REFERRAL_CENTS, welcomeStatus, welcomeEligible, welcomeForQuote, welcomeCentsOf, applyWelcome, codeFor, ownerOf, recordReferral, refreshEarned, referralsOf, linkFor };

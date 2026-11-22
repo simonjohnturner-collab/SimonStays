@@ -384,6 +384,9 @@
   .mode-note{ margin:8px 0; padding:9px 11px; border-radius:9px; background:#fff7e6; border:1px solid #f0d9a8; color:#7a5300; font-size:13px; }
   .mode-note.ok{ background:#eef6f0; border-color:#cfe6d6; color:var(--green-d); }
   .mode-note a{ font-weight:700; cursor:pointer; }
+  .welcome-acts{ margin-top:6px; }
+  .welcome-msg{ display:block; margin-top:4px; }
+  .welcome-msg:empty{ display:none; }
   .rate-prompt{ display:flex; align-items:center; gap:12px; margin:0 0 10px; padding:12px 14px; border-radius:12px; background:#fffaf0; border:1px solid #f3dfb3; color:var(--ink); }
   .rate-prompt>span:first-child{ font-size:22px; }
   .rate-prompt b{ display:block; } .rate-prompt small{ color:var(--muted); }
@@ -988,9 +991,9 @@
       : '<div class="mode-note">⭐ Instant booking here is for guests rated 5 stars by their previous hosts.'+(GTOKEN?'':' <a id="modeSignin">Sign in</a> if that’s you.')+' Otherwise, send a request: you only pay once the host accepts.</div>';
     if(mode==='request') modeNote='<div class="mode-note">✋ This host approves every booking. Send a request: nothing is charged, and you pay once they accept.</div>';
     side.innerHTML=head+'<div class="qbox">'+lines+'<div class="qrow qtot"><span>Total</span><span>'+totalHtml(q)+'</span></div></div>'+
-      addons+depoNote+modeNote+
+      addons+depoNote+modeNote+welcomeNote(q)+
       (instant?'<button id="contBtn" class="cta-btn">Continue to payment →</button>':'<button id="reqBtn" class="cta-btn">Request to book →</button>')+ENQ;
-    bindEnq();
+    bindEnq(); bindWelcome(side, null);
     var oe=$('#optEarly'); if(oe) oe.onchange=function(){ STATE.early=oe.checked; getQuote(); };
     var ol=$('#optLate'); if(ol) ol.onchange=function(){ STATE.late=ol.checked; getQuote(); };
     if($('#contBtn')) $('#contBtn').onclick=openCheckout;
@@ -1075,6 +1078,39 @@
     return (was?'<s class="was">'+rand(was)+'</s> ':'')+rand(q.totalCents+x);
   }
 
+  // Before they book: a first-time guest who isn't due the 5% yet (signed out, or
+  // email not confirmed) is told what to do first. It can't be added afterwards.
+  function welcomeNote(q){
+    var w=q&&q.welcome; if(!w||!w.cents) return '';
+    var off='<b>'+(w.percent||5)+'% off this booking ('+rand(w.cents)+')</b>', m=w.missing||[];
+    if(m.indexOf('signin')>=0) return '<div class="mode-note welcome-warn">🎁 Get '+off+': <a data-welcome="signup">sign up</a> and confirm your email <b>before you book</b>. The discount can’t be added after booking.</div>';
+    if(m.indexOf('email')>=0) return '<div class="mode-note welcome-warn">🎁 Confirm your email <b>before you book</b> to get '+off+'. We sent a link to '+esc((GUEST&&GUEST.email)||'your email')+'. The discount can’t be added after booking.'+
+      '<div class="welcome-acts"><a data-welcome="resend">Send the link again</a> · <a data-welcome="recheck">I’ve confirmed it</a></div><span class="welcome-msg"></span></div>';
+    return '<div class="mode-note welcome-warn">🎁 Your account needs a profile photo and ID before you book to get '+off+'. Please message us and we’ll help.</div>';
+  }
+  // Wires the note's links. again() redraws wherever the note was shown, with the new price.
+  function bindWelcome(root, again){
+    var su=root.querySelector('[data-welcome=signup]');
+    if(su) su.onclick=function(){ AFTER_AUTH=function(){ renderDetail(); getQuote(); }; openAuth('register', null, 'Sign up and confirm your email to get 5% off your first booking.'); };
+    var rs=root.querySelector('[data-welcome=resend]');
+    if(rs) rs.onclick=async function(){
+      var note=root.querySelector('.welcome-msg');
+      try{
+        var r=await fetch(API+'/public/account/verify-email/resend',{method:'POST',headers:authHeaders()});
+        var d=await r.json().catch(function(){ return {}; });
+        note.textContent=r.ok?'Sent. Please check your inbox, then come back and tap “I’ve confirmed it”.':(d.message||'Could not send it. Please try again.');
+      }catch(e){ note.textContent='Could not send it. Please try again.'; }
+    };
+    var rc=root.querySelector('[data-welcome=recheck]');
+    if(rc) rc.onclick=async function(){
+      var note=root.querySelector('.welcome-msg'); note.textContent='Checking…';
+      await getQuote();
+      var w=STATE.quote&&STATE.quote.welcome;
+      if(w&&(w.missing||[]).indexOf('email')>=0){ note.textContent='Not confirmed yet. Please click the link in the email we sent you.'; return; }
+      loadGrow(); if(again) again();
+    };
+  }
+
   // ---- Checkout screen: cover photo, full breakdown, details, payment options ----
   function openCheckout(){
     var p=STATE.prop, u=STATE.unit, q=STATE.quote; if(!q) return;
@@ -1093,6 +1129,7 @@
         '<div class="note">📅 <b>'+STATE.ciSel+'</b> → <b>'+STATE.coSel+'</b> · check-in from '+ci+', checkout by '+co+'</div>'+
         '<div class="qbox" style="margin-top:10px">'+breakdownLines(q)+'<div class="qrow qtot"><span>Total</span><span>'+totalHtml(q)+'</span></div></div>'+
         (q.depositCents?('<div class="note" style="margin:8px 0">🔒 The '+rand(q.depositCents)+' breakage deposit is refunded after checkout, subject to no damage.</div>'):'')+
+        welcomeNote(q)+
         '<h3 class="sec">Your details</h3>'+
         '<div class="frm"><input id="gName" placeholder="Full name" /><div class="two"><input id="gEmail" type="email" placeholder="Email — we’ll send your invoice here" /><input id="gPhone" type="tel" autocomplete="tel" placeholder="WhatsApp number — we’ll send your confirmation here" /></div><input id="gGuests" type="number" min="1" placeholder="Number of guests" /><textarea id="gBiz" placeholder="Business / billing details for your invoice (optional) — company name, VAT no., address"></textarea><input id="gMsg" placeholder="Anything we should know? (optional)" /><input id="gRecommend" placeholder="Who recommended us? (optional) — so we can thank them" /></div>'+
         '<h3 class="sec">How would you like to pay?</h3>'+
@@ -1138,6 +1175,8 @@
       if(GUEST.phone) overlay.querySelector('#gPhone').value=GUEST.phone;
     }
     overlay.querySelector('#confirmBtn').onclick=function(){ confirmBooking(overlay); };
+    // Confirmed their email from here: reopen this screen with the 5% taken off.
+    bindWelcome(overlay, openCheckout);
   }
 
   async function confirmBooking(overlay){
@@ -1262,6 +1301,7 @@
     var g=$('#growGuest'); if(!g) return;
     if(!GTOKEN){ g.innerHTML='<b>5% off your first booking</b><span>Yours once your SimonStays account is registered.</span><button type="button" id="growSignup">Sign up</button>'; }
     else if(GROW&&GROW.welcomeEligible){ g.innerHTML='<b>Your 5% is ready</b><span>It comes off your first stay automatically.</span><span class="ok">✓ Signed up</span>'; }
+    else if(GROW&&GROW.welcome&&!GROW.welcome.used&&(GROW.welcome.missing||[]).indexOf('email')>=0){ g.innerHTML='<b>5% off your first booking</b><span>Confirm your email before you book to get it. Check your inbox for our link.</span><span class="ok">✓ Signed up</span>'; }
     else if(GROW){ g.innerHTML='<b>5% off your first booking</b><span>Yours once your SimonStays account is registered.</span><span class="ok">✓ Signed up</span>'; }
     var su=$('#growSignup'); if(su) su.onclick=function(){ AFTER_AUTH=null; openAuth('register', null, 'Sign up to get 5% off your first booking.'); };
     var rf=$('#growRefer'); if(rf) rf.onclick=openRefer;
