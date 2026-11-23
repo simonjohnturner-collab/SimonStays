@@ -156,6 +156,29 @@ router.get('/submissions/:id', async (req, res) => {
   } });
 });
 
+// GET /forms/submissions/:id/history?limit=6 — this report and the earlier ones
+// of the same kind for the same unit (newest first), with answers and photo ids,
+// so the host can line them up and see when something (a fob, a remote) went missing.
+router.get('/submissions/:id/history', async (req, res) => {
+  const sub = await prisma.formSubmission.findFirst({ where: { id: req.params.id, hostId: req.hostId }, select: { id: true, unitId: true, type: true, createdAt: true } });
+  if (!sub) return res.status(404).json({ error: 'not_found' });
+  if (!sub.unitId) return res.json({ submissions: [], more: false });
+  const limit = Math.min(Math.max(Number(req.query.limit) || 6, 2), 30);
+  const rows = await prisma.formSubmission.findMany({
+    where: { hostId: req.hostId, unitId: sub.unitId, type: sub.type, status: { not: 'incomplete' }, createdAt: { lte: sub.createdAt } },
+    orderBy: { createdAt: 'desc' },
+    take: limit + 1,
+    include: {
+      property: { select: { name: true } }, unit: { select: { name: true } },
+      photos: { select: { id: true, fieldId: true, filename: true }, orderBy: { createdAt: 'asc' } },
+    },
+  });
+  res.json({
+    more: rows.length > limit,
+    submissions: rows.slice(0, limit).map((s) => ({ ...fmtSub(s), answers: s.answers, photos: s.photos })),
+  });
+});
+
 // POST /forms/submissions/:id/analyze — (re)read this submission's purchase
 // receipt with the AI analyzer and return the fresh summary. Runs inline so the
 // admin button gets a result; a few seconds is fine for a manual action.

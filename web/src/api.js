@@ -239,6 +239,7 @@ export const api = {
   deleteCleanForm: (id) => req('DELETE', `/forms/clean-forms/${id}`),
   listFormSubmissions: (qs = '') => req('GET', `/forms/submissions${qs}`),
   getFormSubmission: (id) => req('GET', `/forms/submissions/${id}`),
+  getSubmissionHistory: (id, limit = 6) => req('GET', `/forms/submissions/${id}/history?limit=${limit}`),
   updateFormSubmission: (id, data) => req('PATCH', `/forms/submissions/${id}`, data),
   deleteFormSubmission: (id) => req('DELETE', `/forms/submissions/${id}`),
   analyzePurchase: (id) => req('POST', `/forms/submissions/${id}/analyze`),

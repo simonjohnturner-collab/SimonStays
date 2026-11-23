@@ -1508,3 +1508,30 @@ button.bm-cancel:hover { background: #fdeaea; }
   .ts-plans { grid-template-columns: 1fr; }
   .ts-table { display: block; overflow-x: auto; }
 }
+
+/* Reports › Compare past: one unit's checkout reports side by side. */
+.uh-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.uh-panel { background: #fff; border-radius: 14px; width: 1180px; max-width: 100%; max-height: calc(100vh - 32px); display: flex; flex-direction: column; padding: 16px 18px; box-shadow: 0 18px 50px rgba(0,0,0,.25); }
+.uh-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.uh-head h3 { margin: 0 0 2px; font-size: 16px; }
+.uh-head p { margin: 0; }
+.uh-chg-key { background: #fff3c4; padding: 0 4px; border-radius: 4px; }
+.uh-close { background: none; border: 0; font-size: 26px; line-height: 1; color: var(--muted); cursor: pointer; padding: 0 4px; }
+.uh-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0 10px; }
+.uh-tools input[type=text], .uh-tools input:not([type]) { flex: 1 1 260px; font-size: 13px; padding: 7px 10px; }
+.uh-toggle { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--ink); white-space: nowrap; }
+.uh-scroll { overflow: auto; min-height: 0; border: 1px solid var(--line); border-radius: 10px; }
+.uh-table { border-collapse: separate; border-spacing: 0; font-size: 13px; width: 100%; }
+.uh-table th, .uh-table td { padding: 7px 10px; border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); text-align: left; vertical-align: top; min-width: 120px; }
+.uh-table thead th { position: sticky; top: 0; background: #f6f8f7; z-index: 2; }
+.uh-table .uh-q { position: sticky; left: 0; background: #fff; z-index: 1; min-width: 200px; max-width: 260px; border-left: 0; font-weight: 600; }
+.uh-table thead .uh-q { z-index: 3; background: #f6f8f7; }
+.uh-where { display: block; font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.uh-colbtn { display: flex; flex-direction: column; gap: 1px; align-items: flex-start; background: none; border: 0; padding: 0; color: var(--ink); font-size: 12px; cursor: pointer; text-align: left; font-weight: 400; }
+.uh-colbtn:hover b { text-decoration: underline; }
+.uh-colbtn span { color: var(--muted); }
+.uh-table th.uh-this, .uh-table td.uh-this { background: #f1f8f3; }
+.uh-thistag { color: var(--green-d) !important; font-weight: 700; }
+.uh-table td.uh-chg { background: #fff3c4; font-weight: 700; }
+.uh-thumbs { display: flex; gap: 4px; align-items: center; }
+.uh-thumbs img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; cursor: zoom-in; border: 1px solid var(--line); }

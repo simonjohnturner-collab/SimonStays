@@ -149,6 +149,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
   const [photoPick, setPhotoPick] = useState(null);
   const [photoBusy, setPhotoBusy] = useState('');
   const fileCache = useRef(new Map()); // photo id → File, so a second Share tap is instant
+  const [history, setHistory] = useState(false); // "compare past reports" panel open
   useEffect(() => { setPhotoPick(null); setPhotoBusy(''); }, [sel?.id]);
 
   const togglePhoto = (id) => setPhotoPick((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -324,6 +325,9 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
                 {['new', 'reviewed', 'resolved'].map((s) => (
                   <button key={s} className={`chip ${sel.status === s ? 'on' : ''}`} onClick={() => setStatusOf(sel.id, s)}>{s}</button>
                 ))}
+                {sel.type === 'clean' && sel.unitId && (
+                  <button className="chip" title="Line this report up against the earlier ones for this unit" onClick={() => setHistory(true)}>🕘 Compare past</button>
+                )}
                 {(sel.photos || []).length > 0 && (
                   <button className={`chip ${photoPick ? 'on' : ''}`} title="Choose photos to download or share"
                     onClick={() => setPhotoPick((s) => (s ? null : new Set()))}>⬇ Photos</button>
@@ -559,6 +563,9 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
         )}
       </main>
     </div>
+    {history && sel && (
+      <UnitHistory sub={sel} forms={forms} labelById={labelById} onOpen={open} onZoom={setZoom} onClose={() => setHistory(false)} />
+    )}
     {zoom && (
       <div className="img-lightbox" onClick={() => setZoom(null)}>
         <button className="img-lightbox-close" onClick={() => setZoom(null)} aria-label="Close image">×</button>
@@ -641,6 +648,162 @@ function DamageSummary({ properties, onOpen, flash }) {
           ))}
         </section>
       ))}
+    </div>
+  );
+}
+
+/* ---------------- Unit history: this clean report beside the earlier ones ----------------
+   One row per question (rooms repeated as on the form), one column per report,
+   oldest → newest, so a changed answer (fob "Yes" → "No") shows when and in which
+   clean it happened. */
+function UnitHistory({ sub, forms, labelById, onOpen, onZoom, onClose }) {
+  const [limit, setLimit] = useState(6);
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState('');
+  const [find, setFind] = useState('');
+  const [onlyChanged, setOnlyChanged] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    setErr('');
+    api.getSubmissionHistory(sub.id, limit)
+      .then((r) => { if (live) setData(r); })
+      .catch((e) => { if (live) setErr(e.message || 'Could not load the earlier reports.'); });
+    return () => { live = false; };
+  }, [sub.id, limit]);
+
+  useEffect(() => {
+    // Esc closes a zoomed photo first, then this panel.
+    const onKey = (e) => { if (e.key === 'Escape' && !document.querySelector('.img-lightbox')) onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const cols = useMemo(() => (data ? [...data.submissions].reverse() : []), [data]); // oldest → newest
+
+  // Rows follow the open report's form; keys only older reports used are added after.
+  const rows = useMemo(() => {
+    if (!cols.length) return [];
+    const template = (forms && forms.cleanForms || []).find((t) => t.id === sub.templateId);
+    const fields = template && Array.isArray(template.fields) ? template.fields : [];
+    const keysOf = (s) => [...Object.keys(s.answers || {}), ...(s.photos || []).map((p) => p.fieldId || '')];
+    const allKeys = new Set(cols.flatMap(keysOf));
+    const out = [], covered = new Set();
+    const groups = []; let cur = { section: null, fields: [] };
+    fields.forEach((f) => {
+      if (f.type === 'section') { if (cur.section || cur.fields.length) groups.push(cur); cur = { section: f, fields: [] }; }
+      else cur.fields.push(f);
+    });
+    if (cur.section || cur.fields.length) groups.push(cur);
+    groups.forEach((g) => {
+      const suf = new Set();
+      allKeys.forEach((k) => g.fields.forEach((f) => {
+        if (k === f.id) suf.add('');
+        else if (k.startsWith(f.id + '__')) suf.add(k.slice(f.id.length));
+      }));
+      const insts = [...suf].sort((a, b) => (a === '' ? 0 : +a.slice(2)) - (b === '' ? 0 : +b.slice(2)));
+      const multi = insts.length > 1;
+      insts.forEach((sfx, idx) => {
+        const where = g.section ? (multi ? `${g.section.label} ${idx + 1}` : g.section.label) : '';
+        g.fields.forEach((f) => {
+          const key = f.id + sfx;
+          if (!allKeys.has(key)) return;
+          covered.add(key);
+          out.push({ key, where, label: f.label, photos: f.type === 'photos' });
+        });
+      });
+    });
+    const isPlain = (v) => v == null || typeof v !== 'object' || (Array.isArray(v) && v.every((x) => x == null || typeof x !== 'object'));
+    allKeys.forEach((k) => {
+      if (!k || covered.has(k)) return;
+      const photoKey = cols.some((s) => (s.photos || []).some((p) => (p.fieldId || '') === k));
+      if (!photoKey && !cols.every((s) => isPlain((s.answers || {})[k]))) return; // skip structured data (invoices etc.)
+      out.push({ key: k, where: '', label: labelFor(k, labelById), photos: photoKey });
+    });
+    return out;
+  }, [cols, forms, sub.templateId, labelById]);
+
+  const norm = (v) => (v == null ? '' : formatAnswer(v).trim().toLowerCase());
+  const changedAt = (row, i) => {
+    if (row.photos || i === 0) return false;
+    const a = norm((cols[i - 1].answers || {})[row.key]), b = norm((cols[i].answers || {})[row.key]);
+    return a !== '' && b !== '' && a !== b;
+  };
+  const term = find.trim().toLowerCase();
+  const shown = rows.filter((r) =>
+    (!term || `${r.where} ${r.label}`.toLowerCase().includes(term)) &&
+    (!onlyChanged || cols.some((_, i) => changedAt(r, i))));
+  const nChanged = rows.filter((r) => cols.some((_, i) => changedAt(r, i))).length;
+
+  return (
+    <div className="uh-overlay" onClick={onClose}>
+      <div className="uh-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="uh-head">
+          <div>
+            <h3>🕘 {sub.propertyName || 'Unit'}{sub.unitName ? ' · ' + sub.unitName : ''}: past checkout reports</h3>
+            <p className="muted small">Oldest on the left, this report on the right. <span className="uh-chg-key">Yellow</span> = the answer changed since the clean before.</p>
+          </div>
+          <button className="uh-close" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <div className="uh-tools">
+          <input placeholder="Find a question, e.g. fob, remote, towels" value={find} onChange={(e) => setFind(e.target.value)} />
+          <label className="uh-toggle"><input type="checkbox" checked={onlyChanged} onChange={(e) => setOnlyChanged(e.target.checked)} /> Only what changed ({nChanged})</label>
+          {data && data.more && <button className="mini secondary" onClick={() => setLimit((n) => n + 6)}>⟵ Load older reports</button>}
+        </div>
+        {err ? <p className="small" style={{ color: '#a11' }}>{err}</p> : !data ? <p className="muted small">Loading…</p> : cols.length < 2 ? (
+          <p className="muted small">This is the only checkout report for this unit so far, so there's nothing to compare yet.</p>
+        ) : (
+          <div className="uh-scroll">
+            <table className="uh-table">
+              <thead>
+                <tr>
+                  <th className="uh-q">Question</th>
+                  {cols.map((s) => (
+                    <th key={s.id} className={s.id === sub.id ? 'uh-this' : ''}>
+                      <button className="uh-colbtn" title="Open this report" onClick={() => { onOpen(s.id); onClose(); }}>
+                        <b>{new Date(s.createdAt).toLocaleDateString()}</b>
+                        <span>{new Date(s.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span>{s.submitterName || '—'}</span>
+                        {s.id === sub.id && <span className="uh-thistag">This report</span>}
+                      </button>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {shown.length === 0 && <tr><td colSpan={cols.length + 1} className="muted small">No questions match.</td></tr>}
+                {shown.map((r) => (
+                  <tr key={r.key}>
+                    <td className="uh-q">{r.where && <span className="uh-where">{r.where}</span>}{r.label}</td>
+                    {cols.map((s, i) => {
+                      if (r.photos) {
+                        const ph = (s.photos || []).filter((p) => (p.fieldId || '') === r.key);
+                        return (
+                          <td key={s.id} className={s.id === sub.id ? 'uh-this' : ''}>
+                            {ph.length ? (
+                              <span className="uh-thumbs">
+                                {ph.slice(0, 3).map((p) => <img key={p.id} src={photoUrl(p.id) + '?w=200&v=2'} alt="" loading="lazy" onClick={() => onZoom(photoUrl(p.id) + '?v=2')} />)}
+                                {ph.length > 3 && <span className="muted small">+{ph.length - 3}</span>}
+                              </span>
+                            ) : <span className="muted">—</span>}
+                          </td>
+                        );
+                      }
+                      const v = (s.answers || {})[r.key];
+                      const txt = v == null || v === '' ? '' : formatAnswer(v);
+                      return (
+                        <td key={s.id} className={`${s.id === sub.id ? 'uh-this' : ''}${changedAt(r, i) ? ' uh-chg' : ''}`}>
+                          {txt || <span className="muted">—</span>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
