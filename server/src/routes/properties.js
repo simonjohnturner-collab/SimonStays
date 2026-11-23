@@ -51,6 +51,11 @@ router.patch('/:id', requireOwnedProperty, async (req, res) => {
   ['monthlyRentCents', 'weeklyRentCents', 'depositCents']
     .forEach((k) => { if (k in b) data[k] = (b[k] === '' || b[k] == null) ? null : Math.max(0, Math.round(Number(b[k]))) || null; });
   if ('tsHidden' in b) data.tsHidden = !!b.tsHidden;
+  // Township Stay: the date it's available from ('YYYY-MM-DD', blank = not set).
+  if ('availableFrom' in b) {
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(String(b.availableFrom || '')) ? new Date(`${b.availableFrom}T00:00:00Z`) : null;
+    data.availableFrom = d && !isNaN(d) ? d : null;
+  }
   ['latitude', 'longitude'].forEach((k) => { if (k in b) data[k] = (b[k] === '' || b[k] == null) ? null : Number(b[k]); });
   if ('parkingBays' in b) data.parkingBays = (b.parkingBays === '' || b.parkingBays == null) ? null : Number(b.parkingBays);
   if ('bookingMode' in b && require('../utils/bookingMode').MODES.includes(b.bookingMode)) data.bookingMode = b.bookingMode;

@@ -315,8 +315,8 @@ if (require.main === module) {
   setTimeout(expireHolds, 90 * 1000);
   cron.schedule('41 * * * *', expireHolds);
 
-  // Daily 08:00: Township Stays monthly fees — charge saved cards that are due,
-  // or remind the host 3 days before and on the day.
+  // Daily 08:00: Township Stays paid months — remind the host (email + WhatsApp)
+  // 3 days before and in the last day of a listing's paid time. Nothing is charged.
   cron.schedule('0 8 * * *', async () => {
     try { console.log('[township] daily', JSON.stringify(await require('./utils/township').runDaily())); }
     catch (e) { console.error('[township] daily failed', e.message); }

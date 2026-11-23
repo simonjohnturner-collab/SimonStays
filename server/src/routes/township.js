@@ -41,35 +41,33 @@ host.get('/', wrap(async (req, res) => {
     ts.spentThisMonth(req.hostId, now),
   ]);
   const minClick = props.length ? Math.min(...props.map((p) => ts.feesFor(p, settings).clickFeeCents)) : settings.clickFeeCents;
+  const shown = props.filter((p) => !p.tsHidden);
   res.json({
-    plan: h.tsPlan, creditCents: h.tsCreditCents, monthlyCapCents: h.tsMonthlyCapCents, spentThisMonthCents: spent,
-    activated: !!h.tsActivatedAt, cardLabel: h.tsCardLabel || null, cardSaving: paygate.vaultReady(),
-    clicksOpen: await ts.clicksOpen(h, minClick, now),
+    plan: h.tsPlan, creditCents: h.tsCreditCents, spentThisMonthCents: spent,
+    activated: !!h.tsActivatedAt,
+    // Contact button: click plan = enough credit; monthly = any listing within its paid months.
+    clicksOpen: h.tsPlan === 'monthly' ? shown.some((p) => ts.planActive(p, h, now)) : await ts.clicksOpen(h, minClick, now),
     fees: settings,
     listings: props.map((p) => {
       const f = ts.feesFor(p, settings);
       return {
         id: p.id, name: p.name, areaName: p.areaName, hidden: p.tsHidden, paidUntil: p.tsPaidUntil,
+        paid: ts.planActive(p, h, now), availableFrom: p.availableFrom,
         monthlyFeeCents: f.monthlyFeeCents, clickFeeCents: f.clickFeeCents, leads: p._count.townshipLeads,
-        missing: ts.missingInfo(p, p._count.photos), live: ts.isLive(p, h, p._count.photos, now),
+        missing: ts.missingInfo(p, p._count.photos), live: ts.isLive(p, h, p._count.photos),
       };
     }),
     leads: leads.map(leadOut),
     lockedCount: leads.filter((l) => l.status === 'locked').length,
-    payments: payments.map((p) => ({ id: p.id, kind: p.kind, method: p.method, amountCents: p.amountCents, status: p.status, createdAt: p.createdAt, note: p.note })),
+    payments: payments.map((p) => ({ id: p.id, kind: p.kind, months: p.months, propertyIds: p.propertyIds, method: p.method, amountCents: p.amountCents, status: p.status, createdAt: p.createdAt, note: p.note })),
   });
 }));
 
-// PATCH /host-township/plan { plan: 'monthly'|'click', monthlyCapCents }
+// PATCH /host-township/plan { plan: 'monthly'|'click' }
 host.patch('/plan', wrap(async (req, res) => {
   const b = req.body || {};
-  const data = {};
-  if ('plan' in b) {
-    if (!['monthly', 'click'].includes(b.plan)) return res.status(400).json({ error: 'bad_plan' });
-    data.tsPlan = b.plan;
-  }
-  if ('monthlyCapCents' in b) data.tsMonthlyCapCents = cents(b.monthlyCapCents);
-  await prisma.host.update({ where: { id: req.hostId }, data: { ...data, tsCapNotified: null } });
+  if (!['monthly', 'click'].includes(b.plan)) return res.status(400).json({ error: 'bad_plan' });
+  await prisma.host.update({ where: { id: req.hostId }, data: { tsPlan: b.plan } });
   const unlocked = await ts.unlockLocked(req.hostId);
   res.json({ ok: true, unlocked });
 }));
@@ -82,13 +80,19 @@ host.post('/topup', wrap(async (req, res) => {
   res.json(await ts.startPayment(h, { kind: 'topup', amountCents, base: baseOf(req) }));
 }));
 
-// POST /host-township/pay-month — a month of listing fees for every listing on show.
-host.post('/pay-month', wrap(async (req, res) => {
+// POST /host-township/pay-months { propertyId, months } — pay upfront for as many months
+// of one listing as the host wants. They're added on from when its current paid time ends.
+const MAX_MONTHS = 60;
+host.post('/pay-months', wrap(async (req, res) => {
+  const b = req.body || {};
+  const months = Math.round(Number(b.months));
+  if (!Number.isInteger(months) || months < 1 || months > MAX_MONTHS) return res.status(400).json({ error: 'bad_months', message: `Choose between 1 and ${MAX_MONTHS} months.` });
+  const p = await prisma.property.findFirst({ where: { id: String(b.propertyId || ''), hostId: req.hostId, kind: 'township' } });
+  if (!p) return res.status(404).json({ error: 'not_found', message: 'That listing was not found.' });
+  const fee = ts.feesFor(p, await ts.getSettings()).monthlyFeeCents;
+  if (!fee) return res.status(400).json({ error: 'free', message: 'This listing has no monthly fee.' });
   const h = await prisma.host.findUnique({ where: { id: req.hostId } });
-  const due = await ts.monthlyDue(req.hostId);
-  if (!due.items.length) return res.status(400).json({ error: 'no_listings', message: 'Add a Township Stay in Listings first.' });
-  if (!due.totalCents) return res.status(400).json({ error: 'free', message: 'Your listings have no monthly fee.' });
-  res.json(await ts.startPayment(h, { kind: 'monthly', amountCents: due.totalCents, propertyIds: due.items.map((x) => x.id), base: baseOf(req) }));
+  res.json(await ts.startPayment(h, { kind: 'monthly', amountCents: fee * months, propertyIds: [p.id], months, base: baseOf(req) }));
 }));
 
 // ================= public =================
@@ -96,7 +100,7 @@ const pub = express.Router();
 
 const liveInclude = { host: true, photos: { orderBy: [{ sort: 'asc' }, { createdAt: 'asc' }], select: { id: true } } };
 
-// GET /public/township — every live listing.
+// GET /public/township — every live listing (each with its availableFrom date, if set).
 pub.get('/', wrap(async (req, res) => {
   const now = new Date();
   const props = await prisma.property.findMany({
@@ -176,19 +180,19 @@ admin.get('/', wrap(async (req, res) => {
       prisma.townshipLead.count({ where: { hostId: h.id, createdAt: { gte: ts.monthStart(now) } } }),
       prisma.townshipLead.count({ where: { hostId: h.id, status: 'locked' } }),
     ]);
-    hostRows.push({ id: h.id, name: h.name, email: h.email, plan: h.tsPlan, creditCents: h.tsCreditCents, monthlyCapCents: h.tsMonthlyCapCents,
+    hostRows.push({ id: h.id, name: h.name, email: h.email, plan: h.tsPlan, creditCents: h.tsCreditCents,
       spentThisMonthCents: spent, leadsThisMonth: leads, lockedLeads: locked, cardLabel: h.tsCardLabel, activated: !!h.tsActivatedAt });
   }
   const payments = await prisma.townshipPayment.findMany({ orderBy: { createdAt: 'desc' }, take: 50, include: { host: { select: { name: true, email: true } } } });
   res.json({
-    settings, cardSaving: paygate.vaultReady(),
+    settings,
     hosts: hostRows,
     listings: props.map((p) => ({
       id: p.id, name: p.name, areaName: p.areaName, hostId: p.hostId, hostName: p.host.name || p.host.email,
       tsMonthlyFeeCents: p.tsMonthlyFeeCents, tsClickFeeCents: p.tsClickFeeCents, paidUntil: p.tsPaidUntil, hidden: p.tsHidden,
-      leads: p._count.townshipLeads, live: ts.isLive(p, p.host, p._count.photos, now), missing: ts.missingInfo(p, p._count.photos),
+      leads: p._count.townshipLeads, live: ts.isLive(p, p.host, p._count.photos), missing: ts.missingInfo(p, p._count.photos),
     })),
-    payments: payments.map((p) => ({ id: p.id, host: p.host.name || p.host.email, kind: p.kind, method: p.method, amountCents: p.amountCents, status: p.status, createdAt: p.createdAt, note: p.note })),
+    payments: payments.map((p) => ({ id: p.id, host: p.host.name || p.host.email, kind: p.kind, months: p.months, method: p.method, amountCents: p.amountCents, status: p.status, createdAt: p.createdAt, note: p.note })),
   });
 }));
 
@@ -222,13 +226,14 @@ admin.post('/hosts/:id/credit', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// POST /admin/township/listings/:id/month { note } — mark a month paid by hand (e.g. EFT).
+// POST /admin/township/listings/:id/month { months, note } — mark months paid by hand (e.g. EFT).
 admin.post('/listings/:id/month', wrap(async (req, res) => {
   const p = await prisma.property.findFirst({ where: { id: req.params.id, kind: 'township' } });
   if (!p) return res.status(404).json({ error: 'not_found' });
+  const months = Math.min(Math.max(Math.round(Number(req.body && req.body.months)) || 1, 1), MAX_MONTHS);
   const fee = ts.feesFor(p, await ts.getSettings()).monthlyFeeCents;
   const tp = await prisma.townshipPayment.create({ data: {
-    hostId: p.hostId, kind: 'monthly', method: 'admin', amountCents: fee, propertyIds: [p.id], status: 'COMPLETE',
+    hostId: p.hostId, kind: 'monthly', method: 'admin', amountCents: fee * months, months, propertyIds: [p.id], status: 'COMPLETE',
     note: String((req.body && req.body.note) || 'Marked paid in Platform admin').slice(0, 200),
   } });
   await ts.applyPayment(tp.id);

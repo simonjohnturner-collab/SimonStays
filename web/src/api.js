@@ -175,9 +175,9 @@ export const api = {
 
   // Township Stays: the host's plan, credit, payments and leads
   township: () => req('GET', '/host-township'),
-  townshipPlan: (data) => req('PATCH', '/host-township/plan', data), // { plan, monthlyCapCents }
+  townshipPlan: (data) => req('PATCH', '/host-township/plan', data), // { plan }
   townshipTopup: (amountCents) => req('POST', '/host-township/topup', { amountCents }),
-  townshipPayMonth: () => req('POST', '/host-township/pay-month'),
+  townshipPayMonths: (propertyId, months) => req('POST', '/host-township/pay-months', { propertyId, months }),
   // Township Stays: Platform admin
   adminTownship: () => req('GET', '/admin/township'),
   adminTownshipSettings: (data) => req('PUT', '/admin/township/settings', data),

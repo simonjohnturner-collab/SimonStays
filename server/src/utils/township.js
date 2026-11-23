@@ -1,12 +1,15 @@
 // Township Stays: longer rentals listed on /township. Tenants pay nothing; the host
 // pays to be found, on one of two plans (Host.tsPlan):
-//   monthly — a fee per listing per month (Property.tsPaidUntil). Contact clicks are free.
-//   click   — prepaid credit (Host.tsCreditCents). Each signed-in tenant who asks for a
-//             listing's contact details costs the host one click fee, at most once per
-//             tenant per listing per 30 days, up to the host's monthly maximum.
-// When a click-plan host's credit runs out or their maximum is reached, the Contact
-// button switches off. A tenant can still ask to be contacted: that becomes a 'locked'
-// lead whose details unlock (and are charged) once the host tops up.
+//   monthly — the host pays upfront for as many months as they choose, per listing
+//             (Property.tsPaidUntil). Contact clicks are free while paid. No card is saved
+//             and nothing renews by itself: the host is reminded to pay for more.
+//   click   — prepaid credit (Host.tsCreditCents), shared by all their listings. Each
+//             signed-in tenant who asks for a listing's contact details costs one click fee,
+//             at most once per tenant per listing per 30 days. No spending cap: the credit is the limit.
+// Once a listing has been paid for, it stays up until the host removes it. When the paid
+// months end or the credit runs out, the Contact button switches off: a tenant can still
+// ask to be contacted, the host is told someone's interested (without their details) and
+// asked to remove the listing if it's taken. The details unlock once the host pays.
 // Simon sets the fees in Platform admin (PlatformSetting), with per-listing overrides.
 const prisma = require('../lib/prisma');
 const paygate = require('./paygate');
@@ -50,7 +53,7 @@ function monthStart(now = new Date()) {
   return new Date(Date.UTC(l.getUTCFullYear(), l.getUTCMonth(), 1) - SAST);
 }
 function monthKey(now = new Date()) { return new Date(now.getTime() + SAST).toISOString().slice(0, 7); }
-function addMonth(d) { const x = new Date(d); x.setUTCMonth(x.getUTCMonth() + 1); return x; }
+function addMonth(d, n = 1) { const x = new Date(d); x.setUTCMonth(x.getUTCMonth() + n); return x; }
 
 async function spentThisMonth(hostId, now = new Date()) {
   const r = await prisma.townshipLead.aggregate({ where: { hostId, chargedAt: { gte: monthStart(now) } }, _sum: { feeCents: true } });
@@ -67,26 +70,29 @@ function missingInfo(p, photoCount) {
   if (!photoCount) m.push('at least one photo');
   return m;
 }
+// Is this listing paid up right now (monthly: within its paid months; click: plan started)?
 function planActive(p, host, now = new Date()) {
   if (host.tsPlan === 'monthly') return !!(p.tsPaidUntil && new Date(p.tsPaidUntil) > now);
   if (host.tsPlan === 'click') return !!host.tsActivatedAt;
   return false;
 }
-function isLive(p, host, photoCount, now = new Date()) {
-  return p.kind === 'township' && !p.tsHidden && missingInfo(p, photoCount).length === 0 && planActive(p, host, now);
+// Has the host ever paid for it? A listing goes up on its first payment and then stays
+// up (even once the months or credit run out) until the host removes it.
+function everPaid(p, host) {
+  return !!(host.tsPlan && (host.tsActivatedAt || p.tsPaidUntil));
 }
-// Can a tenant see the contact details right now (without the host topping up)?
-async function clicksOpen(host, fee, now = new Date()) {
-  if (host.tsPlan === 'monthly') return true;
+function isLive(p, host, photoCount) {
+  return p.kind === 'township' && !p.tsHidden && missingInfo(p, photoCount).length === 0 && everPaid(p, host);
+}
+// Can a tenant see this listing's contact details right now (without the host paying)?
+async function clicksOpen(host, fee, now = new Date(), p = null) {
+  if (host.tsPlan === 'monthly') return p ? planActive(p, host, now) : true;
   if (host.tsPlan !== 'click') return false;
-  if ((host.tsCreditCents || 0) < fee) return false;
-  if (host.tsMonthlyCapCents != null && (await spentThisMonth(host.id, now)) + fee > host.tsMonthlyCapCents) return false;
-  return true;
+  return (host.tsCreditCents || 0) >= fee;
 }
-// Take one click fee off the host's credit, if the credit and their maximum allow.
-async function charge(host, fee, now = new Date()) {
+// Take one click fee off the host's credit, if there's enough.
+async function charge(host, fee) {
   if (fee <= 0) return true;
-  if (host.tsMonthlyCapCents != null && (await spentThisMonth(host.id, now)) + fee > host.tsMonthlyCapCents) return false;
   const r = await prisma.host.updateMany({ where: { id: host.id, tsCreditCents: { gte: fee } }, data: { tsCreditCents: { decrement: fee } } });
   return r.count === 1;
 }
@@ -97,7 +103,9 @@ const contactOf = (p, host) => ({
   email: p.contactEmail || null,
 });
 
-// ---- notifying the host ----
+// ---- notifying the host: always email AND WhatsApp ----
+// WhatsApp goes to the host's account phone, or failing that the contact phone on
+// one of their Township listings (every live listing has one).
 async function notifyHost(host, { subject, lines, html }) {
   const link = `${SITE()}/hosting/listings/township`;
   try {
@@ -111,22 +119,21 @@ async function notifyHost(host, { subject, lines, html }) {
       });
     }
   } catch (e) { console.error('[township] email to host failed', e.message); }
-  try { await require('./payments').alertHost({ hostId: host.id }, `${subject}\n${lines.join('\n')}\n${link}`); } catch (e) { /* best effort */ }
+  try {
+    const listing = await prisma.property.findFirst({ where: { hostId: host.id, kind: 'township', contactPhone: { not: null } }, orderBy: { createdAt: 'asc' }, select: { contactPhone: true } });
+    await require('./payments').alertHost({ hostId: host.id, fallbackPhone: listing ? listing.contactPhone : null }, `${subject}\n${lines.join('\n')}\n${link}`);
+  } catch (e) { console.error('[township] WhatsApp to host failed', e.message); }
 }
-async function notifySwitchedOff(host, now = new Date()) {
-  const key = monthKey(now);
-  const capHit = host.tsMonthlyCapCents != null && (await spentThisMonth(host.id, now)) >= host.tsMonthlyCapCents;
-  // Out of credit is told every time; the monthly maximum once a month.
-  if (capHit && host.tsCapNotified === key) return;
-  if (capHit) await prisma.host.update({ where: { id: host.id }, data: { tsCapNotified: key } });
+// A click-plan host's credit just ran out (told once, right after the last click it paid for).
+async function notifySwitchedOff(host) {
   await notifyHost(host, {
-    subject: 'Township Stays: your Contact button is switched off',
-    lines: [capHit
-      ? `You've reached the monthly maximum you set (${rand(host.tsMonthlyCapCents)}), so tenants can't see your contact details until next month.`
-      : `Your Township Stays credit has run out (${rand(host.tsCreditCents || 0)} left), so tenants can't see your contact details.`,
-      'Tenants can still ask you to contact them. Their details unlock as soon as you ' + (capHit ? 'raise your maximum or the new month starts.' : 'top up.')],
+    subject: 'Township Stays: your credit has run out',
+    lines: [`Your Township Stays credit has run out (${rand(host.tsCreditCents || 0)} left), so tenants can't see your contact details.`,
+      "Your listings stay up. When a tenant is interested we'll let you know, and you can top up to get their details.",
+      'If a place has been rented, please remove it from Township Stays so you stop getting these messages.'],
   });
 }
+const fmtDay = (d) => new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Johannesburg' });
 
 // ---- tenant actions ----
 async function loadListing(propertyId) {
@@ -157,7 +164,7 @@ async function revealContact({ guestId, propertyId, phone, now = new Date() }) {
 
   const settings = await getSettings();
   const fee = p.host.tsPlan === 'click' ? feesFor(p, settings).clickFeeCents : 0;
-  if (!(await clicksOpen(p.host, fee, now)) || !(await charge(p.host, fee, now))) {
+  if (!(await clicksOpen(p.host, fee, now, p)) || !(await charge(p.host, fee))) {
     return { status: 'closed', requested: !!(await recentLead(p.id, acct.id, now, ['locked'])) };
   }
   const lead = await prisma.townshipLead.create({ data: {
@@ -172,7 +179,7 @@ async function revealContact({ guestId, propertyId, phone, now = new Date() }) {
   });
   if (fee) {
     const fresh = await prisma.host.findUnique({ where: { id: p.hostId } });
-    if (!(await clicksOpen(fresh, fee, now))) await notifySwitchedOff(fresh, now);
+    if (!(await clicksOpen(fresh, fee, now))) await notifySwitchedOff(fresh);
   }
   return { status: 'open', contact: contactOf(p, p.host), leadId: lead.id };
 }
@@ -190,12 +197,15 @@ async function requestContact({ guestId, propertyId, message, now = new Date() }
     message: String(message || '').trim().slice(0, 1000) || null, status: 'locked',
   } });
   const waiting = await prisma.townshipLead.count({ where: { hostId: p.hostId, status: 'locked' } });
+  const pay = p.host.tsPlan === 'monthly'
+    ? `Your paid listing time${p.tsPaidUntil ? ` ended on ${fmtDay(p.tsPaidUntil)}` : ' has ended'}. Pay for more months to see their contact details.`
+    : `Your credit has run out. Top up to see their contact details (${rand(feesFor(p, await getSettings()).clickFeeCents)} per tenant).`;
   await notifyHost(p.host, {
     subject: `Township Stays: someone is interested in ${p.name}`,
-    lines: [`A tenant has asked you to contact them about ${p.name}${p.areaName ? ` (${p.areaName})` : ''}.`,
-      `Your Contact button is switched off, so their details are locked. ${waiting === 1 ? 'They unlock' : `All ${waiting} waiting tenants unlock`} as soon as you top up${p.host.tsMonthlyCapCents != null ? ' or raise your monthly maximum' : ''}.`],
+    lines: [`A tenant is interested in ${p.name}${p.areaName ? ` (${p.areaName})` : ''} and has asked you to contact them.`,
+      pay + (waiting > 1 ? ` ${waiting} tenants are waiting.` : ''),
+      `If ${p.name} has been rented, please remove it from Township Stays so you stop getting these messages.`],
   });
-  await notifySwitchedOff(p.host, now);
   return { ok: true };
 }
 
@@ -210,7 +220,7 @@ async function unlockLocked(hostId, now = new Date()) {
     const fee = host.tsPlan === 'click' ? feesFor(l.property, settings).clickFeeCents : 0;
     if (host.tsPlan !== 'monthly' && host.tsPlan !== 'click') break;
     if (host.tsPlan === 'monthly' && !planActive(l.property, host, now)) continue;
-    if (!(await charge(host, fee, now))) break;
+    if (!(await charge(host, fee))) break;
     const ok = await prisma.townshipLead.updateMany({ where: { id: l.id, status: 'locked' }, data: { status: 'open', feeCents: fee, chargedAt: fee ? now : null } });
     if (ok.count) unlocked.push({ ...l, feeCents: fee });
     else if (fee) await prisma.host.update({ where: { id: hostId }, data: { tsCreditCents: { increment: fee } } }); // someone else unlocked it
@@ -231,8 +241,8 @@ async function hostEmail(host) { return host.email || 'support@simonstays.co.za'
 
 // Start a top-up or a month of listing fees. Returns { mode:'simulate' } (applied at
 // once, for testing) or { mode:'form', action, fields, goUrl } for Paygate's page.
-async function startPayment(host, { kind, amountCents, propertyIds = [], base }) {
-  const tp = await prisma.townshipPayment.create({ data: { hostId: host.id, kind, amountCents, propertyIds, method: 'card' } });
+async function startPayment(host, { kind, amountCents, propertyIds = [], months = null, base }) {
+  const tp = await prisma.townshipPayment.create({ data: { hostId: host.id, kind, amountCents, propertyIds, months, method: 'card' } });
   if (!paygate.ready() || !base) {
     await prisma.townshipPayment.update({ where: { id: tp.id }, data: { status: 'COMPLETE', note: 'Simulated (payments not live)' } });
     await applyPayment(tp.id);
@@ -242,7 +252,6 @@ async function startPayment(host, { kind, amountCents, propertyIds = [], base })
     reference: tp.id, amountCents, email: await hostEmail(host), user1: `township-${kind}`,
     returnUrl: `${base}/public/township/pay/return/${tp.id}`,
     notifyUrl: `${base}/public/paygate/notify`,
-    vault: paygate.vaultReady(),
   });
   await prisma.townshipPayment.update({ where: { id: tp.id }, data: { providerRef: init.payRequestId } });
   return { mode: 'form', paymentId: tp.id, ...init.form, goUrl: `${base}/public/township/pay/go/${tp.id}` };
@@ -270,7 +279,7 @@ async function applyPayment(id, now = new Date()) {
     const props = await prisma.property.findMany({ where: { id: { in: ids }, hostId: host.id, kind: 'township' } });
     for (const p of props) {
       const from = p.tsPaidUntil && new Date(p.tsPaidUntil) > now ? new Date(p.tsPaidUntil) : now;
-      await prisma.property.update({ where: { id: p.id }, data: { tsPaidUntil: addMonth(from) } });
+      await prisma.property.update({ where: { id: p.id }, data: { tsPaidUntil: addMonth(from, Math.max(1, tp.months || 1)) } });
     }
   }
   await unlockLocked(host.id, now).catch((e) => console.error('[township] unlock failed', e.message));
@@ -314,37 +323,25 @@ async function monthlyDue(hostId, settings) {
   return { items, totalCents: items.reduce((a, x) => a + x.feeCents, 0) };
 }
 
-// Daily: monthly-plan listings coming up for renewal. With a saved card (Vault),
-// charge it on the day; otherwise email the host a reminder 3 days before and on the day.
+// Daily: monthly-plan listings whose paid months end in 3 days or today. Nothing is
+// charged automatically; the host is reminded (email + WhatsApp) to pay for more.
 async function runDaily(now = new Date()) {
-  const settings = await getSettings();
   const hosts = await prisma.host.findMany({ where: { tsPlan: 'monthly' } });
-  const out = { charged: 0, reminded: 0, failed: 0 };
+  const out = { reminded: 0 };
+  const inWindow = (d, fromDays, toDays) => d > new Date(now.getTime() + fromDays * DAY) && d <= new Date(now.getTime() + toDays * DAY);
   for (const host of hosts) {
-    const props = await prisma.property.findMany({ where: { hostId: host.id, kind: 'township', tsHidden: false, tsPaidUntil: { not: null, lte: new Date(now.getTime() + 3 * DAY) } } });
-    if (!props.length) continue;
-    const dueToday = props.filter((p) => new Date(p.tsPaidUntil) <= new Date(now.getTime() + DAY) && new Date(p.tsPaidUntil) > new Date(now.getTime() - DAY));
-    const inThree = props.filter((p) => new Date(p.tsPaidUntil) > new Date(now.getTime() + 2 * DAY));
-    if (dueToday.length && host.tsVaultId && paygate.vaultReady()) {
-      const amountCents = dueToday.reduce((a, p) => a + feesFor(p, settings).monthlyFeeCents, 0);
-      const tp = await prisma.townshipPayment.create({ data: { hostId: host.id, kind: 'monthly', method: 'vault', amountCents, propertyIds: dueToday.map((p) => p.id) } });
-      const r = await paygate.vaultCharge({ vaultId: host.tsVaultId, reference: tp.id, amountCents, email: await hostEmail(host), name: host.name });
-      if (r.outcome === 'approved') {
-        await prisma.townshipPayment.update({ where: { id: tp.id }, data: { status: 'COMPLETE', providerRef: r.transactionId ? `vault-${r.transactionId}` : null, note: r.message } });
-        await applyPayment(tp.id, now); out.charged++;
-        await notifyHost(host, { subject: 'Township Stays: monthly fee paid', lines: [`We charged ${rand(amountCents)} to your saved card for another month of ${dueToday.map((p) => p.name).join(', ')}.`] });
-        continue;
-      }
-      await prisma.townshipPayment.update({ where: { id: tp.id }, data: { status: r.outcome === 'declined' ? 'DECLINED' : 'FAILED', note: r.message } });
-      out.failed++;
-    }
-    const remind = dueToday.length ? dueToday : inThree;
+    // Each window is one day wide, so a once-a-day run reminds about each listing exactly twice.
+    const props = await prisma.property.findMany({ where: { hostId: host.id, kind: 'township', tsHidden: false, tsPaidUntil: { not: null, gt: now, lte: new Date(now.getTime() + 3 * DAY) } } });
+    const last = props.filter((p) => inWindow(new Date(p.tsPaidUntil), 0, 1));
+    const inThree = props.filter((p) => inWindow(new Date(p.tsPaidUntil), 2, 3));
+    const remind = last.length ? last : inThree;
     if (!remind.length) continue;
-    const amountCents = remind.reduce((a, p) => a + feesFor(p, settings).monthlyFeeCents, 0);
+    const names = remind.map((p) => p.name).join(', ');
     await notifyHost(host, {
-      subject: dueToday.length ? 'Township Stays: your listings need this month’s fee' : 'Township Stays: monthly fee due in 3 days',
-      lines: [`${remind.map((p) => p.name).join(', ')} ${dueToday.length ? 'come off Township Stays today' : 'come off Township Stays in 3 days'} unless this month's fee (${rand(amountCents)}) is paid.`,
-        'Pay it from your Township Stays page.'],
+      subject: last.length ? 'Township Stays: your paid listing time ends within a day' : 'Township Stays: your paid listing time ends in 3 days',
+      lines: [`Your paid time for ${names} ends on ${fmtDay(remind[0].tsPaidUntil)}.`,
+        "Your listing stays up, but after that tenants won't see your contact details. We'll tell you when someone is interested, and you can pay for more months to get their details.",
+        'Pay for more months on your Township Stays page. If the place has been rented, please remove it from Township Stays.'],
     });
     out.reminded++;
   }
@@ -360,11 +357,12 @@ function publicCard(p) {
     coverPhotoId: cover ? cover.id : null,
     monthlyRentCents: p.monthlyRentCents ?? null, weeklyRentCents: p.weeklyRentCents ?? null, depositCents: p.depositCents ?? null,
     hostName: p.host && p.host.name ? String(p.host.name).split(' ')[0] : null,
+    availableFrom: p.availableFrom ? new Date(p.availableFrom).toISOString().slice(0, 10) : null,
   };
 }
 
 module.exports = {
   DEFAULTS, REPEAT_WINDOW_DAYS, getSettings, saveSettings, feesFor, monthStart, monthKey, spentThisMonth,
-  missingInfo, planActive, isLive, clicksOpen, revealContact, requestContact, unlockLocked,
+  missingInfo, planActive, everPaid, isLive, addMonth, clicksOpen, revealContact, requestContact, unlockLocked,
   startPayment, applyPayment, reconcile, handleNotify, monthlyDue, runDaily, publicCard, notifySwitchedOff,
 };

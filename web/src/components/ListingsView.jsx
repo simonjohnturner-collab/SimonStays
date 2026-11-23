@@ -193,6 +193,7 @@ export default function ListingsView({ onClose }) {
         monthlyRentCents: p.monthlyRentCents ?? null, weeklyRentCents: p.weeklyRentCents ?? null, depositCents: p.depositCents ?? null,
         contactName: p.contactName || '', contactPhone: p.contactPhone || '', contactEmail: p.contactEmail || '',
         tsHidden: !!p.tsHidden,
+        availableFrom: p.availableFrom ? String(p.availableFrom).slice(0, 10) : '',
       } : {}),
     });
     if (p.kind === 'township') api.township().then(setTs).catch(() => {});
@@ -332,7 +333,7 @@ export default function ListingsView({ onClose }) {
     const info = ts && (ts.listings || []).find((x) => x.id === p.id);
     const live = !!(info && info.live);
     const planNote = !ts ? '' : !ts.plan ? 'Choose a plan (monthly fee or pay per click) on your Township Stays page.'
-      : ts.plan === 'monthly' && !live && !missing.length && !p.tsHidden ? 'Pay this month’s listing fee on your Township Stays page.'
+      : ts.plan === 'monthly' && !live && !missing.length && !p.tsHidden ? 'Pay for the months you want on your Township Stays page.'
       : ts.plan === 'click' && !ts.activated ? 'Load credit on your Township Stays page.' : '';
     return (
       <section key={p.id} className="listing-card">
@@ -387,7 +388,11 @@ export default function ListingsView({ onClose }) {
             <label className="attr">Monthly rent<RandInput cents={p.monthlyRentCents ?? null} placeholder="e.g. 3500" onChange={(c) => editProp(p.id, { monthlyRentCents: c })} onBlur={() => autoSaveProp(p)} /></label>
             <label className="attr">Weekly rent<RandInput cents={p.weeklyRentCents ?? null} placeholder="optional" onChange={(c) => editProp(p.id, { weeklyRentCents: c })} onBlur={() => autoSaveProp(p)} /></label>
             <label className="attr">Deposit<RandInput cents={p.depositCents ?? null} placeholder="e.g. 3500" onChange={(c) => editProp(p.id, { depositCents: c })} onBlur={() => autoSaveProp(p)} /></label>
+            <label className="attr">Available from <span className="muted small">— the move-in date</span>
+              <input type="date" value={p.availableFrom ? String(p.availableFrom).slice(0, 10) : ''}
+                onChange={(e) => { const np = { ...p, availableFrom: e.target.value || null }; editProp(p.id, { availableFrom: np.availableFrom }); autoSaveProp(np); }} /></label>
           </div>
+          <p className="muted small" style={{ margin: '4px 0 0' }}>Your listing can go up before this date. Tenants see “Available from …”, then “Available now” once the date arrives.</p>
         </div>
 
         <div className="attr-section">

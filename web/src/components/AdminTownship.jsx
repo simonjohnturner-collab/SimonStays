@@ -38,7 +38,6 @@ export default function AdminTownship() {
           <input className="ts-amt" inputMode="decimal" value={fees.click} onChange={(e) => setFees({ ...fees, click: e.target.value })} />
           <button onClick={() => run(() => api.adminTownshipSettings({ monthlyFeeCents: toCents(fees.monthly) ?? 0, clickFeeCents: toCents(fees.click) ?? 0 }), 'Fees saved.')}>Save fees</button>
         </div>
-        <p className="muted small">Card saving for monthly auto-charge: {d.cardSaving ? 'on' : 'off (needs Paygate Vault, then PAYGATE_VAULT=on)'}.</p>
       </div>
 
       <div className="ts-card">
@@ -52,7 +51,7 @@ export default function AdminTownship() {
                   <td><b>{h.name || h.email}</b><div className="muted small">{h.email}{h.cardLabel ? ` · ${h.cardLabel}` : ''}</div></td>
                   <td>{h.plan === 'monthly' ? 'Monthly' : h.plan === 'click' ? 'Per click' : 'None yet'}</td>
                   <td>{rand(h.creditCents)}</td>
-                  <td>{rand(h.spentThisMonthCents)}{h.monthlyCapCents != null ? ` of ${rand(h.monthlyCapCents)}` : ''}</td>
+                  <td>{rand(h.spentThisMonthCents)}</td>
                   <td>{h.leadsThisMonth}</td>
                   <td>{h.lockedLeads || ''}</td>
                   <td><button className="mini" onClick={() => {
@@ -106,7 +105,7 @@ export default function AdminTownship() {
             <thead><tr><th>When</th><th>Host</th><th>What</th><th>Amount</th><th>Status</th></tr></thead>
             <tbody>
               {d.payments.map((p) => (
-                <tr key={p.id}><td>{day(p.createdAt)}</td><td>{p.host}</td><td>{p.kind === 'topup' ? 'Top-up' : 'Monthly'} · {p.method}{p.note ? <div className="muted small">{p.note}</div> : ''}</td><td>{rand(p.amountCents)}</td><td>{p.status}</td></tr>
+                <tr key={p.id}><td>{day(p.createdAt)}</td><td>{p.host}</td><td>{p.kind === 'topup' ? 'Top-up' : `${p.months || 1} month${(p.months || 1) === 1 ? '' : 's'}`} · {p.method}{p.note ? <div className="muted small">{p.note}</div> : ''}</td><td>{rand(p.amountCents)}</td><td>{p.status}</td></tr>
               ))}
             </tbody>
           </table>

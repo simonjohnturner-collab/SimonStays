@@ -49,9 +49,9 @@ model Host {
   // ---- Township Stays billing (see utils/township.js) ----
   tsPlan            String? // monthly (a fee per listing per month) | click (prepaid credit, each contact click costs)
   tsCreditCents     Int       @default(0) // prepaid credit for the click plan
-  tsMonthlyCapCents Int? // most the host will spend on clicks in a calendar month (null = no limit)
+  tsMonthlyCapCents Int? // no longer used (2026-11-23: click hosts spend whatever credit they have)
   tsActivatedAt     DateTime? // first successful payment: listings can go live from here
-  tsVaultId         String? // Paygate vault token of the saved card (monthly auto-charge)
+  tsVaultId         String? // Paygate vault token of a saved card (not used since monthly became prepaid months)
   tsCardLabel       String? // e.g. "Visa 4242", for the host's screen
   tsCapNotified     String? // 'YYYY-MM' the host was last told their clicks are switched off
   townshipLeads     TownshipLead[]
@@ -392,7 +392,8 @@ model Property {
   tsHidden          Boolean   @default(false) // the host has taken it off Township Stays
   tsMonthlyFeeCents Int? // admin override of the monthly listing fee
   tsClickFeeCents   Int? // admin override of the per-click fee
-  tsPaidUntil       DateTime? // monthly plan: live until then
+  tsPaidUntil       DateTime? // monthly plan: contact details open until then (the listing stays up after)
+  availableFrom     DateTime? // Township Stay: the date it can be moved into (shown to tenants; listing can go up before)
   townshipLeads     TownshipLead[]
   sortOrder   Int      @default(0) // manual order on the board (lower = higher up)
   createdAt   DateTime @default(now())
@@ -1133,7 +1134,8 @@ model TownshipPayment {
   kind        String // topup | monthly
   method      String    @default("card") // card (Paygate page) | vault (saved card) | admin (added by hand)
   amountCents Int
-  propertyIds Json      @default("[]") // monthly: the listings this month pays for
+  propertyIds Json      @default("[]") // monthly: the listings these months pay for
+  months      Int? // monthly: how many months were paid for (null = 1, older payments)
   status      String    @default("pending") // pending | COMPLETE | DECLINED | CANCELLED | ...
   providerRef String?   @unique
   note        String?

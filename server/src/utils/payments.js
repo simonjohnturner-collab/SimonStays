@@ -295,7 +295,9 @@ async function alertHost(booking, body) {
     if (!wa.enabled()) return;
     const hostId = booking.hostId || booking.unit?.property?.hostId;
     const host = hostId && await prisma.host.findUnique({ where: { id: hostId }, select: { contactPhone: true, biller: { select: { phone: true } } } });
-    const phone = host && (host.contactPhone || host.biller?.phone);
+    // fallbackPhone: a number to use when the host has none on their account
+    // (Township Stays passes the listing's contact phone).
+    const phone = (host && (host.contactPhone || host.biller?.phone)) || booking.fallbackPhone || null;
     if (!phone) return;
     const [first, ...rest] = String(body).split('\n');
     await wa.sendWhatsApp({

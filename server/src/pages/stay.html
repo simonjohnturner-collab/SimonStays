@@ -407,6 +407,7 @@
   .sect-switch a{ padding:8px 16px; border-radius:9px; font-weight:700; font-size:14px; color:var(--muted); white-space:nowrap; }
   .sect-switch a.on{ background:#fff; color:var(--green-d); box-shadow:0 1px 3px rgba(0,0,0,.08); }
   #township{ display:none; }
+  #township .ts-avail{ font-size:13px; color:var(--green-d); font-weight:600; margin-top:2px; }
   body.ts-mode #township{ display:block; }
   body.ts-mode .search-bar, body.ts-mode .promos, body.ts-mode .toolbar, body.ts-mode #results, body.ts-mode #map, body.ts-mode .host-cta{ display:none !important; }
   .ts-banner{ margin:16px 0; padding:18px 20px; border-radius:16px; background:linear-gradient(135deg,#14622f,#1a7a3a); color:#fff; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
@@ -2195,6 +2196,13 @@
     if(x.weeklyRentCents) return rand(x.weeklyRentCents)+' <small>/ week</small>';
     return '<small>Ask the host</small>';
   }
+  // "Available now" once the move-in date has arrived (South African date), else "Available from 1 Dec 2026".
+  function tsAvail(x){
+    if(!x.availableFrom) return '';
+    var today=new Date(Date.now()+2*3600*1000).toISOString().slice(0,10);
+    if(x.availableFrom<=today) return 'Available now';
+    return 'Available from '+new Date(x.availableFrom+'T00:00:00Z').toLocaleDateString('en-ZA',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
+  }
   function renderTownship(){
     var q=($('#tsQ').value||'').trim().toLowerCase();
     var list=(TS_LIST||[]).filter(function(x){ return !q || [x.name,x.areaName,x.address].join(' ').toLowerCase().indexOf(q)>=0; });
@@ -2206,6 +2214,7 @@
       var img=x.coverPhotoId?('background-image:url('+API+'/photos/'+x.coverPhotoId+'?w=960)'):'';
       c.innerHTML='<div class="ph" style="'+img+'"></div><div class="body"><div class="nm">'+esc(x.name)+'</div>'+
         '<div class="sub">'+esc(x.areaName||x.address||'')+'</div>'+(x.hostName?'<div class="host-by">Listed by '+esc(x.hostName)+'</div>':'')+
+        (tsAvail(x)?'<div class="ts-avail">'+esc(tsAvail(x))+'</div>':'')+
         '<div class="ts-price">'+tsPrice(x)+'</div></div>';
       c.onclick=function(){ openTownship(x.id); };
       box.appendChild(c);
@@ -2227,6 +2236,7 @@
     if(x.monthlyRentCents) prices.push('<div><small>Monthly rent</small><b>'+rand(x.monthlyRentCents)+'</b></div>');
     if(x.weeklyRentCents) prices.push('<div><small>Weekly rent</small><b>'+rand(x.weeklyRentCents)+'</b></div>');
     if(x.depositCents) prices.push('<div><small>Deposit</small><b>'+rand(x.depositCents)+'</b></div>');
+    if(x.availableFrom) prices.push('<div><small>Move in</small><b>'+esc(tsAvail(x).replace('Available from ','').replace('Available now','Now'))+'</b></div>');
     host.innerHTML='<div class="overlay"><div class="sheet" style="max-width:820px"><div class="sheet-head"><h2>'+esc(x.name)+'</h2><button class="x">&times;</button></div><div class="sheet-body">'+
       (x.photos&&x.photos.length?galleryHtml(x.photos.slice(0,5).map(function(pid){ return {id:pid}; })):'')+
       '<div class="sub" style="color:var(--muted)">'+esc(x.areaName||x.address||'')+(x.hostName?' · Listed by '+esc(x.hostName):'')+'</div>'+

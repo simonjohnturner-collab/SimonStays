@@ -6,17 +6,17 @@ const rand = (c) => 'R' + (Math.round(c || 0) / 100).toLocaleString('en-ZA', { m
 const day = (d) => (d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 const when = (d) => new Date(d).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-// Hosting › Township Stays: the host's plan (monthly fee or pay per click), credit,
-// monthly maximum, listing fees and the tenants who asked for their contact details.
+// Hosting › Township Stays: the host's plan (months paid upfront, or pay per click),
+// credit, paid months per listing and the tenants who asked for their contact details.
 export default function TownshipView() {
   const [d, setD] = useState(null);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [topup, setTopup] = useState('250');
-  const [cap, setCap] = useState('');
+  const [months, setMonths] = useState({}); // listing id → months typed in
 
   async function load() {
-    try { const r = await api.township(); setD(r); setCap(r.monthlyCapCents == null ? '' : String(r.monthlyCapCents / 100)); }
+    try { setD(await api.township()); }
     catch (e) { setMsg(e.message); }
   }
   useEffect(() => {
@@ -47,7 +47,6 @@ export default function TownshipView() {
 
   if (!d) return <div className="invoices-view"><p className="muted small" style={{ padding: 16 }}>{msg || 'Loading…'}</p></div>;
 
-  const monthlyTotal = d.listings.filter((l) => !l.hidden).reduce((a, l) => a + l.monthlyFeeCents, 0);
   const clickFee = d.listings.length ? Math.min(...d.listings.map((l) => l.clickFeeCents)) : d.fees.clickFeeCents;
 
   return (
@@ -74,7 +73,7 @@ export default function TownshipView() {
           <div className="ts-plans">
             <label className={`ts-plan ${d.plan === 'monthly' ? 'on' : ''}`}>
               <input type="radio" name="tsplan" checked={d.plan === 'monthly'} disabled={busy} onChange={() => run(() => api.townshipPlan({ plan: 'monthly' }), 'Plan changed to monthly.')} />
-              <span><b>Monthly</b><span className="muted small">{rand(d.fees.monthlyFeeCents)} per listing per month. Tenants see your contact details for free.</span></span>
+              <span><b>Pay for months</b><span className="muted small">{rand(d.fees.monthlyFeeCents)} per listing per month. Pay upfront for as many months as you like. Tenants see your contact details for free while it's paid.</span></span>
             </label>
             <label className={`ts-plan ${d.plan === 'click' ? 'on' : ''}`}>
               <input type="radio" name="tsplan" checked={d.plan === 'click'} disabled={busy} onChange={() => run(() => api.townshipPlan({ plan: 'click' }), 'Plan changed to pay per click.')} />
@@ -92,33 +91,38 @@ export default function TownshipView() {
               <input className="ts-amt" inputMode="decimal" value={topup} onChange={(e) => setTopup(e.target.value.replace(/[^0-9.]/g, ''))} />
               <button disabled={busy || !(Number(topup) >= 50)} onClick={() => pay(() => api.townshipTopup(Math.round(Number(topup) * 100)))}>Pay R{topup || 0}</button>
             </div>
-            <p className="muted small">Minimum R50. You pay on Paygate’s secure page.</p>
-            <div className="ts-row" style={{ marginTop: 10 }}>
-              <span className="muted small">Monthly maximum</span>
-              <input className="ts-amt" inputMode="decimal" placeholder="No limit" value={cap} onChange={(e) => setCap(e.target.value.replace(/[^0-9.]/g, ''))} />
-              <button className="secondary" disabled={busy} onClick={() => run(() => api.townshipPlan({ monthlyCapCents: cap === '' ? null : Math.round(Number(cap) * 100) }), 'Monthly maximum saved.')}>Save</button>
-            </div>
-            <p className="muted small">Spent this month: {rand(d.spentThisMonthCents)}{d.monthlyCapCents != null ? ` of ${rand(d.monthlyCapCents)}` : ''}. When your credit runs out or you reach your maximum, the Contact button switches off. Tenants can still ask you to contact them, and their details unlock when you top up.</p>
+            <p className="muted small">Minimum R50. You pay on Paygate’s secure page. Your credit works for all your listings.</p>
+            <p className="muted small">When your credit runs out, the Contact button switches off but your listings stay up. Tenants can still ask you to contact them: we let you know, and their details unlock when you top up. If a place has been rented, remove it so you stop getting these messages.</p>
           </div>
         )}
 
         {d.plan === 'monthly' && (
           <div className="ts-card">
-            <div className="ts-head"><b>Monthly fees</b>{d.cardLabel && <span className="muted small">Saved card: {d.cardLabel}</span>}</div>
+            <div className="ts-head"><b>Paid months</b></div>
             <table className="ts-table">
-              <thead><tr><th>Listing</th><th>Fee</th><th>Paid until</th></tr></thead>
+              <thead><tr><th>Listing</th><th>Paid until</th><th>Pay for more</th></tr></thead>
               <tbody>
-                {d.listings.map((l) => (
-                  <tr key={l.id}><td>{l.name}{l.hidden ? <span className="muted small"> (hidden)</span> : ''}</td><td>{rand(l.monthlyFeeCents)}</td><td>{day(l.paidUntil)}</td></tr>
-                ))}
+                {d.listings.map((l) => {
+                  const n = months[l.id] ?? '1';
+                  const ok = Number.isInteger(Number(n)) && Number(n) >= 1 && Number(n) <= 60;
+                  return (
+                    <tr key={l.id}>
+                      <td>{l.name}{l.hidden ? <span className="muted small"> (removed)</span> : ''}<div className="muted small">{rand(l.monthlyFeeCents)} a month</div></td>
+                      <td>{l.paidUntil ? day(l.paidUntil) : 'Not paid yet'}{l.paidUntil && !l.paid && <div className="muted small">Ended: tenants can’t see your details</div>}</td>
+                      <td>
+                        <div className="ts-row" style={{ margin: 0 }}>
+                          <input className="ts-amt" style={{ width: 56 }} inputMode="numeric" value={n} onChange={(e) => setMonths((m) => ({ ...m, [l.id]: e.target.value.replace(/[^0-9]/g, '') }))} />
+                          <span className="muted small">month{n === '1' ? '' : 's'}</span>
+                          <button disabled={busy || !ok || l.hidden} onClick={() => pay(() => api.townshipPayMonths(l.id, Number(n)))}>Pay {ok ? rand(l.monthlyFeeCents * Number(n)) : ''}</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-            {d.listings.some((l) => !l.hidden) && (
-              <button style={{ marginTop: 10 }} disabled={busy || !monthlyTotal} onClick={() => pay(() => api.townshipPayMonth())}>Pay a month: {rand(monthlyTotal)}</button>
-            )}
-            <p className="muted small">{d.cardSaving
-              ? 'Your card is saved when you pay and charged automatically each month. We email you before it renews.'
-              : 'Each month adds a month from the day your current month ends. We email you 3 days before a listing comes off.'}</p>
+            <p className="muted small">Months are added on from the day the current paid time ends. Nothing is charged automatically: we remind you by email and WhatsApp 3 days before and on the day it ends.</p>
+            <p className="muted small">After that your listing stays up, but tenants can’t see your contact details. We let you know when someone is interested, and their details unlock when you pay for more months. If a place has been rented, remove it so you stop getting these messages. No refunds for unused months.</p>
           </div>
         )}
 
@@ -129,7 +133,8 @@ export default function TownshipView() {
               {d.listings.map((l) => (
                 <li key={l.id}>
                   <b>{l.name}</b>{l.areaName ? <span className="muted small"> · {l.areaName}</span> : ''}
-                  <span className={`ts-pill ${l.live ? 'ok' : 'off'}`}>{l.hidden ? 'Hidden' : l.live ? 'Live' : 'Not live'}</span>
+                  <span className={`ts-pill ${l.live ? 'ok' : 'off'}`}>{l.hidden ? 'Removed' : l.live ? 'Live' : 'Not live'}</span>
+                  {l.availableFrom && <span className="muted small"> · Available from {day(l.availableFrom)}</span>}
                   {!l.live && !l.hidden && l.missing.length > 0 && <div className="muted small">Still needs {l.missing.join(', ')}.</div>}
                 </li>
               ))}
@@ -139,7 +144,7 @@ export default function TownshipView() {
 
         <div className="ts-card">
           <div className="ts-head"><b>Leads</b><span className="muted small">Tenants who asked for your contact details</span></div>
-          {d.lockedCount > 0 && <div className="ts-locked">{d.lockedCount} tenant{d.lockedCount === 1 ? ' is' : 's are'} waiting for you to contact them. Their details unlock when you top up{d.monthlyCapCents != null ? ' or raise your maximum' : ''}.</div>}
+          {d.lockedCount > 0 && <div className="ts-locked">{d.lockedCount} tenant{d.lockedCount === 1 ? ' is' : 's are'} waiting for you to contact them. Their details unlock when you {d.plan === 'monthly' ? 'pay for more months' : 'top up'}.</div>}
           {!d.leads.length ? <p className="muted small">No leads yet.</p> : (
             <table className="ts-table">
               <thead><tr><th>When</th><th>Listing</th><th>Tenant</th><th>Cost</th></tr></thead>
@@ -148,7 +153,7 @@ export default function TownshipView() {
                   <tr key={l.id} className={l.status === 'locked' ? 'locked' : ''}>
                     <td>{when(l.createdAt)}</td>
                     <td>{l.propertyName}</td>
-                    <td>{l.status === 'locked' ? <span className="muted">Locked until you top up</span> : <>
+                    <td>{l.status === 'locked' ? <span className="muted">Locked until you {d.plan === 'monthly' ? 'pay for more months' : 'top up'}</span> : <>
                       <b>{l.name || 'Tenant'}</b>
                       {l.phone && <> · <a href={`tel:${l.phone}`}>{l.phone}</a></>}
                       {l.email && <> · <a href={`mailto:${l.email}`}>{l.email}</a></>}
@@ -169,7 +174,7 @@ export default function TownshipView() {
               <thead><tr><th>When</th><th>What</th><th>Amount</th><th>Status</th></tr></thead>
               <tbody>
                 {d.payments.map((p) => (
-                  <tr key={p.id}><td>{when(p.createdAt)}</td><td>{p.kind === 'topup' ? 'Credit top-up' : 'Monthly fee'}{p.method === 'admin' ? ' (by SimonStays)' : p.method === 'vault' ? ' (saved card)' : ''}</td>
+                  <tr key={p.id}><td>{when(p.createdAt)}</td><td>{p.kind === 'topup' ? 'Credit top-up' : `${p.months || 1} month${(p.months || 1) === 1 ? '' : 's'}${(p.propertyIds || []).length === 1 ? ': ' + ((d.listings.find((l) => l.id === p.propertyIds[0]) || {}).name || 'listing') : ''}`}{p.method === 'admin' ? ' (by SimonStays)' : ''}</td>
                     <td>{rand(p.amountCents)}</td><td>{p.status === 'COMPLETE' ? 'Paid' : p.status === 'pending' ? 'Not completed' : p.status.toLowerCase().replace('_', ' ')}</td></tr>
                 ))}
               </tbody>
