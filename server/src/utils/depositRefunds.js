@@ -144,14 +144,47 @@ async function askGuest(id, now = new Date()) {
     + `As soon as you agree, your refund of ${rand(r.amountCents)} is sent. If you don’t agree, the deposit stays held until it’s sorted out.`;
   const sent = await messaging.sendHostMessage(b.id, text, { bookerOnly: true, notice: 'refund' })
     .catch((e) => { console.error('[depositRefund] ask guest failed', e.message); return null; });
+  const wa = await whatsAppGuest(b, r);
   const updated = await prisma.depositRefund.update({ where: { id }, data: { status: 'guest', guestAskedAt: now } });
   const who = b.guestName || 'The guest';
+  const ways = [b.guestEmail && `by email to ${b.guestEmail}`, wa.ok && `on WhatsApp to ${wa.to}`, 'in their SimonStays messages'].filter(Boolean);
+  const noWa = wa.ok ? '' : wa.skipped === 'no_template' ? ' (WhatsApp isn’t set up for refunds yet)' : wa.skipped === 'no_guest_phone' ? ' (no phone number for WhatsApp)' : ' (the WhatsApp didn’t send)';
   return {
     ok: true, refund: updated,
     message: sent && sent.ok
-      ? `${who} has been asked to agree the refund of ${rand(r.amountCents)}${b.guestEmail ? `, by email to ${b.guestEmail} and in their SimonStays messages` : ' in their SimonStays messages (there is no email on the booking)'}.`
-      : `The refund is waiting for ${who}, but the message could not be sent. Send them this link yourself: ${depositLink(b.id)}`,
+      ? `${who} has been asked to agree the refund of ${rand(r.amountCents)}: ${ways.join(', ')}${noWa}. Their link: ${depositLink(b.id)}`
+      : `The refund is waiting for ${who}, but the message could not be sent${wa.ok ? ' (the WhatsApp did go)' : ''}. Send them this link yourself: ${depositLink(b.id)}`,
   };
+}
+
+// WhatsApp the guest the reduced refund, with a button to their link. Needs the
+// approved template TWILIO_WHATSAPP_REFUND_CONTENT_SID ("simonstays_deposit_refund"):
+//   {{1}} first name · {{2}} where they stayed · {{3}} what's kept back and the refund, one line
+//   button "Review my refund" → https://simonstays.co.za/deposit/{{4}} ({{4}} = the link's key).
+const oneLine = (s, max) => String(s || '').replace(/\s*\n+\s*/g, ' · ').replace(/[\t ]{2,}/g, ' ').trim().slice(0, max) || '—';
+function refundWhatsApp(b, r) {
+  const max = refundableOf(b);
+  const link = depositLink(b.id);
+  const summary = oneLine(`${rand(max - r.amountCents)} kept back for: ${r.note || 'see the link'} · Refund to you: ${rand(r.amountCents)}`, 600);
+  const body = `Hi ${firstName(b)}, there's an update on the breakage deposit for your SimonStays stay at ${placeOf(b)}.\n\n${summary}\n\nPlease tap the button below to agree, or tell us if you don't. As soon as you agree, your refund is sent.\n${link}`;
+  return { body, contentVariables: { 1: firstName(b), 2: oneLine(placeOf(b), 200), 3: summary, 4: link.split('/deposit/')[1] } };
+}
+async function whatsAppGuest(b, r) {
+  try {
+    const wa = require('./whatsapp');
+    const template = String(process.env.TWILIO_WHATSAPP_REFUND_CONTENT_SID || '').trim();
+    if (!wa.enabled() || !template) return { ok: false, skipped: 'no_template' };
+    let phone = b.guestPhone || null;
+    if (!phone && b.guestAccountId) {
+      const a = await prisma.guestAccount.findUnique({ where: { id: b.guestAccountId }, select: { phone: true } });
+      phone = a && a.phone;
+    }
+    if (!phone) return { ok: false, skipped: 'no_guest_phone' };
+    const { body, contentVariables } = refundWhatsApp(b, r);
+    const out = await wa.sendWhatsApp({ to: phone, body, contentSid: template, contentVariables });
+    if (!out.ok) console.warn('[depositRefund] WhatsApp not sent', b.id, out.error || out.skipped);
+    return out;
+  } catch (e) { console.error('[depositRefund] WhatsApp failed', e.message); return { ok: false, error: e.message }; }
 }
 
 function alertAdmin(subject, lines) {
@@ -316,4 +349,4 @@ async function cancelRefund(id) {
   return { ok: true };
 }
 
-module.exports = { WAIT_DAYS, listRefunds, startRefund, askGuest, guestView, guestAnswer, approveRefund, markRefundPaid, sendToPaygate, resolveCheck, cancelRefund, cardPaymentOf };
+module.exports = { refundWhatsApp, WAIT_DAYS, listRefunds, startRefund, askGuest, guestView, guestAnswer, approveRefund, markRefundPaid, sendToPaygate, resolveCheck, cancelRefund, cardPaymentOf };

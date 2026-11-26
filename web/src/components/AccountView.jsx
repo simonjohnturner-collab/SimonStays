@@ -142,6 +142,7 @@ export default function AccountView({ onClose, onEmailChanged }) {
               </div>
               <button className="secondary" style={{ marginTop: 8 }} disabled={!!waBusy} onClick={() => testWhatsApp('guest')}>{waBusy === 'guest' ? 'Sending… (checking delivery)' : '🧳 Test: what a guest gets when their booking is confirmed'}</button>
               <button className="secondary" style={{ marginTop: 8 }} disabled={!!waBusy} onClick={() => testWhatsApp('guestUpdate')}>{waBusy === 'guestUpdate' ? 'Sending… (checking delivery)' : '✏️ Test: what a guest gets when their booking is changed or cancelled'}</button>
+              <button className="secondary" style={{ marginTop: 8 }} disabled={!!waBusy} onClick={() => testWhatsApp('refund')}>{waBusy === 'refund' ? 'Sending… (checking delivery)' : '↩️ Test: what a guest gets when part of their deposit is kept back'}</button>
               {waResult && (
                 <div className={`wa-result ${waResult.ok ? 'ok' : 'bad'}`}>
                   <b>{WA_STATUS[waResult.status] || (waResult.ok ? 'Sent' : 'Not sent')}</b>{waResult.to ? ` · to ${waResult.to}` : ''}{waResult.template === false ? ' · without a template' : ''}
