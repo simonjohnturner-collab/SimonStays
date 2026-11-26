@@ -741,7 +741,7 @@ tr.row-flash td, tr.row-flash th { animation: rowflash 2.2s ease; }
 .um-day.pad { border:0; background:transparent; cursor:default; }
 .um-day.free:hover { border-color:var(--green); }
 .um-day.booked { background:var(--blue); border-color:#8fb8dd; }
-.um-day.today .um-num { background:var(--green); color:#fff; border-radius:50%; }
+.um-day.is-today .um-num { background:var(--green); color:#fff; border-radius:50%; }
 .um-num { font-size:12px; font-weight:700; width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; }
 .um-guest { font-size:12px; font-weight:600; line-height:1.15; overflow:hidden; }
 .um-guest.owing { color:var(--red); }
@@ -1535,3 +1535,61 @@ button.bm-cancel:hover { background: #fdeaea; }
 .uh-table td.uh-chg { background: #fff3c4; font-weight: 700; }
 .uh-thumbs { display: flex; gap: 4px; align-items: center; }
 .uh-thumbs img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; cursor: zoom-in; border: 1px solid var(--line); }
+
+/* --- Phone calendar (≤640px): Airbnb-style list + single-unit month --- */
+.um-back { display:none; }
+.pc-list { padding:8px 16px 90px; display:flex; flex-direction:column; gap:14px; }
+.pc-title { font-size:32px; margin:14px 0 0; letter-spacing:-.5px; }
+.pc-sub { margin:0 0 4px; }
+.pc-card { display:grid; grid-template-columns:84px 1fr auto; align-items:center; gap:14px; width:100%; text-align:left; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:16px; padding:14px; font:inherit; cursor:pointer; box-shadow:none; }
+.pc-card:active { background:#f6f6f6; }
+.pc-photo { width:84px; height:84px; border-radius:12px; object-fit:cover; display:block; }
+.pc-ph { display:flex; align-items:center; justify-content:center; background:#eef6f0; color:var(--green); font-size:30px; font-weight:700; }
+.pc-name { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.pc-name b { font-size:17px; line-height:1.2; overflow-wrap:anywhere; }
+.pc-name .muted { font-size:14px; }
+.mm-grid { display:grid; grid-template-columns:repeat(7,12px); grid-auto-rows:14px; width:84px; }
+.mm-c { position:relative; display:flex; align-items:center; justify-content:center; }
+.mm-c i { width:4px; height:4px; border-radius:50%; background:#c4c4c4; }
+.mm-c.bar i { display:none; }
+.mm-c.bar::before { content:''; position:absolute; left:0; right:0; top:4px; height:6px; background:#222; }
+.mm-c.bar.past::before { background:#8a8a8a; }
+.mm-c.bar.s::before { left:2px; border-radius:3px 0 0 3px; }
+.mm-c.bar.e::before { right:2px; border-radius:0 3px 3px 0; }
+.mm-c.bar.s.e::before { border-radius:3px; }
+.mm-c.is-today i { background:#e0115f; width:6px; height:6px; }
+.mm-c.is-today.bar::after { content:''; position:absolute; width:4px; height:4px; border-radius:50%; background:#fff; border:1px solid #e0115f; top:4px; }
+
+@media (max-width: 640px) {
+  .pc-app .board-wrap { display:none; }
+  /* single-unit month */
+  .um-back { display:inline-flex; font-size:20px; padding:2px 8px; }
+  .um-backw, .um-navw { display:none; }
+  .um-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; font-weight:700; opacity:1; }
+  .um-title + .spacer { display:none; }
+  .um-wrap { padding:10px 8px 80px; }
+  .um-head h3 { font-size:22px; }
+  .um-nav { font-size:22px; padding:4px 14px; }
+  .um-grid { gap:0; row-gap:6px; }
+  .um-day { position:relative; min-height:78px; border:0; border-radius:10px; margin:0 2px; background:#f4f4f4; padding:6px 2px; align-items:center; }
+  .um-day.pad { background:transparent; }
+  .um-day.free { justify-content:flex-start; gap:10px; }
+  .um-num { font-size:15px; width:28px; height:28px; }
+  .um-day.is-today .um-num { background:#e0115f; }
+  .um-day.past.free { background:#fafafa; }
+  .um-day.past .um-num { color:#9a9a9a; text-decoration:line-through; }
+  .um-price { align-self:center; font-size:12px; }
+  .um-day.sel { background:#e4f2e8; box-shadow:inset 0 0 0 2px var(--green); }
+  /* booked nights: a continuous dark bar across the row */
+  .um-day.booked { background:transparent; margin:0; border-radius:0; }
+  .um-day.booked::after { content:''; position:absolute; left:0; right:0; top:42px; height:28px; background:#222; }
+  .um-day.booked.past::after { background:#8a8a8a; }
+  .um-day.booked.owe::after { background:#b3261e; }
+  .um-day.booked.bs::after { left:6px; border-radius:14px 0 0 14px; }
+  .um-day.booked.be::after { right:6px; border-radius:0 14px 14px 0; }
+  .um-day.booked.bs.be::after { border-radius:14px; }
+  .um-day.booked .um-cont { display:none; }
+  .um-guest, .um-guest.owing { position:absolute; z-index:1; left:12px; top:42px; height:28px; line-height:28px; color:#fff; white-space:nowrap; font-size:13px; font-weight:700; pointer-events:none; }
+  .um-help { font-size:12px; }
+  .um-pricebar { position:sticky; top:0; z-index:3; }
+}

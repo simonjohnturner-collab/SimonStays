@@ -10,10 +10,20 @@ router.use(authHost);
 router.get('/', async (req, res) => {
   const properties = await prisma.property.findMany({
     where: { hostId: req.hostId, kind: 'stay' },
-    include: { units: { orderBy: { createdAt: 'asc' } } },
+    include: {
+      units: { orderBy: { createdAt: 'asc' }, include: { photos: { orderBy: { sort: 'asc' }, take: 1, select: { id: true } } } },
+      photos: { orderBy: { sort: 'asc' }, take: 1, select: { id: true } },
+    },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
   });
-  res.json({ properties });
+  // Cover photo ids (for the phone calendar list) as flat fields, so the shapes
+  // other screens send back on save stay the same.
+  const out = properties.map(({ photos, units, ...p }) => ({
+    ...p,
+    coverPhotoId: photos[0]?.id || null,
+    units: units.map(({ photos: up, ...u }) => ({ ...u, coverPhotoId: up[0]?.id || null })),
+  }));
+  res.json({ properties: out });
 });
 
 // PUT /properties/reorder { ids: [...] } — set the board order (index = position).

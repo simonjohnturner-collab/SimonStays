@@ -74,16 +74,21 @@ export default function UnitMonthView({ unit, propertyName, onClose, units = [],
     const ds = iso(new Date(y, mo, day));
     const b = nights[ds];
     const isCheckIn = b && b.checkIn.slice(0, 10) === ds;
+    // For the phone layout: where each booking bar starts/ends on a row.
+    const dow = (startDow + day - 1) % 7;
+    const barS = b && (isCheckIn || dow === 0 || day === 1);
+    const barE = b && (nights[iso(new Date(y, mo, day + 1))] !== b || dow === 6 || day === days);
+    const isPast = ds < todayISO;
     const nr = rates[ds];
     const selected = sel.has(ds);
     cells.push(
       <div key={ds}
-        className={`um-day ${b ? 'booked' : 'free'} ${selected ? 'sel' : ''} ${ds === todayISO ? 'today' : ''}`}
+        className={`um-day ${b ? 'booked' : 'free'} ${selected ? 'sel' : ''} ${ds === todayISO ? 'is-today' : ''}${barS ? ' bs' : ''}${barE ? ' be' : ''}${isPast ? ' past' : ''}${isRed(b) ? ' owe' : ''}`}
         onClick={() => (b ? setEdit({ booking: b }) : toggle(ds))}
         title={b ? `${b.guestName || 'Booking'} · ${b.checkIn.slice(0, 10)} → ${b.checkOut.slice(0, 10)}` : (selected ? 'Selected — set a price below' : 'Click to select this night')}>
         <span className="um-num">{day}</span>
         {b ? (
-          isCheckIn ? <span className={`um-guest ${isRed(b) ? 'owing' : ''}`}>{b.guestName || '(guest)'}</span> : <span className="um-cont">•</span>
+          isCheckIn || (barS && day === 1) ? <span className={`um-guest ${isRed(b) ? 'owing' : ''}`}>{b.guestName || '(guest)'}</span> : <span className="um-cont">•</span>
         ) : (
           nr && nr.cents != null ? <span className={`um-price ${nr.overridden ? 'ovr' : ''}`}>{fmtR(nr.cents)}</span> : null
         )}
@@ -94,18 +99,19 @@ export default function UnitMonthView({ unit, propertyName, onClose, units = [],
   return (
     <div className="invoices-view">
       <header className="topbar">
-        <span className="host">{propertyName ? propertyName + ' · ' : ''}Unit {unit.name}</span>
+        <button className="ghost um-back" onClick={onClose} aria-label="Back to calendars">←</button>
+        <span className="host um-title">{propertyName ? propertyName + ' · ' : ''}Unit {unit.name}</span>
         <div className="spacer" />
         {msg && <span className="small" style={{ marginRight: 8 }}>{msg}</span>}
         <button className="ghost" onClick={() => setEdit({ neww: true })}>＋ Booking</button>
-        <button className="ghost" onClick={onClose}>← Calendar</button>
+        <button className="ghost um-backw" onClick={onClose}>← Calendar</button>
       </header>
 
       <div className="um-wrap">
         <div className="um-head">
-          <button className="um-nav" onClick={() => setMonth(new Date(y, mo - 1, 1))}>‹ Previous month</button>
+          <button className="um-nav" aria-label="Previous month" onClick={() => setMonth(new Date(y, mo - 1, 1))}>‹<span className="um-navw"> Previous month</span></button>
           <h3>{label} <button className="um-today" onClick={() => setMonth(firstOfMonth())}>Today</button></h3>
-          <button className="um-nav" onClick={() => setMonth(new Date(y, mo + 1, 1))}>Next month ›</button>
+          <button className="um-nav" aria-label="Next month" onClick={() => setMonth(new Date(y, mo + 1, 1))}><span className="um-navw">Next month </span>›</button>
         </div>
 
         {sel.size > 0 && (
@@ -123,7 +129,7 @@ export default function UnitMonthView({ unit, propertyName, onClose, units = [],
           <>
             <div className="um-grid um-dows">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => <div key={d} className="um-dow">{d}</div>)}</div>
             <div className="um-grid">{cells}</div>
-            <p className="muted small" style={{ marginTop: 10 }}>
+            <p className="muted small um-help" style={{ marginTop: 10 }}>
               Click a <b>booked</b> day to edit it, or <b>＋ Booking</b> to add one. Click <b>empty</b> days to select them, then set a custom base price (overrides the rate card for those nights only — cleaning, deposit &amp; fees are unchanged).
               {!hasPricing && <> This unit has no pricing group, so rate-card prices aren’t shown.</>}
             </p>

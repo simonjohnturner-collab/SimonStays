@@ -7,6 +7,7 @@ import Board from './Board.jsx';
 import BookingModal from './BookingModal.jsx';
 import UnitPanel from './UnitPanel.jsx';
 import UnitMonthView from './UnitMonthView.jsx';
+import PhoneCalendar, { useIsPhone } from './PhoneCalendar.jsx';
 import ManageDrawer from './ManageDrawer.jsx';
 import InvoicesView from './InvoicesView.jsx';
 import RateCardMatrix from './RateCardMatrix.jsx';
@@ -232,6 +233,7 @@ export default function Main() {
     setStart(addDays(new Date(iso + 'T12:00:00'), -3));
   }
 
+  const isPhone = useIsPhone();
   const hasUnits = properties.some((p) => p.units.length);
   const isAdmin = !!host?.isAdmin && !impersonating;
   const allUnits = properties.flatMap((p) => p.units.map((u) => ({ ...u, label: `${p.name} · ${u.name}` })));
@@ -270,6 +272,21 @@ export default function Main() {
     screen = unit
       ? <UnitMonthView key={unit.id} unit={unit} propertyName={p.name} units={allUnits} groups={groups} cleaners={cleaners} onClose={toCalendar} onBookingsChanged={() => loadBookings(properties)} />
       : <div className="center muted">{loading ? 'Loading…' : 'That unit no longer exists.'}</div>;
+  } else if (path === '/calendar' && isPhone && hasUnits) {
+    // Phones: a list of listings with a mini month each (the board is too wide).
+    screen = (
+      <div className="app pc-app">
+        <header className="topbar">
+          <span className="host">Calendar</span>
+          <div className="spacer" />
+          <button className="ghost" onClick={syncAll} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync'}</button>
+          <button className="ghost" onClick={() => setDrawer('booking')}>＋ Booking</button>
+        </header>
+        {syncFailed && <div className="banner sync-failed">⚠ Unable to sync — correct as at {fmtSyncTime(lastSynced)}</div>}
+        {msg && !syncFailed && <div className="banner">{msg}</div>}
+        <PhoneCalendar properties={properties} onOpenUnit={(unit) => navigate(`/calendar/unit/${unit.id}`)} />
+      </div>
+    );
   } else if (path === '/calendar') {
     screen = (
       <div className="app">
