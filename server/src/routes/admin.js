@@ -209,6 +209,11 @@ router.post('/refunds/booking/:bookingId/start', async (req, res) => {
   refundReply(res, await refunds.startRefund(req.params.bookingId, req.body || {}, req.adminHost.email));
 });
 
+// POST /admin/refunds/:id/ask-guest — send the guest the reduced refund to agree (again).
+router.post('/refunds/:id/ask-guest', async (req, res) => {
+  refundReply(res, await refunds.askGuest(req.params.id));
+});
+
 // POST /admin/refunds/:id/approve { amountCents } — the amount typed again, as the sign-off.
 router.post('/refunds/:id/approve', async (req, res) => {
   refundReply(res, await refunds.approveRefund(req.params.id, req.body || {}, req.adminHost.email));

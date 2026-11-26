@@ -667,6 +667,8 @@ function Transactions({ hostFilter, HostPicker }) {
 
 const refundStage = (x) => (!x.refund ? (x.due ? 'Ready to start' : 'Waiting out the 7 days')
   : x.refund.status === 'started' ? 'Waiting for approval'
+  : x.refund.status === 'guest' ? 'Waiting for the guest to agree'
+  : x.refund.status === 'disputed' ? 'Guest doesn’t agree: deposit held'
     : x.refund.status === 'approved' ? 'Approved, to pay'
       : x.refund.status === 'check' ? 'Check with Paygate'
         : x.refund.via === 'paygate' ? 'Sent to card' : 'Paid');
@@ -685,7 +687,7 @@ function RefundAction({ x, onDone }) {
     setBusy(true); setErr('');
     try {
       const out = await call();
-      if (out && out.outcome === 'unclear') window.alert(out.message);
+      if (out && (out.outcome === 'unclear' || out.askedGuest !== undefined || out.refund?.status === 'guest')) window.alert(out.message);
       onDone();
     } catch (e) { setErr(e.message); setBusy(false); }
   }
@@ -697,8 +699,9 @@ function RefundAction({ x, onDone }) {
     return (
       <div className="refund-action">
         <label className="small">Amount <input className="amt" inputMode="decimal" value={amount} placeholder={(x.refundableCents / 100).toFixed(2)} onChange={(e) => setAmount(e.target.value)} /></label>
-        {typed < x.refundableCents && <input value={note} placeholder="Why less than the deposit?" aria-label="Reason for the lower refund" onChange={(e) => setNote(e.target.value)} />}
-        <button className="mini" disabled={busy} onClick={() => run(() => api.adminStartRefund(x.bookingId, typed, note))}>Start refund</button>
+        {typed < x.refundableCents && <input value={note} placeholder="Why less than the deposit? (the guest sees this)" aria-label="Reason for the lower refund" onChange={(e) => setNote(e.target.value)} />}
+        {typed < x.refundableCents && <div className="muted small">{fmtR(x.refundableCents - typed)} kept back. {x.guestName || 'The guest'} is sent this to agree; once they agree, the refund is paid.</div>}
+        <button className="mini" disabled={busy || (typed < x.refundableCents && !note.trim())} onClick={() => run(() => api.adminStartRefund(x.bookingId, typed, note))}>{typed < x.refundableCents ? 'Send to guest to agree' : 'Start refund'}</button>
         {error}
       </div>
     );
@@ -716,11 +719,30 @@ function RefundAction({ x, onDone }) {
     );
   }
   const cancel = <button className="mini danger" disabled={busy} onClick={() => window.confirm('Cancel this refund? The deposit stays held.') && run(() => api.adminCancelRefund(r.id))}>Cancel</button>;
+  const reduced = r.amountCents < x.refundableCents;
+  const approveBox = (label) => (
+    <>
+      <label className="small">{label} <input className="amt" inputMode="decimal" value={amount} placeholder={(r.amountCents / 100).toFixed(2)} onChange={(e) => setAmount(e.target.value)} /></label>
+      <button className="mini" disabled={busy || !amount.trim()} onClick={() => run(() => api.adminApproveRefund(r.id, randToCents(amount)))}>Approve</button>
+    </>
+  );
+  if (r.status === 'guest' || r.status === 'disputed') {
+    return (
+      <div className="refund-action">
+        {r.status === 'guest'
+          ? <div className="small">Sent to {x.guestName || 'the guest'} {fmtWhen(r.guestAskedAt)}. Once they agree, {fmtR(r.amountCents)} is paid{x.method === 'Card' && x.canSendToCard ? ' to their card automatically' : ' and you’re emailed to pay it by EFT'}.</div>
+          : <div className="small"><b>{x.guestName || 'The guest'} doesn’t agree</b> ({fmtWhen(r.guestAt)}): <span className="tx-wrap">{r.guestReply}</span><div className="muted">The deposit stays held. Cancel and start again with a new amount, or approve if you’ve since agreed.</div></div>}
+        {r.status === 'guest' && <button className="mini" disabled={busy} onClick={() => run(() => api.adminAskGuestRefund(r.id))}>Send again</button>}
+        <details className="small"><summary>Agreed another way?</summary>{approveBox(`Type ${fmtR(r.amountCents)} to approve`)}</details>
+        {cancel}{error}
+      </div>
+    );
+  }
   if (r.status === 'started') {
     return (
       <div className="refund-action">
-        <label className="small">Retype the amount to approve <input className="amt" inputMode="decimal" value={amount} placeholder="0.00" onChange={(e) => setAmount(e.target.value)} /></label>
-        <button className="mini" disabled={busy || !amount.trim()} onClick={() => run(() => api.adminApproveRefund(r.id, randToCents(amount)))}>Approve</button>
+        {reduced && <button className="mini" disabled={busy} onClick={() => run(() => api.adminAskGuestRefund(r.id))}>Send to {x.guestName || 'guest'} to agree</button>}
+        {approveBox(`Type ${fmtR(r.amountCents)} to approve`)}
         {cancel}{error}
       </div>
     );
@@ -772,7 +794,7 @@ function Refunds({ hostFilter, HostPicker }) {
             <Tile label="Under way" value={underWay.length} sub={total(underWay)} />
             <Tile label="Paid" value={paid.length} sub={total(paid)} />
           </div>
-          <p className="muted small">A refund can start {data.waitDays} days after checkout. Start it, then approve it by retyping the amount. A card payment is then sent back through Paygate in one click; an EFT is paid by hand and recorded with its reference. The guest is told once it's paid.</p>
+          <p className="muted small">A refund can start {data.waitDays} days after checkout. Start it, then approve it by retyping the amount. If you keep some back, give the reason: the guest is sent it to agree, and once they agree the refund is approved and (by card) paid automatically. A card payment is then sent back through Paygate in one click; an EFT is paid by hand and recorded with its reference. The guest is told once it's paid.</p>
           <div className="admin-table-wrap">
             <table className="admin-table">
               <thead><tr><th>Guest</th><th>Stay</th><th>Host</th><th>Paid by</th><th className="num">Deposit</th><th>Stage</th><th>Next step</th></tr></thead>

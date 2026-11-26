@@ -16,6 +16,9 @@ function threadLink(bookingId) {
 // The link a guest uses to rate their stay. A different key, so it can't open messages.
 const rateLink = (bookingId) => `${siteBase()}/rate/${bookingId}.${mac(bookingId, 'guest-rate')}`;
 
+// The link a guest uses to agree (or not) to a reduced deposit refund. Its own key.
+const depositLink = (bookingId) => `${siteBase()}/deposit/${bookingId}.${mac(bookingId, 'guest-deposit')}`;
+
 // The booking id a token is for, or null if it isn't genuine.
 function bookingIdOf(token, purpose = 'guest-thread') {
   const [id, given] = String(token || '').split('.');
@@ -26,4 +29,4 @@ function bookingIdOf(token, purpose = 'guest-thread') {
 
 const linkExpired = (booking, now = Date.now()) => new Date(booking.checkOut).getTime() + LINK_DAYS_AFTER_STAY * 864e5 < now;
 
-module.exports = { threadLink, rateLink, bookingIdOf, linkExpired };
+module.exports = { threadLink, rateLink, depositLink, bookingIdOf, linkExpired };

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Your deposit refund · SimonStays</title>
+<style>
+  :root { --green:#1a7a3a; --green-d:#14622f; --ink:#1f2430; --muted:#6b7280; --line:#e3e6ea; --bg:#f4f6f4; --red:#b3261e; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; }
+  body { font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); line-height:1.5; }
+  .wrap { max-width:520px; margin:0 auto; padding:16px; }
+  .brand { font-size:22px; font-weight:800; color:var(--green); margin-bottom:12px; }
+  .brand span { color:var(--ink); }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; }
+  h1 { font-size:20px; margin:0 0 2px; }
+  .muted { color:var(--muted); font-size:14px; }
+  table { width:100%; border-collapse:collapse; margin:16px 0 6px; }
+  td { padding:7px 0; border-bottom:1px solid var(--line); }
+  td.n { text-align:right; white-space:nowrap; font-weight:600; }
+  tr.total td { border-bottom:0; font-size:17px; font-weight:700; }
+  .reason { background:#fbf7ec; border:1px solid #efe2bf; border-radius:10px; padding:10px 12px; margin:12px 0; }
+  .reason b { display:block; font-size:13px; color:#8a6a12; }
+  button { margin-top:12px; width:100%; padding:12px; font:inherit; font-weight:600; color:#fff; background:var(--green); border:0; border-radius:10px; cursor:pointer; }
+  button:hover { background:var(--green-d); }
+  button.no { background:#fff; color:var(--ink); border:1px solid #cfd4da; }
+  button.no:hover { background:#f6f6f6; }
+  button:disabled { opacity:.6; cursor:default; }
+  textarea { width:100%; font:inherit; padding:10px; border:1px solid #d6dbd8; border-radius:8px; margin-top:12px; }
+  .err { color:var(--red); font-size:14px; margin-top:8px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="brand">Simon<span>Stays</span></div>
+  <div class="card" id="app"><p class="muted">Loading…</p></div>
+</main>
+<script>
+(function(){
+  var api = '/public/deposit/' + encodeURIComponent(location.pathname.split('/').pop());
+  var app = document.getElementById('app');
+  function el(tag, cls, text){ var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function R(c){ return 'R' + (c / 100).toLocaleString('en-ZA', { minimumFractionDigits:2, maximumFractionDigits:2 }); }
+  function done(title, text){ app.textContent = ''; app.appendChild(el('h1', null, title)); if (text) app.appendChild(el('p', 'muted', text)); }
+  function row(t, label, amount, cls){ var tr = el('tr', cls); tr.appendChild(el('td', null, label)); tr.appendChild(el('td', 'n', amount)); t.appendChild(tr); }
+  function show(d){
+    if (d.state === 'paid') return done('Your refund has been paid', 'Your deposit refund of ' + R(d.refundCents) + ' has been paid.');
+    if (d.state === 'agreed') return done('Thank you', 'You agreed the refund of ' + R(d.refundCents) + '. We’re paying it and will let you know when it’s done.');
+    if (d.state === 'disputed') return done('We’ve got your reply', 'You told us you don’t agree. Your deposit stays held while we sort it out, and we’ll be in touch.');
+    if (d.state !== 'waiting') return done('Nothing to answer here', 'There’s nothing waiting for you on this link. If you have a question, reply to our email.');
+    app.textContent = '';
+    app.appendChild(el('h1', null, 'Your deposit refund'));
+    app.appendChild(el('div', 'muted', d.place));
+    var t = el('table');
+    row(t, 'Breakage deposit', R(d.depositCents));
+    row(t, 'Kept back', '− ' + R(d.keptCents));
+    row(t, 'Refund to you', R(d.refundCents), 'total');
+    app.appendChild(t);
+    if (d.reason) { var rs = el('div', 'reason'); rs.appendChild(el('b', null, 'Why')); rs.appendChild(document.createTextNode(d.reason)); app.appendChild(rs); }
+    var yes = el('button', null, 'I agree, refund ' + R(d.refundCents));
+    var no = el('button', 'no', 'I don’t agree');
+    var e = el('div', 'err');
+    app.appendChild(yes); app.appendChild(no); app.appendChild(e);
+    async function send(body){
+      yes.disabled = no.disabled = true; e.textContent = '';
+      try {
+        var r = await fetch(api, { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
+        var o = await r.json();
+        if (!r.ok) throw new Error(o.message || 'Something went wrong.');
+        if (o.state === 'disputed') return done('We’ve got your reply', 'Your deposit stays held while we sort it out, and we’ll be in touch.');
+        if (o.state === 'paid') return done('Your refund is on its way', R(d.refundCents) + ' has been sent back to the card you paid with. It can take 7 to 14 days to show on your statement, or 14 to 21 days for a card issued outside South Africa.');
+        done('Thank you', 'You agreed the refund of ' + R(d.refundCents) + '. We’re paying it now and will let you know when it’s done.');
+      } catch (x) { e.textContent = x.message || 'Something went wrong. Please try again.'; yes.disabled = no.disabled = false; }
+    }
+    yes.onclick = function(){ send({ answer:'agree' }); };
+    no.onclick = function(){
+      no.remove(); yes.remove();
+      var ta = el('textarea'); ta.rows = 4; ta.maxLength = 1000; ta.placeholder = 'Please tell us why you don’t agree';
+      var b = el('button', null, 'Send my reply'), back = el('button', 'no', 'Back');
+      app.insertBefore(ta, e); app.insertBefore(b, e); app.insertBefore(back, e);
+      ta.focus();
+      b.onclick = function(){ if (!ta.value.trim()) { e.textContent = 'Please tell us why you don’t agree.'; return; } b.disabled = back.disabled = true; send({ answer:'disagree', comment:ta.value }).then(function(){ b.disabled = back.disabled = false; }); };
+      back.onclick = function(){ show(d); };
+    };
+  }
+  fetch(api).then(function(r){ return r.json().then(function(d){ if (!r.ok) throw new Error(d.message || 'This link isn’t valid.'); show(d); }); })
+    .catch(function(x){ done('This link isn’t valid', x.message); });
+})();
+</script>
+</body>
+</html>

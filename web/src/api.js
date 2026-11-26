@@ -106,6 +106,7 @@ export const api = {
   adminTransactions: (f = {}) => req('GET', `/admin/transactions?${new URLSearchParams(Object.entries(f).filter(([, v]) => v))}`),
   adminRefunds: (hostId) => req('GET', `/admin/refunds${hostId ? `?hostId=${encodeURIComponent(hostId)}` : ''}`),
   adminStartRefund: (bookingId, amountCents, note) => req('POST', `/admin/refunds/booking/${bookingId}/start`, { amountCents, note }),
+  adminAskGuestRefund: (id) => req('POST', `/admin/refunds/${id}/ask-guest`),
   adminApproveRefund: (id, amountCents) => req('POST', `/admin/refunds/${id}/approve`, { amountCents }),
   adminRefundPaid: (id, reference) => req('POST', `/admin/refunds/${id}/paid`, { reference }),
   adminTestRefunds: () => req('GET', '/admin/test-refunds'),

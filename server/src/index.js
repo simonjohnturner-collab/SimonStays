@@ -37,6 +37,7 @@ app.use('/public/track', require('./routes/track'));
 app.use('/public/account/messages', require('./routes/guestMessages'));
 app.use('/public/thread', require('./routes/guestThread'));
 app.use('/public/rate', require('./routes/guestRating'));
+app.use('/public/deposit', require('./routes/guestDeposit'));
 app.use('/public/documents', require('./routes/documents').publicRouter);
 app.use('/public/account', require('./routes/guestAuth'));
 // Paygate PayWeb3 callbacks (notify + guest return) — public, verified with Paygate.
@@ -176,6 +177,15 @@ app.get('/rate/:token', (req, res) => {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-Robots-Tag', 'noindex');
   res.type('html').send(rateHtml);
+});
+// Where a guest agrees (or not) to a reduced deposit refund, from their message.
+const depositHtml = fs.readFileSync(path.join(__dirname, 'pages/deposit.html'), 'utf8');
+app.get('/deposit/:token', (req, res) => {
+  res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Robots-Tag', 'noindex');
+  res.type('html').send(depositHtml);
 });
 // Privacy Policy — same plain self-contained style as the terms page.
 const privacyHtml = fs.readFileSync(path.join(__dirname, 'pages/privacy.html'), 'utf8');

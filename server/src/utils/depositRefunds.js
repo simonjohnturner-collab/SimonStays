@@ -1,7 +1,12 @@
-// Refunding a held breakage deposit, from the admin portal's Refunds tab. Each
+// Refunding a held breakage deposit, from the admin portal's Refunds tab. A full
 // refund is started, then approved by retyping its amount, then paid: a card
 // payment is sent back through Paygate (PayHost), an EFT is paid by hand and
 // marked paid with its bank reference.
+//
+// A reduced refund (something kept back, with a reason) is instead sent to the
+// guest to agree, from a private link. When they agree it is approved and, if it
+// can go back to their card, sent straight away; an EFT waits to be paid by hand.
+// If they don't agree the deposit stays held and SimonStays is told.
 //
 // Sending to Paygate never repeats by itself. The refund is marked 'check' before
 // the request goes out, so if the reply is unclear (or the server stops mid-call)
@@ -11,6 +16,10 @@ const messaging = require('./messaging');
 const paygate = require('./paygate');
 const { shownCheckOut } = require('./ical');
 
+const { sendMail } = require('./mailer');
+const { depositLink } = require('./guestThread');
+
+const ADMIN_EMAIL = process.env.REFUNDS_ALERT_EMAIL || 'support@simonstays.co.za';
 const WAIT_DAYS = 7; // nothing is paid until this long after checkout
 const SAST_MS = 2 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -100,20 +109,121 @@ async function startRefund(bookingId, { amountCents, note }, by, now = new Date(
   if (!Number.isInteger(amountCents) || amountCents < 1 || amountCents > max) return { error: 'bad_amount', status: 400, message: `The refund must be between R0.01 and ${rand(max)}.` };
   const reason = String(note || '').trim();
   if (amountCents < max && !reason) return { error: 'note_required', status: 400, message: 'Say why the refund is less than the deposit.' };
+  let refund;
   try {
-    return { refund: await prisma.depositRefund.create({ data: { bookingId, amountCents, note: reason || null, startedBy: by } }) };
+    refund = await prisma.depositRefund.create({ data: { bookingId, amountCents, note: reason || null, startedBy: by } });
   } catch (e) {
     if (e.code === 'P2002') return { error: 'already_started', status: 409, message: 'A refund has already been started for this deposit.' };
     throw e;
   }
+  // Less than the deposit: the guest agrees it before anything is paid.
+  if (amountCents < max) {
+    const asked = await askGuest(refund.id, now);
+    return { refund: asked.refund || refund, askedGuest: !asked.error, message: asked.message };
+  }
+  return { refund };
+}
+
+const placeOf = (b) => [b.unit?.property?.name, b.unit?.name && `Unit ${b.unit.name}`].filter(Boolean).join(', ') || 'your stay';
+const firstName = (b) => String(b.guestName || '').trim().split(/\s+/)[0] || 'there';
+const WITH_PLACE = { unit: { include: { property: { select: { name: true } } } } };
+
+// Send (or send again) the guest the reduced refund and the link to agree or not.
+async function askGuest(id, now = new Date()) {
+  const r = await prisma.depositRefund.findUnique({ where: { id }, include: { booking: { include: WITH_PLACE } } });
+  if (!r) return { error: 'not_found', status: 404, message: 'Refund not found.' };
+  if (!['started', 'guest'].includes(r.status)) return { error: 'not_waiting', status: 409, message: 'This refund is not waiting for the guest.' };
+  const b = r.booking;
+  const max = refundableOf(b);
+  if (r.amountCents >= max) return { error: 'full_refund', status: 409, message: 'This is a full refund, so the guest doesn’t need to agree it.' };
+  const kept = max - r.amountCents;
+  const text = `Hi ${firstName(b)}, about the ${rand(max)} breakage deposit for your stay at ${placeOf(b)}.\n\n`
+    + `${rand(kept)} is being kept back: ${r.note || 'see the reason on the link below'}.\n`
+    + `That leaves ${rand(r.amountCents)} to refund to you.\n\n`
+    + `Please let us know whether you agree: ${depositLink(b.id)}\n\n`
+    + `As soon as you agree, your refund of ${rand(r.amountCents)} is sent. If you don’t agree, the deposit stays held until it’s sorted out.`;
+  const sent = await messaging.sendHostMessage(b.id, text, { bookerOnly: true, notice: 'refund' })
+    .catch((e) => { console.error('[depositRefund] ask guest failed', e.message); return null; });
+  const updated = await prisma.depositRefund.update({ where: { id }, data: { status: 'guest', guestAskedAt: now } });
+  const who = b.guestName || 'The guest';
+  return {
+    ok: true, refund: updated,
+    message: sent && sent.ok
+      ? `${who} has been asked to agree the refund of ${rand(r.amountCents)}${b.guestEmail ? `, by email to ${b.guestEmail} and in their SimonStays messages` : ' in their SimonStays messages (there is no email on the booking)'}.`
+      : `The refund is waiting for ${who}, but the message could not be sent. Send them this link yourself: ${depositLink(b.id)}`,
+  };
+}
+
+function alertAdmin(subject, lines) {
+  const site = (process.env.SHOPFRONT_URL || 'https://simonstays.co.za').trim().replace(/\/$/, '');
+  return sendMail({ to: ADMIN_EMAIL, subject, text: `${lines.join('\n')}\n\nRefunds tab: ${site}/hosting/admin` })
+    .catch((e) => console.error('[depositRefund] admin alert failed', e.message));
+}
+
+// What the guest sees on their link.
+async function guestView(bookingId) {
+  const b = await prisma.booking.findUnique({ where: { id: bookingId }, include: { depositRefund: true, ...WITH_PLACE } });
+  if (!b || !b.depositRefund) return null;
+  const r = b.depositRefund;
+  const max = refundableOf(b);
+  return {
+    place: placeOf(b), checkOut: iso(shownCheckOut(b)), guestName: b.guestName || null,
+    depositCents: max, refundCents: r.amountCents, keptCents: Math.max(0, max - r.amountCents), reason: r.note || null,
+    // waiting | agreed | disputed | paid | other
+    state: r.status === 'guest' ? 'waiting' : r.status === 'disputed' ? 'disputed' : r.status === 'paid' ? 'paid' : r.guestReply === 'agreed' ? 'agreed' : 'other',
+  };
+}
+
+// The guest's answer. Agreeing approves the refund and pays it when it can go
+// straight back to their card; otherwise SimonStays pays it by hand.
+async function guestAnswer(bookingId, { answer, comment } = {}, now = new Date(), deps = {}) {
+  const r = await prisma.depositRefund.findUnique({ where: { bookingId }, include: { booking: { include: WITH_PLACE } } });
+  if (!r) return { error: 'not_found', status: 404, message: 'There is no refund waiting for you.' };
+  if (r.status !== 'guest') return { error: 'answered', status: 409, message: 'This has already been answered. If something has changed, reply to our email.' };
+  const b = r.booking;
+  const who = `${b.guestName || 'Guest'} (${placeOf(b)}${b.ref ? `, ${b.ref}` : ''})`;
+  const kept = refundableOf(b) - r.amountCents;
+  if (answer === 'disagree') {
+    const why = String(comment || '').trim().slice(0, 1000);
+    if (!why) return { error: 'reason_required', status: 400, message: 'Please tell us why you don’t agree.' };
+    const ok = await prisma.depositRefund.updateMany({ where: { id: r.id, status: 'guest' }, data: { status: 'disputed', guestReply: why, guestAt: now } });
+    if (!ok.count) return { error: 'answered', status: 409, message: 'This has already been answered.' };
+    await alertAdmin(`Deposit refund not agreed: ${b.guestName || 'guest'}`, [
+      `${who} does not agree to the deposit refund of ${rand(r.amountCents)} (${rand(kept)} kept back: ${r.note || 'no reason given'}).`, '',
+      `Their reason: ${why}`, '', 'The deposit stays held.']);
+    return { ok: true, state: 'disputed' };
+  }
+  if (answer !== 'agree') return { error: 'bad_answer', status: 400, message: 'Say whether you agree.' };
+  const ok = await prisma.depositRefund.updateMany({ where: { id: r.id, status: 'guest' }, data: { status: 'approved', guestReply: 'agreed', guestAt: now, approvedBy: `guest: ${b.guestName || b.guestEmail || 'agreed on link'}`, approvedAt: now } });
+  if (!ok.count) return { error: 'answered', status: 409, message: 'This has already been answered.' };
+
+  // Pay it now if it can go back to the card through Paygate.
+  const pays = await paymentsOf(b);
+  if (cardPaymentOf(pays, now) && paygate.refundsReady()) {
+    const out = await sendToPaygate(r.id, 'auto (guest agreed)', now, deps).catch((e) => ({ message: e.message }));
+    if (out.ok && out.outcome === 'sent') {
+      await alertAdmin(`Deposit refund agreed and sent: ${b.guestName || 'guest'}`, [`${who} agreed the refund of ${rand(r.amountCents)}, and it has been sent back to their card through Paygate.`]);
+      return { ok: true, state: 'paid', via: 'card' };
+    }
+    await alertAdmin(`Deposit refund agreed, needs you: ${b.guestName || 'guest'}`, [
+      `${who} agreed the refund of ${rand(r.amountCents)}, but sending it to their card didn’t finish: ${out.message || 'no reply'}.`, '',
+      'Check the Refunds tab before doing anything else.']);
+    return { ok: true, state: 'agreed', via: 'card' };
+  }
+  await alertAdmin(`Deposit refund agreed, pay by EFT: ${b.guestName || 'guest'}`, [
+    `${who} agreed the refund of ${rand(r.amountCents)}.`, '',
+    'It can’t go back to a card automatically, so pay it by EFT and mark it paid in the Refunds tab.']);
+  return { ok: true, state: 'agreed', via: 'eft' };
 }
 
 // The sign-off: the amount is typed again and must match what was started.
 async function approveRefund(id, { amountCents }, by, now = new Date()) {
   const r = await prisma.depositRefund.findUnique({ where: { id } });
   if (!r) return { error: 'not_found', status: 404, message: 'Refund not found.' };
-  if (amountCents !== r.amountCents) return { error: 'amount_mismatch', status: 400, message: `That doesn't match the refund of ${rand(r.amountCents)}.` };
-  const claimed = await prisma.depositRefund.updateMany({ where: { id, status: 'started' }, data: { status: 'approved', approvedBy: by, approvedAt: now } });
+  if (amountCents !== r.amountCents) return { error: 'amount_mismatch', status: 400, message: `That doesn't match the refund of ${rand(r.amountCents)}. Type ${rand(r.amountCents)} to approve it, or cancel it and start again with a different amount.` };
+  // A reduced refund waiting on (or disputed by) the guest can still be approved
+  // here, when the guest agreed some other way (phone, WhatsApp).
+  const claimed = await prisma.depositRefund.updateMany({ where: { id, status: { in: ['started', 'guest', 'disputed'] } }, data: { status: 'approved', approvedBy: by, approvedAt: now } });
   if (!claimed.count) return { error: 'not_started', status: 409, message: 'This refund is not waiting for approval.' };
   return { ok: true };
 }
@@ -201,9 +311,9 @@ async function resolveCheck(id, { outcome, reference }, by, now = new Date()) {
 
 // Called off before any money moves; the deposit simply stays held.
 async function cancelRefund(id) {
-  const gone = await prisma.depositRefund.deleteMany({ where: { id, status: { in: ['started', 'approved'] } } });
+  const gone = await prisma.depositRefund.deleteMany({ where: { id, status: { in: ['started', 'guest', 'disputed', 'approved'] } } });
   if (!gone.count) return { error: 'not_cancellable', status: 409, message: 'A paid refund cannot be cancelled.' };
   return { ok: true };
 }
 
-module.exports = { WAIT_DAYS, listRefunds, startRefund, approveRefund, markRefundPaid, sendToPaygate, resolveCheck, cancelRefund, cardPaymentOf };
+module.exports = { WAIT_DAYS, listRefunds, startRefund, askGuest, guestView, guestAnswer, approveRefund, markRefundPaid, sendToPaygate, resolveCheck, cancelRefund, cardPaymentOf };
