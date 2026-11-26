@@ -472,7 +472,7 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
             <div className="bm-actions-sub">
               {onInvoice && <button className="secondary" disabled={busy} onClick={() => onInvoice(booking)}>🧾 Invoice</button>}
               {booking.unitId && onMessage && <button className="secondary" disabled={busy} onClick={() => onMessage(booking)}>💬 Message</button>}
-              {booking.unitId && booking.source === 'manual' && <button className="secondary" disabled={busy} onClick={makeFloating}>↩ Make floating</button>}
+              {booking.unitId && booking.source !== 'airbnb' && <button className="secondary" disabled={busy} onClick={makeFloating}>↩ Make floating</button>}
             </div>
           )}
           <div className="bm-actions-main">
