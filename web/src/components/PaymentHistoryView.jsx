@@ -35,7 +35,7 @@ export default function PaymentHistoryView({ onClose }) {
               <b>{fmtR(data.totalPaidOutCents)}</b>
               <span className="muted small">across {data.payments.length} booking{data.payments.length === 1 ? '' : 's'} · gross {fmtR(data.totalGrossCents)} − {data.agencyFeePercent}% SimonStays fee {fmtR(data.totalFeeCents)}</span>
             </div>
-            <p className="muted small">These are bookings SimonStays collected on your behalf. The net payout is the rental (accommodation + cleaning + extras, after discounts) less the {data.agencyFeePercent}% SimonStays fee. The refundable breakage deposit isn’t part of the payout.</p>
+            <p className="muted small">These are bookings SimonStays collected on your behalf. The net payout is the rental (accommodation + cleaning + extras, after discounts) less the {data.agencyFeePercent}% SimonStays fee. The refundable breakage deposit isn’t part of the payout, except any part kept back for damage that the guest agreed to: that’s added in full, with no fee.</p>
 
             {data.payments.length === 0 ? (
               <p className="muted small">No SimonStays bookings paid out yet. Once online payments are live, website bookings will appear here.</p>
@@ -48,11 +48,13 @@ export default function PaymentHistoryView({ onClose }) {
                       <div className="ph-prop">{p.property} · Unit {p.unit}</div>
                       <div className="ph-sub">{p.checkIn} → {p.checkOut} · {p.guestName || '(guest)'} · <span className="ph-src">{p.source}</span></div>
                       <div className="ph-extras">Extras: {extrasText(p.extras)}</div>
+                      {p.depositKeptCents ? <div className="ph-extras">💰 Includes {fmtR(p.depositKeptCents)} deposit retained for damages</div> : null}
                     </div>
                     <div className="ph-amt">{fmtR(p.netPayoutCents)}<span className="ph-caret">{open === p.id ? '▲' : '▼'}</span></div>
                   </div>
                   {open === p.id && (
                     <div className="ph-breakdown">
+                      {!q && p.depositKeptCents ? <p className="small">Includes {fmtR(p.depositKeptCents)}: {p.depositKeptLabel} (no fee).</p> : null}
                       {!q ? <p className="muted small">No rate card on this unit — amount can’t be itemised.</p> : (<>
                         <div className="ph-row"><span>{q.nights} night{q.nights > 1 ? 's' : ''} accommodation</span><span>{fmtR(q.accommodationCents)}</span></div>
                         {q.discountCents ? <div className="ph-row"><span>{q.discountPercent}% length discount</span><span>−{fmtR(q.discountCents)}</span></div> : null}
@@ -63,6 +65,7 @@ export default function PaymentHistoryView({ onClose }) {
                         {p.grossCents !== q.rentalCents ? <div className="ph-row"><span>Invoice adjustments</span><span>{fmtR(p.grossCents - q.rentalCents)}</span></div> : null}
                         <div className="ph-row"><span>Rental total</span><span>{fmtR(p.grossCents)}</span></div>
                         <div className="ph-row ph-fee"><span>SimonStays fee ({data.agencyFeePercent}%)</span><span>−{fmtR(p.agencyFeeCents)}</span></div>
+                        {p.depositKeptCents ? <div className="ph-row"><span>{p.depositKeptLabel} (no fee)</span><span>{fmtR(p.depositKeptCents)}</span></div> : null}
                         <div className="ph-row ph-rowtot"><span>Net paid out to you</span><span>{fmtR(p.netPayoutCents)}</span></div>
                         {q.depositCents ? <div className="ph-row ph-depo"><span>Refundable breakage deposit (not part of payout)</span><span>{fmtR(q.depositCents)}</span></div> : null}
                       </>)}

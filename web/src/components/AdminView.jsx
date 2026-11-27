@@ -495,7 +495,7 @@ function PaymentBreakdown({ tx }) {
           <p className="paper-thanks">Thank you for staying with us!</p>
         </div>
         {(tx.feeCents > 0 || tx.hostNetCents > 0) && (
-          <p className="small tx-share">Not on the invoice: SimonStays fee <b>{fmtR(tx.feeCents)}</b> · to host <b>{fmtR(tx.hostNetCents)}</b></p>
+          <p className="small tx-share">Not on the invoice: SimonStays fee <b>{fmtR(tx.feeCents)}</b> · to host <b>{fmtR(tx.hostNetCents)}</b>{tx.depositKeptCents ? <> (incl. <b>{fmtR(tx.depositKeptCents)}</b> {tx.depositKeptLabel}, no fee)</> : null}</p>
         )}
       </div>
     </div>
@@ -591,9 +591,9 @@ function Transactions({ hostFilter, HostPicker }) {
   }, [hostFilter, from, to, status]);
 
   function downloadCsv() {
-    const cols = ['Booked', 'Ref', 'Status', 'Host', 'Property', 'Unit', 'Guest', 'Check-in', 'Check-out', 'Method', 'Paygate transaction', 'Total (R)', 'Deposit (R)', 'Paid (R)', 'Booking value (R)', `SimonStays fee ${data.feePercent}% (R)`, 'Owed to host (R)'];
+    const cols = ['Booked', 'Ref', 'Status', 'Host', 'Property', 'Unit', 'Guest', 'Check-in', 'Check-out', 'Method', 'Paygate transaction', 'Total (R)', 'Deposit (R)', 'Paid (R)', 'Booking value (R)', `SimonStays fee ${data.feePercent}% (R)`, 'Owed to host (R)', 'Deposit retained for host (R)', 'Deposit retained: details'];
     const r = (c) => (c / 100).toFixed(2);
-    const lines = data.rows.map((x) => [fmtDate(x.createdAt), x.ref, x.status, x.host, x.property, x.unit, x.guestName, x.checkIn, x.checkOut, x.method, x.paygateRef, r(x.totalCents), r(x.depositCents), r(x.paidCents), r(x.grossCents), r(x.feeCents), r(x.hostNetCents)]);
+    const lines = data.rows.map((x) => [fmtDate(x.createdAt), x.ref, x.status, x.host, x.property, x.unit, x.guestName, x.checkIn, x.checkOut, x.method, x.paygateRef, r(x.totalCents), r(x.depositCents), r(x.paidCents), r(x.grossCents), r(x.feeCents), r(x.hostNetCents), r(x.depositKeptCents || 0), x.depositKeptLabel || '']);
     const csv = [cols, ...lines].map((row) => row.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -810,6 +810,7 @@ function Refunds({ hostFilter, HostPicker }) {
                     <td className="small">{x.method}{x.paygateRef && <div className="muted">#{x.paygateRef}</div>}</td>
                     <td className="num">{fmtR(x.depositCents)}{x.refund && x.refund.amountCents !== x.depositCents && <div className="muted small">refund {fmtR(x.refund.amountCents)}</div>}</td>
                     <td className="small">{refundStage(x)}{x.refund && x.refund.note && <div className="muted tx-wrap">{x.refund.note}</div>}
+                      {x.refund && x.keptCents > 0 && <div className="small" title={x.keptLabel || ''}><b>{fmtR(x.keptCents)} to {x.host}</b>{x.refund.status === 'paid' ? ' (added to their payout)' : ' once the refund is paid'}</div>}
                       {x.refund && x.guestLink && x.refund.amountCents < x.refundableCents && <div><a className="small" href={x.guestLink} target="_blank" rel="noreferrer">Guest’s page ↗</a></div>}
                       {x.refund && <RefundEvidence x={x} onDone={load} />}</td>
                     <td><RefundAction key={x.refund ? `${x.refund.id}-${x.refund.status}` : 'new'} x={x} onDone={load} /></td>

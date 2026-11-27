@@ -127,9 +127,10 @@ router.get('/transactions', async (req, res) => {
       unit: { include: { pricingGroup: true, property: { select: { name: true, hostId: true, checkInTime: true, checkOutTime: true } } } },
       payments: { orderBy: { createdAt: 'desc' } },
       offers: { where: { status: 'paid' }, orderBy: { createdAt: 'asc' } },
-      depositRefund: { select: { status: true, amountCents: true, paidAt: true, via: true } },
+      depositRefund: { select: { status: true, amountCents: true, paidAt: true, via: true, note: true } },
     },
   });
+  const { keptForHost, keptLabel } = require('../utils/depositRefunds');
   // An invoice's extra units hold no payments of their own: the invoice's payment
   // sits on its first booking, so look it up by the invoice.
   const offerIds = bookings.map((b) => b.sourceOfferId).filter(Boolean);
@@ -169,7 +170,10 @@ router.get('/transactions', async (req, res) => {
       owingCents: b.amountOwingCents || 0,
       canEmailDetails: b.status === 'confirmed' && noticeable(b),
       detailsEmailedAt: b.detailsEmailedAt,
-      grossCents, feeCents, hostNetCents: earns ? grossCents - feeOf(grossCents) : 0,
+      // The host's share: the rental less the fee, plus any deposit kept for them (no fee).
+      depositKeptCents: keptForHost(b),
+      depositKeptLabel: keptForHost(b) ? keptLabel(b) : null,
+      grossCents, feeCents, hostNetCents: (earns ? grossCents - feeOf(grossCents) : 0) + keptForHost(b),
       breakdown: await breakdownOf(b, invoice),
       sharedInvoice: !!invoice && invoice.bookingId !== b.id,
       changes: b.offers.filter((o) => o.kind === 'change').map((o) => ({ id: o.id, paidAt: o.paidAt, lines: offerLines(o), totalCents: o.totalCents })),

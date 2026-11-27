@@ -31,6 +31,24 @@ const dueOn = (b) => iso(new Date(shownCheckOut(b)).getTime() + WAIT_DAYS * DAY_
 const today = (now) => iso(now.getTime() + SAST_MS);
 // What can go back: the deposit, or what was actually paid if that's less.
 const refundableOf = (b) => Math.min(b.depositCents || 0, paidOn(b));
+// The part of a deposit kept back for the host. It is owed to the host once the
+// refund workflow is complete (the guest's part has been paid), and is added to
+// their payout in full, with no SimonStays fee.
+function keptForHost(b) {
+  const r = b && b.depositRefund;
+  if (!r || r.status !== 'paid') return 0;
+  return Math.max(0, refundableOf(b) - r.amountCents);
+}
+// A line that traces the money: which booking, where, who, and why.
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function keptLabel(b) {
+  const r = b && b.depositRefund;
+  if (!r) return null;
+  const out = new Date(shownCheckOut(b));
+  const place = [b.unit?.property?.name, b.unit?.name && `Unit ${b.unit.name}`].filter(Boolean).join(', ');
+  return ['Deposit retained for damages', b.ref, place, b.guestName, `out ${out.getUTCDate()} ${MON[out.getUTCMonth()]} ${out.getUTCFullYear()}`].filter(Boolean).join(' · ')
+    + (r.note ? `: ${r.note}` : '');
+}
 
 const INCLUDE = {
   unit: { include: { property: { select: { name: true, hostId: true } } } },
@@ -97,6 +115,9 @@ async function listRefunds({ hostId } = {}, now = new Date()) {
       refund: b.depositRefund || null,
       // The guest's page (what they see, with the evidence), once a refund exists.
       guestLink: b.depositRefund ? depositLink(b.id) : null,
+      // What the host gets from the deposit: kept once agreed, or would be once agreed.
+      keptCents: b.depositRefund ? Math.max(0, refundableOf(b) - b.depositRefund.amountCents) : 0,
+      keptLabel: b.depositRefund ? keptLabel(b) : null,
     };
   });
 }
@@ -279,6 +300,27 @@ async function whatsAppGuest(b, r) {
   } catch (e) { console.error('[depositRefund] WhatsApp failed', e.message); return { ok: false, error: e.message }; }
 }
 
+// Tell the host the kept part of the deposit is theirs (email + WhatsApp). Not for
+// SimonStays' own admins, who host their own units.
+async function notifyHostKept(b, r) {
+  try {
+    const kept = refundableOf(b) - r.amountCents;
+    if (kept <= 0) return;
+    const hostId = b.hostId || b.unit?.property?.hostId;
+    const host = hostId && await prisma.host.findUnique({ where: { id: hostId }, select: { id: true, email: true, name: true } });
+    if (!host || require('../middleware/auth').isAdminEmail(host.email)) return;
+    const lines = [
+      `${rand(kept)} of the ${rand(refundableOf(b))} breakage deposit has been retained for damages and added to your SimonStays payout in full, with no SimonStays fee.`,
+      keptLabel(b),
+      `${b.guestName || 'The guest'} agreed, and their ${rand(r.amountCents)} has been refunded.`,
+    ];
+    const subject = `Deposit kept for you: ${rand(kept)}, ${placeOf(b)}`;
+    const site = (process.env.SHOPFRONT_URL || 'https://simonstays.co.za').trim().replace(/\/$/, '');
+    await sendMail({ to: host.email, subject, text: `${lines.join('\n\n')}\n\nSee your payouts: ${site}/hosting/money` }).catch(() => {});
+    await require('./payments').alertHost({ hostId: host.id }, `💰 ${subject}\n${lines.join('\n')}`);
+  } catch (e) { console.error('[depositRefund] host notice failed', e.message); }
+}
+
 function alertAdmin(subject, lines) {
   const site = (process.env.SHOPFRONT_URL || 'https://simonstays.co.za').trim().replace(/\/$/, '');
   return sendMail({ to: ADMIN_EMAIL, subject, text: `${lines.join('\n')}\n\nRefunds tab: ${site}/hosting/admin` })
@@ -352,6 +394,7 @@ async function approveRefund(id, { amountCents }, by, now = new Date()) {
   // here, when the guest agreed some other way (phone, WhatsApp).
   const claimed = await prisma.depositRefund.updateMany({ where: { id, status: { in: ['started', 'guest', 'disputed'] } }, data: { status: 'approved', approvedBy: by, approvedAt: now } });
   if (!claimed.count) return { error: 'not_started', status: 409, message: 'This refund is not waiting for approval.' };
+
   return { ok: true };
 }
 
@@ -364,6 +407,9 @@ async function finishPaid(r, from, data, now) {
     return true;
   });
   if (!done) return false;
+  // The workflow is complete: whatever was kept now goes into the host's payout.
+  const kb = await prisma.booking.findUnique({ where: { id: r.bookingId }, include: { ...WITH_PLACE, depositRefund: true } });
+  if (kb) await notifyHostKept(kb, r);
   const text = data.via === 'paygate'
     ? `Your deposit refund of ${rand(r.amountCents)} has been sent back to the card you paid with. It can take 7 to 14 days to show on your statement, or 14 to 21 days for a card issued outside South Africa.`
     : `Your deposit refund of ${rand(r.amountCents)} has been paid.`;
@@ -443,4 +489,4 @@ async function cancelRefund(id) {
   return { ok: true };
 }
 
-module.exports = { evidenceOptions, addEvidence, removeEvidence, evidenceFile, refundWhatsApp, WAIT_DAYS, listRefunds, startRefund, askGuest, guestView, guestAnswer, approveRefund, markRefundPaid, sendToPaygate, resolveCheck, cancelRefund, cardPaymentOf };
+module.exports = { keptForHost, keptLabel, evidenceOptions, addEvidence, removeEvidence, evidenceFile, refundWhatsApp, WAIT_DAYS, listRefunds, startRefund, askGuest, guestView, guestAnswer, approveRefund, markRefundPaid, sendToPaygate, resolveCheck, cancelRefund, cardPaymentOf };

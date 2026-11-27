@@ -42,16 +42,19 @@ router.get('/payments', async (req, res) => {
   const iso = (d) => new Date(d).toISOString().slice(0, 10);
   const bookings = await prisma.booking.findMany({
     where: { hostId: req.hostId, source: 'website', OR: [{ paid: true }, { paymentStatus: 'paid' }] },
-    include: { unit: { include: { property: true, pricingGroup: true } }, cleans: true },
+    include: { unit: { include: { property: true, pricingGroup: true } }, cleans: true, depositRefund: { select: { status: true, amountCents: true, note: true } } },
     orderBy: { checkIn: 'desc' },
   });
+  const { keptForHost, keptLabel } = require('../utils/depositRefunds');
   const payments = [];
   for (const b of bookings) {
     if (!b.unit) continue;
     let q = null;
     const grossCents = grossOf(b);
     const agencyFeeCents = feeOf(grossCents);
-    const netPayoutCents = grossCents - agencyFeeCents;
+    // Part of the breakage deposit kept for the host (agreed with the guest): paid in full, no fee.
+    const depositKeptCents = keptForHost(b);
+    const netPayoutCents = grossCents - agencyFeeCents + depositKeptCents;
     if (b.unit.pricingGroup) {
       const overrides = await overridesFor(b.unitId, iso(b.checkIn), iso(b.checkOut));
       const prepaid = (b.cleans || []).filter((c) => c.paymentMethod !== 'direct').length;
@@ -62,6 +65,7 @@ router.get('/payments', async (req, res) => {
       checkIn: iso(b.checkIn), checkOut: iso(b.checkOut),
       extras: { earlyCheckIn: !!b.earlyCheckIn, lateCheckOut: !!b.lateCheckOut, extraMattress: !!b.extraMattress },
       quote: q, grossCents, agencyFeeCents, netPayoutCents,
+      depositKeptCents, depositKeptLabel: depositKeptCents ? keptLabel(b) : null,
     });
   }
   const totalGrossCents = payments.reduce((s, p) => s + p.grossCents, 0);
