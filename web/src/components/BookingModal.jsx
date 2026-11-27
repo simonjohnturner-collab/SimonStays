@@ -52,23 +52,33 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   const addClean = () => setCleans([...cleans, { date: '', paymentMethod: 'prepaid', cleaner: '' }]);
   const updateClean = (i, field, val) => setCleans(cleans.map((c, j) => (j === i ? { ...c, [field]: val } : c)));
   const removeClean = (i) => setCleans(cleans.filter((_, j) => j !== i));
-  // Repeating cleans: every week, two weeks or month from a first date, during the
-  // stay. Each becomes its own clean (own broom, own night-before WhatsApp).
-  const [repeat, setRepeat] = useState(null); // { every, first, until, paymentMethod, cleaner }
-  const lastNight = checkOut ? new Date(Date.parse(checkOut + 'T12:00:00Z') - 864e5).toISOString().slice(0, 10) : '';
+  // Repeating cleans: on a chosen weekday (every week or every 2 weeks) or day of
+  // the month, between two dates, during the stay. Each becomes its own clean
+  // (its own broom, its own night-before WhatsApp).
+  const [repeat, setRepeat] = useState(null); // { every, weekday, monthDay, from, until, paymentMethod, cleaner }
+  const isoAdd = (iso, n) => new Date(Date.parse(iso + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+  const lastNight = checkOut ? isoAdd(checkOut, -1) : '';
+  const firstDay = checkIn ? isoAdd(checkIn, 1) : '';
+  function startRepeat() {
+    const from = firstDay || '';
+    setRepeat({ every: 'week', weekday: 1, monthDay: from ? Number(from.slice(8, 10)) : 1, from, until: lastNight, paymentMethod: 'prepaid', cleaner: '' });
+  }
   function repeatDates(r) {
-    if (!r || !r.first || !r.until || r.first > r.until) return [];
+    if (!r || !r.from || !r.until || r.from > r.until) return [];
     const out = [];
-    const [y, m, d] = r.first.split('-').map(Number);
-    for (let n = 0; n < 60; n++) {
-      let dt;
-      if (r.every === 'month') {
+    const keep = (iso) => { if (iso >= r.from && iso <= r.until && iso > checkIn && iso < checkOut) out.push(iso); };
+    if (r.every === 'month') {
+      const [y, m] = r.from.split('-').map(Number);
+      for (let n = 0; n < 24; n++) {
         const last = new Date(Date.UTC(y, m - 1 + n + 1, 0)).getUTCDate(); // the 31st becomes the month's last day
-        dt = new Date(Date.UTC(y, m - 1 + n, Math.min(d, last), 12));
-      } else dt = new Date(Date.UTC(y, m - 1, d + n * (r.every === '2weeks' ? 14 : 7), 12));
-      const iso = dt.toISOString().slice(0, 10);
-      if (iso > r.until) break;
-      if (iso > checkIn && iso < checkOut) out.push(iso);
+        const iso = new Date(Date.UTC(y, m - 1 + n, Math.min(r.monthDay, last), 12)).toISOString().slice(0, 10);
+        if (iso > r.until) break;
+        keep(iso);
+      }
+    } else {
+      let iso = r.from;
+      while (new Date(iso + 'T12:00:00Z').getUTCDay() !== Number(r.weekday)) iso = isoAdd(iso, 1);
+      for (; iso <= r.until && out.length < 60; iso = isoAdd(iso, r.every === '2weeks' ? 14 : 7)) keep(iso);
     }
     return out;
   }
@@ -191,18 +201,6 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
     catch (e) { setMsg({ text: e.message, kind: 'err' }); setBusy(false); }
   }
 
-  // Save the latest cleaner + checkout notes, then WhatsApp the reminder now
-  // (without closing the modal, so the host sees the result).
-  async function remindCleaner() {
-    setBusy(true); setMsg(null);
-    try {
-      await api.updateBooking(booking.id, { cleaner, checkoutNotes: checkoutNotes.trim() || null });
-      const r = await api.remindCleaner(booking.id);
-      setMsg({ text: `✅ WhatsApp reminder sent to ${r.cleaner || 'the cleaner'}${r.phone ? ` (${r.phone})` : ''}.`, kind: 'ok' });
-    } catch (e) {
-      setMsg({ text: (e.data && e.data.message) || e.message || 'Could not send the reminder.', kind: 'err' });
-    } finally { setBusy(false); }
-  }
 
   // The guestbook was filled in but the phone didn't match: the host links it once sure.
   async function linkGuestbook() {
@@ -447,12 +445,6 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
             <label>Checkout cleaner<input list="cleaner-names" value={cleaner} onChange={(e) => setCleaner(e.target.value)} placeholder="Choose or type a name" /></label>
             <label>Notes for the cleaner
               <textarea rows={2} value={checkoutNotes} onChange={(e) => setCheckoutNotes(e.target.value)} placeholder="e.g. Key in the lockbox · strip the sofa bed" /></label>
-            {editing && booking.unitId && (
-              <div className="remind-row">
-                <button type="button" className="secondary" disabled={busy || !cleaner} onClick={remindCleaner}>📲 Remind cleaner now</button>
-                <span className="muted small">Sends automatically at 7pm the night before.</span>
-              </div>
-            )}
             {requested.length > 0 && (
               <div className="bm-guestnote">
                 <b>Guest asked for {requested.length} mid-stay clean{requested.length > 1 ? 's' : ''}</b>
@@ -466,30 +458,49 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
             <div className="insta-head">
               <span>Mid-stay cleans</span>
               <span>
-                <button type="button" className="mini" onClick={() => setRepeat(repeat ? null : { every: 'week', first: '', until: lastNight, paymentMethod: 'prepaid', cleaner: '' })}>↻ Repeat</button>{' '}
+                <button type="button" className="mini" onClick={() => (repeat ? setRepeat(null) : startRepeat())}>↻ Repeat</button>{' '}
                 <button type="button" className="mini" onClick={addClean}>+ Add</button>
               </span>
             </div>
             {repeat && (
               <div className="repeat-box">
-                <div className="insta-row">
-                  <select value={repeat.every} onChange={(e) => setRepeat({ ...repeat, every: e.target.value })} title="How often">
-                    <option value="week">Every week</option>
-                    <option value="2weeks">Every 2 weeks</option>
-                    <option value="month">Every month</option>
-                  </select>
-                  <label className="small">from <input type="date" value={repeat.first} min={checkIn} max={lastNight} onChange={(e) => setRepeat({ ...repeat, first: e.target.value })} /></label>
-                  <label className="small">until <input type="date" value={repeat.until} min={repeat.first || checkIn} max={lastNight} onChange={(e) => setRepeat({ ...repeat, until: e.target.value })} /></label>
+                <div className="rp-row">
+                  <label>Repeat
+                    <select value={repeat.every} onChange={(e) => setRepeat({ ...repeat, every: e.target.value })}>
+                      <option value="week">Every week</option>
+                      <option value="2weeks">Every 2 weeks</option>
+                      <option value="month">Every month</option>
+                    </select>
+                  </label>
+                  {repeat.every === 'month' ? (
+                    <label>On day
+                      <select value={repeat.monthDay} onChange={(e) => setRepeat({ ...repeat, monthDay: Number(e.target.value) })}>
+                        {Array.from({ length: 31 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}{n === 31 ? ' (or last day)' : ''}</option>)}
+                      </select>
+                    </label>
+                  ) : (
+                    <label>On
+                      <select value={repeat.weekday} onChange={(e) => setRepeat({ ...repeat, weekday: Number(e.target.value) })}>
+                        {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((d, i) => <option key={d} value={i}>{d}</option>)}
+                      </select>
+                    </label>
+                  )}
                 </div>
-                <div className="insta-row">
-                  <select value={repeat.paymentMethod} onChange={(e) => setRepeat({ ...repeat, paymentMethod: e.target.value })} title="Payment">
-                    <option value="prepaid">Paid for</option>
-                    <option value="direct">Cleaner paid directly</option>
-                  </select>
-                  <input list="cleaner-names" value={repeat.cleaner} onChange={(e) => setRepeat({ ...repeat, cleaner: e.target.value })} placeholder="Cleaner" title="Cleaner" />
+                <div className="rp-row">
+                  <label>From<input type="date" value={repeat.from} min={firstDay} max={lastNight} onChange={(e) => setRepeat({ ...repeat, from: e.target.value })} /></label>
+                  <label>Until<input type="date" value={repeat.until} min={repeat.from || firstDay} max={lastNight} onChange={(e) => setRepeat({ ...repeat, until: e.target.value })} /></label>
+                </div>
+                <div className="rp-row">
+                  <label>Payment
+                    <select value={repeat.paymentMethod} onChange={(e) => setRepeat({ ...repeat, paymentMethod: e.target.value })}>
+                      <option value="prepaid">Paid for</option>
+                      <option value="direct">Cleaner paid directly</option>
+                    </select>
+                  </label>
+                  <label>Cleaner<input list="cleaner-names" value={repeat.cleaner} onChange={(e) => setRepeat({ ...repeat, cleaner: e.target.value })} placeholder="Choose or type" /></label>
                 </div>
                 <div className="small muted">
-                  {!repeat.first ? 'Pick the first clean date. The day repeats: same weekday, or same date each month.'
+                  {!repeat.from ? 'Pick the dates to repeat between.'
                     : repeatList.length ? `${repeatList.length} clean${repeatList.length > 1 ? 's' : ''}: ${repeatList.map((d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })).join(' · ')}`
                       : 'No dates fall during the stay.'}
                 </div>
