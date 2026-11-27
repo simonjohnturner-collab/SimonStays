@@ -209,6 +209,21 @@ router.post('/refunds/booking/:bookingId/start', async (req, res) => {
   refundReply(res, await refunds.startRefund(req.params.bookingId, req.body || {}, req.adminHost.email));
 });
 
+// GET /admin/refunds/booking/:bookingId/evidence — the unit's reports around checkout, with photos.
+router.get('/refunds/booking/:bookingId/evidence', async (req, res) => {
+  refundReply(res, await refunds.evidenceOptions(req.params.bookingId));
+});
+
+// POST /admin/refunds/:id/evidence { photoIds, files } — attach more before it's agreed.
+router.post('/refunds/:id/evidence', async (req, res) => {
+  refundReply(res, await refunds.addEvidence(req.params.id, req.body || {}));
+});
+
+// DELETE /admin/refunds/:id/evidence { photoId | fileId }
+router.delete('/refunds/:id/evidence', async (req, res) => {
+  refundReply(res, await refunds.removeEvidence(req.params.id, req.body || {}));
+});
+
 // POST /admin/refunds/:id/ask-guest — send the guest the reduced refund to agree (again).
 router.post('/refunds/:id/ask-guest', async (req, res) => {
   refundReply(res, await refunds.askGuest(req.params.id));

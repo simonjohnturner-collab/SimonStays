@@ -35,7 +35,7 @@ const refundableOf = (b) => Math.min(b.depositCents || 0, paidOn(b));
 const INCLUDE = {
   unit: { include: { property: { select: { name: true, hostId: true } } } },
   payments: { where: { status: 'COMPLETE' } },
-  depositRefund: true,
+  depositRefund: { include: { files: { select: { id: true, filename: true, contentType: true, sizeBytes: true }, orderBy: { createdAt: 'asc' } } } },
 };
 
 // Paygate (2026-11-12): a card payment can be refunded for 6 months. We stop a few
@@ -95,11 +95,13 @@ async function listRefunds({ hostId } = {}, now = new Date()) {
       // Paid by card, but too long ago for Paygate to refund: it has to go by EFT.
       cardTooOld: !toCard && cardPayments(pays).length > 0,
       refund: b.depositRefund || null,
+      // The guest's page (what they see, with the evidence), once a refund exists.
+      guestLink: b.depositRefund ? depositLink(b.id) : null,
     };
   });
 }
 
-async function startRefund(bookingId, { amountCents, note }, by, now = new Date()) {
+async function startRefund(bookingId, { amountCents, note, photoIds, files }, by, now = new Date()) {
   const b = await prisma.booking.findUnique({ where: { id: bookingId }, include: { depositRefund: true } });
   if (!b || !b.depositCents) return { error: 'not_found', status: 404, message: 'This booking has no deposit.' };
   if (b.status !== 'confirmed' || b.depositStatus !== 'held') return { error: 'not_held', status: 409, message: 'This deposit is no longer held.' };
@@ -109,6 +111,8 @@ async function startRefund(bookingId, { amountCents, note }, by, now = new Date(
   if (!Number.isInteger(amountCents) || amountCents < 1 || amountCents > max) return { error: 'bad_amount', status: 400, message: `The refund must be between R0.01 and ${rand(max)}.` };
   const reason = String(note || '').trim();
   if (amountCents < max && !reason) return { error: 'note_required', status: 400, message: 'Say why the refund is less than the deposit.' };
+  const ev = await checkEvidence(b, { photoIds, files });
+  if (ev.error) return ev;
   let refund;
   try {
     refund = await prisma.depositRefund.create({ data: { bookingId, amountCents, note: reason || null, startedBy: by } });
@@ -116,6 +120,7 @@ async function startRefund(bookingId, { amountCents, note }, by, now = new Date(
     if (e.code === 'P2002') return { error: 'already_started', status: 409, message: 'A refund has already been started for this deposit.' };
     throw e;
   }
+  await saveEvidence(refund.id, ev);
   // Less than the deposit: the guest agrees it before anything is paid.
   if (amountCents < max) {
     const asked = await askGuest(refund.id, now);
@@ -124,13 +129,98 @@ async function startRefund(bookingId, { amountCents, note }, by, now = new Date(
   return { refund };
 }
 
+// ---- Evidence: report photos and invoices the guest sees on their link ----
+const FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+const MAX_FILE_BYTES = 6 * 1024 * 1024;
+const MAX_FILES = 6;
+const MAX_PHOTOS = 30;
+const EVIDENCE_DAYS_BEFORE = 1, EVIDENCE_DAYS_AFTER = 7;
+
+// Reports on this booking's unit from the day before checkout to a week after,
+// with their photos, to pick evidence from.
+async function evidenceOptions(bookingId) {
+  const b = await prisma.booking.findUnique({ where: { id: bookingId } });
+  if (!b) return { error: 'not_found', status: 404, message: 'Booking not found.' };
+  if (!b.unitId) return { reports: [] };
+  const out = new Date(shownCheckOut(b)).getTime();
+  const reports = await prisma.formSubmission.findMany({
+    where: { unitId: b.unitId, status: { not: 'incomplete' }, createdAt: { gte: new Date(out - EVIDENCE_DAYS_BEFORE * DAY_MS), lte: new Date(out + EVIDENCE_DAYS_AFTER * DAY_MS) } },
+    select: { id: true, type: true, submitterName: true, createdAt: true, photos: { select: { id: true, fieldId: true }, orderBy: { createdAt: 'asc' } } },
+    orderBy: { createdAt: 'asc' },
+  });
+  return { checkOut: iso(shownCheckOut(b)), reports: reports.filter((r) => r.photos.length) };
+}
+
+// Check photo ids (they must come from reports on this booking's unit) and decode
+// uploaded files. Returns { photoIds, files } ready to save, or an error.
+async function checkEvidence(b, { photoIds, files } = {}, already = { photos: 0, files: 0 }) {
+  const ids = [...new Set((Array.isArray(photoIds) ? photoIds : []).map(String))];
+  if (ids.length + already.photos > MAX_PHOTOS) return { error: 'too_many_photos', status: 400, message: `Attach at most ${MAX_PHOTOS} photos.` };
+  if (ids.length) {
+    const found = await prisma.photo.findMany({ where: { id: { in: ids } }, select: { id: true, formSubmission: { select: { unitId: true } } } });
+    if (found.length !== ids.length || found.some((p) => !p.formSubmission || p.formSubmission.unitId !== b.unitId)) {
+      return { error: 'bad_photo', status: 400, message: 'Those photos aren’t from this unit’s reports.' };
+    }
+  }
+  const list = Array.isArray(files) ? files : [];
+  if (list.length + already.files > MAX_FILES) return { error: 'too_many_files', status: 400, message: `Attach at most ${MAX_FILES} invoices.` };
+  const decoded = [];
+  for (const f of list) {
+    let { filename, contentType, dataBase64 } = f || {};
+    const m = /^data:([^;]+);base64,(.*)$/s.exec(String(dataBase64 || ''));
+    if (m) { contentType = contentType || m[1]; dataBase64 = m[2]; }
+    contentType = String(contentType || '').toLowerCase();
+    if (!FILE_TYPES.includes(contentType)) return { error: 'bad_file', status: 400, message: `${filename || 'That file'} isn’t a PDF or photo.` };
+    const data = Buffer.from(String(dataBase64 || ''), 'base64');
+    if (!data.length) return { error: 'bad_file', status: 400, message: `${filename || 'That file'} is empty.` };
+    if (data.length > MAX_FILE_BYTES) return { error: 'file_too_big', status: 400, message: `${filename || 'That file'} is over 6 MB.` };
+    decoded.push({ filename: String(filename || 'invoice').slice(0, 120), contentType, sizeBytes: data.length, data });
+  }
+  return { photoIds: ids, files: decoded };
+}
+
+async function saveEvidence(refundId, ev, current = []) {
+  if (ev.photoIds.length) await prisma.depositRefund.update({ where: { id: refundId }, data: { photoIds: [...new Set([...current, ...ev.photoIds])] } });
+  for (const f of ev.files) await prisma.refundFile.create({ data: { refundId, ...f } });
+}
+
+// Add evidence to a refund that hasn't been agreed yet (send it to the guest again after).
+async function addEvidence(id, { photoIds, files } = {}) {
+  const r = await prisma.depositRefund.findUnique({ where: { id }, include: { booking: true, files: { select: { id: true } } } });
+  if (!r) return { error: 'not_found', status: 404, message: 'Refund not found.' };
+  if (!['started', 'guest', 'disputed'].includes(r.status)) return { error: 'too_late', status: 409, message: 'Evidence can only be added before the refund is approved.' };
+  const ev = await checkEvidence(r.booking, { photoIds, files }, { photos: (r.photoIds || []).length, files: r.files.length });
+  if (ev.error) return ev;
+  await saveEvidence(id, ev, r.photoIds || []);
+  return { ok: true, message: 'Attached. Use “Send again” so the guest is told there’s more on their link.' };
+}
+
+// Remove one piece of evidence before the refund is agreed.
+async function removeEvidence(id, { photoId, fileId } = {}) {
+  const r = await prisma.depositRefund.findUnique({ where: { id } });
+  if (!r) return { error: 'not_found', status: 404, message: 'Refund not found.' };
+  if (!['started', 'guest', 'disputed'].includes(r.status)) return { error: 'too_late', status: 409, message: 'Evidence can only be changed before the refund is approved.' };
+  if (photoId) await prisma.depositRefund.update({ where: { id }, data: { photoIds: (r.photoIds || []).filter((p) => p !== photoId) } });
+  if (fileId) await prisma.refundFile.deleteMany({ where: { id: fileId, refundId: id } });
+  return { ok: true };
+}
+
+// An invoice, for the guest's link (only one attached to their own refund) or the admin.
+async function evidenceFile(fileId, bookingId = null) {
+  const f = await prisma.refundFile.findUnique({ where: { id: fileId }, include: { refund: { select: { bookingId: true } } } });
+  if (!f || (bookingId && f.refund.bookingId !== bookingId)) return null;
+  return f;
+}
+
+const evidenceCount = (r, nFiles) => (r.photoIds || []).length + nFiles;
+
 const placeOf = (b) => [b.unit?.property?.name, b.unit?.name && `Unit ${b.unit.name}`].filter(Boolean).join(', ') || 'your stay';
 const firstName = (b) => String(b.guestName || '').trim().split(/\s+/)[0] || 'there';
 const WITH_PLACE = { unit: { include: { property: { select: { name: true } } } } };
 
 // Send (or send again) the guest the reduced refund and the link to agree or not.
 async function askGuest(id, now = new Date()) {
-  const r = await prisma.depositRefund.findUnique({ where: { id }, include: { booking: { include: WITH_PLACE } } });
+  const r = await prisma.depositRefund.findUnique({ where: { id }, include: { booking: { include: WITH_PLACE }, files: { select: { id: true } } } });
   if (!r) return { error: 'not_found', status: 404, message: 'Refund not found.' };
   if (!['started', 'guest'].includes(r.status)) return { error: 'not_waiting', status: 409, message: 'This refund is not waiting for the guest.' };
   const b = r.booking;
@@ -140,6 +230,7 @@ async function askGuest(id, now = new Date()) {
   const text = `Hi ${firstName(b)}, about the ${rand(max)} breakage deposit for your stay at ${placeOf(b)}.\n\n`
     + `${rand(kept)} is being kept back: ${r.note || 'see the reason on the link below'}.\n`
     + `That leaves ${rand(r.amountCents)} to refund to you.\n\n`
+    + (evidenceCount(r, r.files.length) ? `The photos and invoices are on this link. ` : '')
     + `Please let us know whether you agree: ${depositLink(b.id)}\n\n`
     + `As soon as you agree, your refund of ${rand(r.amountCents)} is sent. If you don’t agree, the deposit stays held until it’s sorted out.`;
   const sent = await messaging.sendHostMessage(b.id, text, { bookerOnly: true, notice: 'refund' })
@@ -165,7 +256,8 @@ const oneLine = (s, max) => String(s || '').replace(/\s*\n+\s*/g, ' · ').replac
 function refundWhatsApp(b, r) {
   const max = refundableOf(b);
   const link = depositLink(b.id);
-  const summary = oneLine(`${rand(max - r.amountCents)} kept back for: ${r.note || 'see the link'} · Refund to you: ${rand(r.amountCents)}`, 600);
+  const proof = r.files && evidenceCount(r, r.files.length) ? ' · Photos and invoices are on the link' : '';
+  const summary = oneLine(`${rand(max - r.amountCents)} kept back for: ${r.note || 'see the link'} · Refund to you: ${rand(r.amountCents)}${proof}`, 600);
   const body = `Hi ${firstName(b)}, there's an update on the breakage deposit for your SimonStays stay at ${placeOf(b)}.\n\n${summary}\n\nPlease tap the button below to agree, or tell us if you don't. As soon as you agree, your refund is sent.\n${link}`;
   return { body, contentVariables: { 1: firstName(b), 2: oneLine(placeOf(b), 200), 3: summary, 4: link.split('/deposit/')[1] } };
 }
@@ -195,13 +287,15 @@ function alertAdmin(subject, lines) {
 
 // What the guest sees on their link.
 async function guestView(bookingId) {
-  const b = await prisma.booking.findUnique({ where: { id: bookingId }, include: { depositRefund: true, ...WITH_PLACE } });
+  const b = await prisma.booking.findUnique({ where: { id: bookingId }, include: { depositRefund: { include: { files: { select: { id: true, filename: true, contentType: true }, orderBy: { createdAt: 'asc' } } } }, ...WITH_PLACE } });
   if (!b || !b.depositRefund) return null;
   const r = b.depositRefund;
   const max = refundableOf(b);
   return {
     place: placeOf(b), checkOut: iso(shownCheckOut(b)), guestName: b.guestName || null,
     depositCents: max, refundCents: r.amountCents, keptCents: Math.max(0, max - r.amountCents), reason: r.note || null,
+    photos: (r.photoIds || []).map((id) => ({ id })),
+    files: r.files.map((f) => ({ id: f.id, filename: f.filename, contentType: f.contentType })),
     // waiting | agreed | disputed | paid | other
     state: r.status === 'guest' ? 'waiting' : r.status === 'disputed' ? 'disputed' : r.status === 'paid' ? 'paid' : r.guestReply === 'agreed' ? 'agreed' : 'other',
   };
@@ -349,4 +443,4 @@ async function cancelRefund(id) {
   return { ok: true };
 }
 
-module.exports = { refundWhatsApp, WAIT_DAYS, listRefunds, startRefund, askGuest, guestView, guestAnswer, approveRefund, markRefundPaid, sendToPaygate, resolveCheck, cancelRefund, cardPaymentOf };
+module.exports = { evidenceOptions, addEvidence, removeEvidence, evidenceFile, refundWhatsApp, WAIT_DAYS, listRefunds, startRefund, askGuest, guestView, guestAnswer, approveRefund, markRefundPaid, sendToPaygate, resolveCheck, cancelRefund, cardPaymentOf };

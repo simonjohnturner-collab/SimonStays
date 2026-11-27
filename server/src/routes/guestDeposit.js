@@ -19,6 +19,20 @@ router.get('/:token', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /public/deposit/:token/file/:fileId — an invoice attached to their refund.
+router.get('/:token/file/:fileId', async (req, res, next) => {
+  try {
+    const id = bookingOf(req); if (!id) return invalid(res);
+    const f = await refunds.evidenceFile(req.params.fileId, id);
+    if (!f) return invalid(res);
+    res.set('Content-Type', f.contentType);
+    res.set('Content-Disposition', `inline; filename="${f.filename.replace(/[^\w. -]/g, '_')}"`);
+    res.set('Cache-Control', 'private, no-store');
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.send(Buffer.from(f.data));
+  } catch (e) { next(e); }
+});
+
 // POST /public/deposit/:token { answer: 'agree' | 'disagree', comment }
 router.post('/:token', async (req, res, next) => {
   try {

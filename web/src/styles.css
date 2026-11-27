@@ -1593,3 +1593,17 @@ button.bm-cancel:hover { background: #fdeaea; }
   .um-help { font-size:12px; }
   .um-pricebar { position:sticky; top:0; z-index:3; }
 }
+
+/* --- Refund evidence (admin) --- */
+.rev { display:flex; flex-direction:column; gap:6px; margin:6px 0; padding:8px; border:1px dashed var(--line); border-radius:8px; max-width:440px; }
+.rev-rep { display:flex; flex-direction:column; gap:4px; }
+.rev-grid { display:flex; flex-wrap:wrap; gap:4px; }
+.rev-ph { position:relative; width:64px; height:64px; padding:0; border:2px solid transparent; border-radius:6px; overflow:hidden; background:#eee; cursor:pointer; flex:none; }
+.rev-ph img { width:100%; height:100%; object-fit:cover; display:block; }
+.rev-ph.on { border-color:var(--green); }
+.rev-tick { position:absolute; top:2px; right:2px; background:var(--green); color:#fff; border-radius:50%; width:18px; height:18px; font-size:12px; line-height:18px; text-align:center; }
+.rev-x { position:absolute; top:2px; right:2px; width:18px; height:18px; padding:0; border:0; border-radius:50%; background:rgba(0,0,0,.65); color:#fff; font-size:11px; line-height:18px; cursor:pointer; }
+.rev-files { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.rev-file { display:inline-flex; align-items:center; gap:4px; font-size:12px; background:#f4f6f4; border:1px solid var(--line); border-radius:999px; padding:2px 8px; }
+.rev-add { cursor:pointer; }
+.rev-have { display:flex; flex-direction:column; gap:4px; margin-top:6px; }

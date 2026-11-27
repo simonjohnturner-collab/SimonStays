@@ -3,6 +3,7 @@ import TrafficView from './TrafficView.jsx';
 import AdminBubbles from './AdminBubbles.jsx';
 import AdminReferrals from './AdminReferrals.jsx';
 import AdminTownship from './AdminTownship.jsx';
+import { EvidencePicker, RefundEvidence } from './RefundEvidence.jsx';
 import { api, guestDocumentFile } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { fmtR, randToCents } from '../money.js';
@@ -681,6 +682,7 @@ function RefundAction({ x, onDone }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [byHand, setByHand] = useState(false);
+  const [evidence, setEvidence] = useState({ photoIds: [], files: [] });
   const r = x.refund;
 
   async function run(call) {
@@ -689,7 +691,7 @@ function RefundAction({ x, onDone }) {
       const out = await call();
       if (out && (out.outcome === 'unclear' || out.askedGuest !== undefined || out.refund?.status === 'guest')) window.alert(out.message);
       onDone();
-    } catch (e) { setErr(e.message); setBusy(false); }
+    } catch (e) { setErr((e.data && e.data.message) || e.message); setBusy(false); }
   }
   const error = err && <div className="msg-warn">{err}</div>;
 
@@ -701,7 +703,8 @@ function RefundAction({ x, onDone }) {
         <label className="small">Amount <input className="amt" inputMode="decimal" value={amount} placeholder={(x.refundableCents / 100).toFixed(2)} onChange={(e) => setAmount(e.target.value)} /></label>
         {typed < x.refundableCents && <input value={note} placeholder="Why less than the deposit? (the guest sees this)" aria-label="Reason for the lower refund" onChange={(e) => setNote(e.target.value)} />}
         {typed < x.refundableCents && <div className="muted small">{fmtR(x.refundableCents - typed)} kept back. {x.guestName || 'The guest'} is sent this to agree; once they agree, the refund is paid.</div>}
-        <button className="mini" disabled={busy || (typed < x.refundableCents && !note.trim())} onClick={() => run(() => api.adminStartRefund(x.bookingId, typed, note))}>{typed < x.refundableCents ? 'Send to guest to agree' : 'Start refund'}</button>
+        {typed < x.refundableCents && <EvidencePicker bookingId={x.bookingId} value={evidence} onChange={setEvidence} />}
+        <button className="mini" disabled={busy || (typed < x.refundableCents && !note.trim())} onClick={() => run(() => api.adminStartRefund(x.bookingId, typed, note, typed < x.refundableCents ? evidence : {}))}>{typed < x.refundableCents ? 'Send to guest to agree' : 'Start refund'}</button>
         {error}
       </div>
     );
@@ -806,7 +809,9 @@ function Refunds({ hostFilter, HostPicker }) {
                     <td className="small">{x.host}</td>
                     <td className="small">{x.method}{x.paygateRef && <div className="muted">#{x.paygateRef}</div>}</td>
                     <td className="num">{fmtR(x.depositCents)}{x.refund && x.refund.amountCents !== x.depositCents && <div className="muted small">refund {fmtR(x.refund.amountCents)}</div>}</td>
-                    <td className="small">{refundStage(x)}{x.refund && x.refund.note && <div className="muted tx-wrap">{x.refund.note}</div>}</td>
+                    <td className="small">{refundStage(x)}{x.refund && x.refund.note && <div className="muted tx-wrap">{x.refund.note}</div>}
+                      {x.refund && x.guestLink && x.refund.amountCents < x.refundableCents && <div><a className="small" href={x.guestLink} target="_blank" rel="noreferrer">Guest’s page ↗</a></div>}
+                      {x.refund && <RefundEvidence x={x} onDone={load} />}</td>
                     <td><RefundAction key={x.refund ? `${x.refund.id}-${x.refund.status}` : 'new'} x={x} onDone={load} /></td>
                   </tr>
                 ))}

@@ -977,6 +977,10 @@ model DepositRefund {
   guestAskedAt DateTime? // when the guest was last asked to agree a reduced refund
   guestReply  String? // 'agreed', or the guest's reason for not agreeing
   guestAt     DateTime? // when the guest answered
+  // Evidence the guest sees on their link: photos picked from the unit's checkout
+  // reports (Photo ids), and invoices uploaded here.
+  photoIds    String[]  @default([])
+  files       RefundFile[]
   via         String? // 'paygate' when sent through PayHost, else paid by hand (EFT or the Paygate portal)
   paymentId   String? // the card payment refunded through Paygate
   paygate     Json? // Paygate's last reply, for the audit trail
@@ -991,6 +995,20 @@ model DepositRefund {
   paidBy      String?
   paidAt      DateTime?
   updatedAt   DateTime  @updatedAt
+}
+
+// An invoice (PDF or image) attached to a reduced deposit refund as evidence.
+model RefundFile {
+  id          String        @id @default(uuid())
+  refundId    String
+  refund      DepositRefund @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  filename    String
+  contentType String
+  sizeBytes   Int
+  data        Bytes
+  createdAt   DateTime      @default(now())
+
+  @@index([refundId])
 }
 
 enum BookingSource {

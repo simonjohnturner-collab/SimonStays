@@ -29,6 +29,12 @@
   button:disabled { opacity:.6; cursor:default; }
   textarea { width:100%; font:inherit; padding:10px; border:1px solid #d6dbd8; border-radius:8px; margin-top:12px; }
   .err { color:var(--red); font-size:14px; margin-top:8px; }
+  h2 { font-size:15px; margin:16px 0 6px; }
+  .shots { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  .shots a { display:block; aspect-ratio:1; border-radius:8px; overflow:hidden; background:#eee; }
+  .shots img { width:100%; height:100%; object-fit:cover; display:block; }
+  .files a { display:flex; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; margin-top:6px; color:var(--ink); text-decoration:none; font-weight:600; font-size:14px; }
+  .files a:hover { background:#f6f6f6; }
 </style>
 </head>
 <body>
@@ -58,6 +64,18 @@
     row(t, 'Refund to you', R(d.refundCents), 'total');
     app.appendChild(t);
     if (d.reason) { var rs = el('div', 'reason'); rs.appendChild(el('b', null, 'Why')); rs.appendChild(document.createTextNode(d.reason)); app.appendChild(rs); }
+    if (d.photos && d.photos.length) {
+      app.appendChild(el('h2', null, 'Photos from the checkout report'));
+      var g = el('div', 'shots');
+      d.photos.forEach(function(p){ var a = el('a'); a.href = '/photos/' + encodeURIComponent(p.id); a.target = '_blank'; a.rel = 'noopener'; var im = el('img'); im.src = '/photos/' + encodeURIComponent(p.id) + '?w=320'; im.alt = 'Photo from the checkout report'; im.loading = 'lazy'; a.appendChild(im); g.appendChild(a); });
+      app.appendChild(g);
+    }
+    if (d.files && d.files.length) {
+      app.appendChild(el('h2', null, d.files.length === 1 ? 'Invoice' : 'Invoices'));
+      var fl = el('div', 'files');
+      d.files.forEach(function(f){ var a = el('a', null, (f.contentType === 'application/pdf' ? '📄 ' : '🧾 ') + f.filename); a.href = api + '/file/' + encodeURIComponent(f.id); a.target = '_blank'; a.rel = 'noopener'; fl.appendChild(a); });
+      app.appendChild(fl);
+    }
     var yes = el('button', null, 'I agree, refund ' + R(d.refundCents));
     var no = el('button', 'no', 'I don’t agree');
     var e = el('div', 'err');
