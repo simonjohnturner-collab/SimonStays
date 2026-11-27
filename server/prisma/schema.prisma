@@ -936,9 +936,11 @@ model Clean {
   date          DateTime? // day of the clean (optional); shown on the board when set
   paymentMethod String   @default("prepaid") // 'prepaid' (paid up front) | 'direct' (guest pays cleaner)
   cleaner       String?
+  reminderAt    DateTime? // when the night-before WhatsApp went to the cleaner
   createdAt     DateTime @default(now())
 
   @@index([bookingId])
+  @@index([date])
 }
 
 enum ChannelType {

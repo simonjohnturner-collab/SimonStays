@@ -1607,3 +1607,30 @@ button.bm-cancel:hover { background: #fdeaea; }
 .rev-file { display:inline-flex; align-items:center; gap:4px; font-size:12px; background:#f4f6f4; border:1px solid var(--line); border-radius:999px; padding:2px 8px; }
 .rev-add { cursor:pointer; }
 .rev-have { display:flex; flex-direction:column; gap:4px; margin-top:6px; }
+
+/* --- Clean days on the unit month, and the Cleaners tab --- */
+.um-day { position:relative; }
+.um-clean { position:absolute; top:4px; right:5px; font-size:13px; line-height:1; z-index:2; }
+.cd-wrap { max-width:760px; width:100%; margin:0 auto; padding:16px 16px 80px; display:flex; flex-direction:column; gap:12px; }
+.cd-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.cd-day { display:flex; flex-direction:column; align-items:center; text-align:center; }
+.cd-day b { font-size:20px; }
+.cd-today { text-align:center; }
+.cd-empty { text-align:center; padding:30px 0; }
+.cd-card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px; }
+.cd-card h3 { margin:0; font-size:16px; display:flex; align-items:baseline; gap:8px; }
+.cd-none { border-color:#f2c4c0; background:#fff8f7; }
+.cd-job { display:grid; grid-template-columns:56px 1fr auto; gap:10px; align-items:start; width:100%; text-align:left; background:#f8faf8; color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:10px; font:inherit; cursor:pointer; box-shadow:none; }
+.cd-job:hover { border-color:var(--green); }
+.cd-time { font-weight:800; font-size:16px; }
+.cd-main { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.cd-kind { align-self:flex-start; font-size:12px; font-weight:700; border-radius:999px; padding:1px 8px; background:#e6f0fa; color:#24507a; }
+.cd-kind.instay { background:#fbf0dc; color:#7a5212; }
+.cd-note { overflow-wrap:anywhere; }
+.cd-sent.on { color:var(--green); font-weight:700; white-space:nowrap; }
+@media (max-width: 640px) {
+  .um-clean { top:5px; right:4px; font-size:12px; }
+  .cd-wrap { padding:12px 12px 90px; }
+  .cd-job { grid-template-columns:48px 1fr; }
+  .cd-sent { grid-column:2; }
+}

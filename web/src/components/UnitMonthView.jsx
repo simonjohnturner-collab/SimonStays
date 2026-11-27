@@ -45,6 +45,18 @@ export default function UnitMonthView({ unit, propertyName, onClose, units = [],
     return m;
   }, [bookings]);
 
+  // Clean days: each booking's checkout day, and its booked in-stay cleans.
+  const cleanDays = useMemo(() => {
+    const m = {};
+    const add = (ds, what) => { (m[ds] = m[ds] || []).push(what); };
+    (bookings || []).forEach((b) => {
+      if (b.status !== 'confirmed') return;
+      add((b.dayUse ? b.checkIn : b.checkOut).slice(0, 10), `Checkout clean${b.cleaner ? `: ${b.cleaner}` : ' (no cleaner yet)'}`);
+      (b.cleans || []).forEach((c) => { if (c.date) add(c.date.slice(0, 10), `In-stay clean${c.cleaner ? `: ${c.cleaner}` : ' (no cleaner yet)'}`); });
+    });
+    return m;
+  }, [bookings]);
+
   const startDow = new Date(y, mo, 1).getDay();
   const days = new Date(y, mo + 1, 0).getDate();
   const label = month.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
@@ -87,6 +99,7 @@ export default function UnitMonthView({ unit, propertyName, onClose, units = [],
         onClick={() => (b ? setEdit({ booking: b }) : toggle(ds))}
         title={b ? `${b.guestName || 'Booking'} · ${b.checkIn.slice(0, 10)} → ${b.checkOut.slice(0, 10)}` : (selected ? 'Selected — set a price below' : 'Click to select this night')}>
         <span className="um-num">{day}</span>
+        {cleanDays[ds] && <span className="um-clean" title={cleanDays[ds].join('\n')}>🧹</span>}
         {b ? (
           isCheckIn || (barS && day === 1) ? <span className={`um-guest ${isRed(b) ? 'owing' : ''}`}>{b.guestName || '(guest)'}</span> : <span className="um-cont">•</span>
         ) : (

@@ -137,7 +137,7 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
               {c.booking.status === 'pending' && <span className="badge-inline" title={c.booking.paymentStatus === 'paid' ? 'Marked paid, dates blocked. Press Confirm booking to confirm it and tell the guest' : "Awaiting payment — not confirmed, doesn't block the calendar"}>⏳ </span>}
               {s.early && <span className="badge-inline" title="Early check-in">⏰ </span>}
               {c.name}
-              {s.insta && <span className="badge-inline" title="In-stay clean during this stay"> 🧽</span>}
+              {s.insta && <span className="badge-inline" title="In-stay clean during this stay"> 🧹</span>}
             </span>
           </td>
         );
@@ -260,8 +260,7 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
       <div className="legend">
         <span><i className="sw blue" /> Checkout — clean needed</span>
         <span><i className="sw needs-cleaner-sw" /> cleaner not allocated</span>
-        <span>🧹 checkout cleaner <span className="muted">(hover)</span></span>
-        <span>🧽 in-stay clean</span>
+        <span>🧹 clean: checkout or in-stay <span className="muted">(hover for the cleaner)</span></span>
         <span><i className="sw early-sw" /> ⏰ early check-in</span>
         <span><i className="sw late-sw" /> late checkout</span>
         <span><i className="sw red-text">Aa</i> unpaid</span>

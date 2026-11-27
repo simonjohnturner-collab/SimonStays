@@ -139,6 +139,7 @@ export const api = {
   createUnit: (propertyId, name, capacity) => req('POST', '/units', { propertyId, name, capacity }),
   getUnit: (id) => req('GET', `/units/${id}`),
   deleteUnit: (id) => req('DELETE', `/units/${id}`),
+  cleaningDay: (date) => req('GET', `/cleaners/day${date ? `?date=${date}` : ''}`),
   unitBookings: (id, from, to) => req('GET', `/units/${id}/bookings?from=${from}&to=${to}`),
   getNightRates: (id, from, to) => req('GET', `/units/${id}/night-rates?from=${from}&to=${to}`),
   setNightPrices: (id, dates, priceCents) => req('PUT', `/units/${id}/night-prices`, { dates, priceCents }),

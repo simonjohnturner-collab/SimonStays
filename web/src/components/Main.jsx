@@ -8,6 +8,7 @@ import BookingModal from './BookingModal.jsx';
 import UnitPanel from './UnitPanel.jsx';
 import UnitMonthView from './UnitMonthView.jsx';
 import PhoneCalendar, { useIsPhone } from './PhoneCalendar.jsx';
+import CleanersDay from './CleanersDay.jsx';
 import ManageDrawer from './ManageDrawer.jsx';
 import InvoicesView from './InvoicesView.jsx';
 import RateCardMatrix from './RateCardMatrix.jsx';
@@ -272,6 +273,8 @@ export default function Main() {
     screen = unit
       ? <UnitMonthView key={unit.id} unit={unit} propertyName={p.name} units={allUnits} groups={groups} cleaners={cleaners} onClose={toCalendar} onBookingsChanged={() => loadBookings(properties)} />
       : <div className="center muted">{loading ? 'Loading…' : 'That unit no longer exists.'}</div>;
+  } else if (path === '/calendar/cleaners') {
+    screen = <CleanersDay onClose={toCalendar} onOpenUnit={(unitId) => navigate(`/calendar/unit/${unitId}`)} />;
   } else if (path === '/calendar' && isPhone && hasUnits) {
     // Phones: a list of listings with a mini month each (the board is too wide).
     screen = (
@@ -279,6 +282,7 @@ export default function Main() {
         <header className="topbar">
           <span className="host">Calendar</span>
           <div className="spacer" />
+          <button className="ghost" onClick={() => navigate('/calendar/cleaners')}>🧹 Cleaners</button>
           <button className="ghost" onClick={syncAll} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync'}</button>
           <button className="ghost" onClick={() => setDrawer('booking')}>＋ Booking</button>
         </header>
@@ -299,6 +303,7 @@ export default function Main() {
           <button className="ghost" onClick={() => setStart(addDays(today(), -3))}>Today</button>
           <button className="ghost" onClick={() => setStart(addDays(start, 7))}>week →</button>
           <button className="ghost" onClick={() => setStart(addMonths(start, 1))}>month ›</button>
+          <button className="ghost" onClick={() => navigate('/calendar/cleaners')}>🧹 Cleaners</button>
           <button className="ghost" onClick={syncAll} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync channels'}</button>
           <button className="ghost" onClick={() => setDrawer('booking')}>＋ Booking</button>
         </header>

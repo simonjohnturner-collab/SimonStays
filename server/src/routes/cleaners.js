@@ -16,6 +16,17 @@ router.get('/', async (req, res) => {
   res.json({ cleaners: Array.isArray(host?.cleaners) ? host.cleaners : [] });
 });
 
+// GET /cleaners/day?date=YYYY-MM-DD — every clean that day (checkout and in-stay),
+// with the cleaner, guest, expected start time and notes. Defaults to today (SAST).
+router.get('/day', async (req, res, next) => {
+  try {
+    const jobs = require('../utils/cleaningJobs');
+    const q = String(req.query.date || '');
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(q) ? q : jobs.todaySAST();
+    res.json({ date, today: jobs.todaySAST(), jobs: await jobs.jobsForDay(date, { hostId: req.hostId }) });
+  } catch (e) { next(e); }
+});
+
 router.put('/', async (req, res) => {
   const list = Array.isArray(req.body?.cleaners) ? req.body.cleaners.map((s) => String(s).trim()).filter(Boolean) : [];
   const host = await prisma.host.update({ where: { id: req.hostId }, data: { cleaners: list }, select: { cleaners: true } });
