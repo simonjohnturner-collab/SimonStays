@@ -1634,3 +1634,8 @@ button.bm-cancel:hover { background: #fdeaea; }
   .cd-job { grid-template-columns:48px 1fr; }
   .cd-sent { grid-column:2; }
 }
+
+/* --- A broom on each in-stay clean's date, inside a stay block; repeating cleans --- */
+.stay-broom { position:absolute; top:50%; transform:translateY(-50%); width:16px; text-align:center; font-size:13px; line-height:1; z-index:2; pointer-events:auto; }
+.repeat-box { margin-top:6px; padding:8px; border:1px dashed var(--line); border-radius:8px; background:#fafcfa; display:flex; flex-direction:column; gap:4px; }
+.repeat-box label { display:inline-flex; align-items:center; gap:4px; margin:0; }

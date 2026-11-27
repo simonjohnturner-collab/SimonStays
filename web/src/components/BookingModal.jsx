@@ -52,6 +52,33 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
   const addClean = () => setCleans([...cleans, { date: '', paymentMethod: 'prepaid', cleaner: '' }]);
   const updateClean = (i, field, val) => setCleans(cleans.map((c, j) => (j === i ? { ...c, [field]: val } : c)));
   const removeClean = (i) => setCleans(cleans.filter((_, j) => j !== i));
+  // Repeating cleans: every week, two weeks or month from a first date, during the
+  // stay. Each becomes its own clean (own broom, own night-before WhatsApp).
+  const [repeat, setRepeat] = useState(null); // { every, first, until, paymentMethod, cleaner }
+  const lastNight = checkOut ? new Date(Date.parse(checkOut + 'T12:00:00Z') - 864e5).toISOString().slice(0, 10) : '';
+  function repeatDates(r) {
+    if (!r || !r.first || !r.until || r.first > r.until) return [];
+    const out = [];
+    const [y, m, d] = r.first.split('-').map(Number);
+    for (let n = 0; n < 60; n++) {
+      let dt;
+      if (r.every === 'month') {
+        const last = new Date(Date.UTC(y, m - 1 + n + 1, 0)).getUTCDate(); // the 31st becomes the month's last day
+        dt = new Date(Date.UTC(y, m - 1 + n, Math.min(d, last), 12));
+      } else dt = new Date(Date.UTC(y, m - 1, d + n * (r.every === '2weeks' ? 14 : 7), 12));
+      const iso = dt.toISOString().slice(0, 10);
+      if (iso > r.until) break;
+      if (iso > checkIn && iso < checkOut) out.push(iso);
+    }
+    return out;
+  }
+  const repeatList = repeatDates(repeat);
+  function addRepeat() {
+    const have = new Set(cleans.map((c) => c.date));
+    setCleans([...cleans, ...repeatList.filter((d) => !have.has(d)).map((date) => ({ date, paymentMethod: repeat.paymentMethod, cleaner: repeat.cleaner }))]
+      .sort((a, b) => (a.date || '9').localeCompare(b.date || '9')));
+    setRepeat(null);
+  }
   // Mid-stay cleans the guest asked for in the guestbook, kept off the calendar
   // until the host adds them (once paid). Saving after adding clears the request.
   const [requested, setRequested] = useState(Array.isArray(booking?.requestedCleans) ? booking.requestedCleans : []);
@@ -438,8 +465,40 @@ export default function BookingModal({ unit, booking, floating, units = [], grou
             )}
             <div className="insta-head">
               <span>Mid-stay cleans</span>
-              <button type="button" className="mini" onClick={addClean}>+ Add</button>
+              <span>
+                <button type="button" className="mini" onClick={() => setRepeat(repeat ? null : { every: 'week', first: '', until: lastNight, paymentMethod: 'prepaid', cleaner: '' })}>↻ Repeat</button>{' '}
+                <button type="button" className="mini" onClick={addClean}>+ Add</button>
+              </span>
             </div>
+            {repeat && (
+              <div className="repeat-box">
+                <div className="insta-row">
+                  <select value={repeat.every} onChange={(e) => setRepeat({ ...repeat, every: e.target.value })} title="How often">
+                    <option value="week">Every week</option>
+                    <option value="2weeks">Every 2 weeks</option>
+                    <option value="month">Every month</option>
+                  </select>
+                  <label className="small">from <input type="date" value={repeat.first} min={checkIn} max={lastNight} onChange={(e) => setRepeat({ ...repeat, first: e.target.value })} /></label>
+                  <label className="small">until <input type="date" value={repeat.until} min={repeat.first || checkIn} max={lastNight} onChange={(e) => setRepeat({ ...repeat, until: e.target.value })} /></label>
+                </div>
+                <div className="insta-row">
+                  <select value={repeat.paymentMethod} onChange={(e) => setRepeat({ ...repeat, paymentMethod: e.target.value })} title="Payment">
+                    <option value="prepaid">Paid for</option>
+                    <option value="direct">Cleaner paid directly</option>
+                  </select>
+                  <input list="cleaner-names" value={repeat.cleaner} onChange={(e) => setRepeat({ ...repeat, cleaner: e.target.value })} placeholder="Cleaner" title="Cleaner" />
+                </div>
+                <div className="small muted">
+                  {!repeat.first ? 'Pick the first clean date. The day repeats: same weekday, or same date each month.'
+                    : repeatList.length ? `${repeatList.length} clean${repeatList.length > 1 ? 's' : ''}: ${repeatList.map((d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })).join(' · ')}`
+                      : 'No dates fall during the stay.'}
+                </div>
+                <div className="bm-req-btns">
+                  <button type="button" className="mini" disabled={!repeatList.length} onClick={addRepeat}>Add {repeatList.length || ''} clean{repeatList.length === 1 ? '' : 's'}</button>
+                  <button type="button" className="mini" onClick={() => setRepeat(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
             {cleans.length === 0 && <p className="muted small">None.</p>}
             {cleans.map((c, i) => (
               <div key={i} className="insta-row">

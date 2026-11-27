@@ -46,8 +46,8 @@ function coverage(bookings) {
       if (!cell.booking) cell.booking = b;
     }
 
-    // Insta (mid-stay) cleans → marker on their date.
-    (b.cleans || []).forEach((cl) => {
+    // Insta (mid-stay) cleans → a broom on their date, once the booking is confirmed.
+    if (b.status === 'confirmed') (b.cleans || []).forEach((cl) => {
       if (!cl.date) return;
       const cell = ensure(ymd(new Date(cl.date)));
       (cell.insta = cell.insta || []).push({ cleaner: cl.cleaner, paymentMethod: cl.paymentMethod });
@@ -67,12 +67,13 @@ function buildSegments(cov, dates, TODAY) {
     const isStay = !!(c && c.name && !c.blue); // occupancy night, not a checkout cell
     if (isStay) {
       const bid = c.booking && c.booking.id;
-      let j = i, insta = false, early = false, hasToday = false;
+      let j = i, early = false, hasToday = false;
+      const insta = []; // { at: night index in this block, cleans }
       while (j < dates.length) {
         const kj = ymd(dates[j]);
         const cj = cov[kj];
         if (cj && cj.name && !cj.blue && cj.booking && cj.booking.id === bid) {
-          if (cj.insta && cj.insta.length) insta = true;
+          if (cj.insta && cj.insta.length) insta.push({ at: j - i, cleans: cj.insta });
           if (cj.early) early = true;
           if (kj === TODAY) hasToday = true;
           j++;
@@ -137,8 +138,10 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
               {c.booking.status === 'pending' && <span className="badge-inline" title={c.booking.paymentStatus === 'paid' ? 'Marked paid, dates blocked. Press Confirm booking to confirm it and tell the guest' : "Awaiting payment — not confirmed, doesn't block the calendar"}>⏳ </span>}
               {s.early && <span className="badge-inline" title="Early check-in">⏰ </span>}
               {c.name}
-              {s.insta && <span className="badge-inline" title="In-stay clean during this stay"> 🧹</span>}
             </span>
+            {s.insta.map((x) => (
+              <span key={x.at} className="stay-broom" style={{ left: `calc(${((x.at + 0.5) * 100) / s.len}% - 8px)` }} title={instaTitle(x.cleans)}>🧹</span>
+            ))}
           </td>
         );
       }
@@ -158,7 +161,7 @@ export default function Board({ properties, bookingsByUnit, floatingBookings = [
           title={hasGuest ? cellTitle(c) : c?.blue ? 'Checkout — clean needed · free for a new check-in' : (u ? 'Click to add a booking' : '')}>
           {c?.early && <span className="badge early" title="Early check-in">⏰</span>}
           {hasGuest && <span className={c.red ? 'name red' : 'name'}>{c.name}</span>}
-          {c?.insta?.length > 0 && <span className="cico insta" title={instaTitle(c.insta)}>🧽</span>}
+          {c?.insta?.length > 0 && <span className="cico insta" title={instaTitle(c.insta)}>🧹</span>}
           {c?.blue && (
             <span
               className={`cico clean ${c.cleanerCheckout ? '' : 'unassigned'} ${hasGuest ? '' : 'centered'}`}
