@@ -106,6 +106,35 @@
   .jobcard .arrive:disabled { opacity:.6; }
   .jobcard .arrived { margin-top:10px; color:#1a7a3a; font-weight:700; }
   .jobcard .other { display:block; margin-top:10px; font-size:14px; color:#1a7a3a; }
+  /* One tab per clean the cleaner has that day, in order */
+  .jobtabs { display:flex; gap:6px; overflow-x:auto; margin:0 0 12px; padding-bottom:2px; }
+  .jobtabs a { flex:none; display:flex; flex-direction:column; gap:1px; padding:8px 12px; border:1px solid #d9e6dc; border-radius:12px; background:#fff; color:#1f2430; text-decoration:none; font-size:13px; line-height:1.25; }
+  .jobtabs a b { font-size:14px; }
+  .jobtabs a.on { border-color:#1a7a3a; box-shadow:inset 0 0 0 2px #1a7a3a; background:#eef6f0; }
+  .jobtabs a.sent { color:#6b7280; }
+  .jobtabs .st { font-size:12px; color:#6b7280; }
+  .jobtabs .st.go { color:#b45309; font-weight:700; }
+  .jobtabs .st.ok { color:#1a7a3a; font-weight:700; }
+  .nextclean { display:block; margin:14px auto 0; max-width:320px; padding:14px; font-size:17px; font-weight:800; color:#fff; background:#1a7a3a; border-radius:12px; text-decoration:none; text-align:center; }
+
+  /* The helper chat (opened from a cleaner's link, after "I've arrived") */
+  .hp-fab { position:fixed; right:14px; bottom:16px; z-index:50; padding:12px 16px; font:inherit; font-weight:800; color:#fff; background:#1a7a3a; border:0; border-radius:999px; box-shadow:0 4px 14px rgba(0,0,0,.2); cursor:pointer; }
+  .hp-panel { position:fixed; left:0; right:0; bottom:0; z-index:60; max-width:560px; margin:0 auto; height:62vh; display:flex; flex-direction:column; background:#fff; border:1px solid #d9e6dc; border-radius:16px 16px 0 0; box-shadow:0 -6px 24px rgba(0,0,0,.18); }
+  .hp-head { display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid #e3e6ea; }
+  .hp-head b { flex:1; }
+  .hp-head button { font:inherit; background:#f1f4f2; border:0; border-radius:10px; padding:6px 10px; cursor:pointer; }
+  .hp-msgs { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; background:#f7faf8; }
+  .hp-msg { max-width:85%; padding:9px 12px; border-radius:14px; white-space:pre-wrap; line-height:1.4; font-size:15px; }
+  .hp-msg.helper { align-self:flex-start; background:#fff; border:1px solid #e3e6ea; }
+  .hp-msg.cleaner { align-self:flex-end; background:#1a7a3a; color:#fff; }
+  .hp-msg.typing { color:#6b7280; font-style:italic; }
+  .hp-chips { display:flex; flex-wrap:wrap; gap:6px; padding:8px 12px 0; }
+  .hp-chip { font:inherit; font-size:14px; padding:6px 12px; border:1px solid #cfe0d4; background:#eef6f0; color:#14622f; border-radius:999px; cursor:pointer; }
+  .hp-form { display:flex; gap:8px; padding:10px 12px 14px; }
+  .hp-form input { flex:1; font:inherit; font-size:16px; padding:10px 12px; border:1px solid #d6dbd8; border-radius:12px; }
+  .hp-form button { font:inherit; font-weight:700; padding:10px 14px; color:#fff; background:#1a7a3a; border:0; border-radius:12px; }
+  .hp-cam { display:flex; align-items:center; justify-content:center; width:44px; font-size:20px; background:#eef6f0; border:1px solid #cfe0d4; border-radius:12px; cursor:pointer; flex:none; }
+  .hp-msg img { display:block; max-width:160px; border-radius:10px; margin-top:4px; }
 </style>
 </head>
 <body>
@@ -115,6 +144,7 @@
   </div>
 
   <div class="wrap">
+    <div id="jobtabs" class="jobtabs hidden"></div>
     <div id="jobcard" class="jobcard hidden"></div>
     <form id="form">
       <div class="q"><label class="req" for="cleaner">Name of cleaner</label>
@@ -781,11 +811,33 @@
 
   // ---- The cleaner's link: the job card and "I've arrived" ----
   function hm(t) { return new Date(t).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Johannesburg' }); }
+  // The cleaner's cleans for the day, one tab each, in the order to do them.
+  function renderTabs() {
+    var day = JOB_CTX.day || [], bar = document.getElementById('jobtabs');
+    bar.innerHTML = '';
+    if (day.length < 2) { bar.classList.add('hidden'); return; }
+    bar.classList.remove('hidden');
+    day.forEach(function (d) {
+      var a = el('a', (d.current ? 'on' : '') + (d.reportDone ? ' sent' : '')); a.href = d.current ? '#' : d.link;
+      var name = d.place.split(' · ').pop();
+      a.appendChild(el('b', 'notr', (d.seq ? d.seq + '. ' : '') + name + (d.arrivalToday ? ' ⚡' : '')));
+      a.appendChild(el('span', null, d.time + ' · ' + (d.kind === 'instay' ? 'In-stay' : 'Checkout')));
+      a.appendChild(d.reportDone ? el('span', 'st ok', '✓ Report sent') : d.arrivedAt ? el('span', 'st', 'In progress') : el('span', 'st' + (d.arrivalToday ? ' go' : ''), d.arrivalToday ? 'Guest arriving' : 'Not started'));
+      bar.appendChild(a);
+    });
+    // After this report is submitted: straight on to the next clean that isn't done.
+    var next = day.filter(function (d) { return !d.current && !d.reportDone; })[0], done = document.getElementById('done');
+    if (next && done && !document.getElementById('nextclean')) {
+      var n = el('a', 'nextclean', 'Next clean: ' + next.place.split(' · ').pop() + ' →'); n.id = 'nextclean'; n.href = next.link;
+      done.appendChild(n);
+    }
+  }
   function renderJobCard() {
     var j = JOB_CTX.job, card = document.getElementById('jobcard');
+    renderTabs();
     card.innerHTML = ''; card.classList.remove('hidden');
     card.appendChild(el('span', 'jk ' + j.kind, j.label));
-    card.appendChild(el('h2', null, j.place));
+    card.appendChild(el('h2', 'notr', j.place));
     card.appendChild(el('div', 'jt', 'Start at ' + j.time + (j.date !== JOB_CTX.today ? ' · ' + new Date(j.date + 'T12:00:00Z').toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }) : '')));
     if (j.guestName) card.appendChild(el('div', 'jn', '👤 Guest: ' + j.guestName));
     (j.notes || []).forEach(function (n) { card.appendChild(el('div', 'jn', '📋 ' + n)); });
@@ -920,6 +972,8 @@
     var unitId = document.getElementById('unit').value;
     var btn = document.getElementById('submit'); btn.disabled = true; btn.textContent = 'Sending…';
     var body = { type: 'clean', unitId: unitId, submitterName: cleaner, templateId: TEMPLATE.id || null, answers: Object.assign({ date: document.getElementById('date').value }, answers) };
+    if (window.HELPER_LANG && window.HELPER_LANG.code !== 'en') body.answers._lang = window.HELPER_LANG.code;
+    if (JOB_CTX && JOB_CTX.job) body.answers._job = JOB_CTX.job.key;
 
     // Adding to a saved form → PUT (merge answers). Otherwise create once and reuse
     // the id on retry so re-uploaded photos add to it.
@@ -962,6 +1016,172 @@
       })
       .catch(function () { showErr('Sorry, something went wrong. Please try again.'); btn.disabled = false; btn.textContent = 'Submit clean report'; });
   };
+</script>
+
+<button id="hp-fab" class="hp-fab hidden" type="button">💬 Helper</button>
+<div id="hp-panel" class="hp-panel hidden" role="dialog" aria-label="Helper">
+  <div class="hp-head"><b>Your helper</b><button type="button" id="hp-lang" aria-label="Language">🌐</button><button type="button" id="hp-close" aria-label="Close">✕</button></div>
+  <div id="hp-msgs" class="hp-msgs"></div>
+  <div id="hp-chips" class="hp-chips"></div>
+  <form id="hp-form" class="hp-form"><label class="hp-cam" title="Send a photo" aria-label="Send a photo">📷<input id="hp-photo" type="file" accept="image/*" multiple hidden></label><input id="hp-in" placeholder="Type a message…" autocomplete="off" maxlength="1500"><button type="submit">Send</button></form>
+</div>
+<script>
+// ---- The helper and the cleaner's language (only when opened from a job link) ----
+(function () {
+  if (!JOB) return;
+  var LANGS = [['en', 'English'], ['zu', 'isiZulu'], ['xh', 'isiXhosa'], ['st', 'Sesotho'], ['tn', 'Setswana'], ['nso', 'Sepedi'], ['af', 'Afrikaans'],
+    ['sn', 'chiShona'], ['ny', 'Chichewa'], ['ts', 'Xitsonga'], ['ve', 'Tshivenda'], ['ss', 'siSwati'], ['nr', 'isiNdebele'], ['pt', 'Português'], ['fr', 'Français']];
+  var api = '/public/cleaning/job/' + encodeURIComponent(JOB);
+  var LANG = null, CHAT = [], TR = {}, ORIG = new WeakMap(), PH = new WeakMap(), started = false, busy = false;
+  var fab = document.getElementById('hp-fab'), panel = document.getElementById('hp-panel'), msgs = document.getElementById('hp-msgs'),
+    chips = document.getElementById('hp-chips'), form = document.getElementById('hp-form'), input = document.getElementById('hp-in');
+  function first() { return String((JOB_CTX && JOB_CTX.job.cleaner) || '').trim().split(/\s+/)[0] || ''; }
+  function post(path, body) { return fetch(api + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); }); }
+
+  // -- chat --
+  function render(typing) {
+    msgs.innerHTML = '';
+    CHAT.forEach(function (m) { msgs.appendChild(el('div', 'hp-msg ' + m.role, m.text)); });
+    if (typing) msgs.appendChild(el('div', 'hp-msg helper typing', '…'));
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+  function showChips(on) {
+    chips.innerHTML = '';
+    if (!on) return;
+    LANGS.forEach(function (l) {
+      var b = el('button', 'hp-chip', l[1]); b.type = 'button';
+      b.onclick = function () { showChips(false); setLang({ code: l[0], name: l[1] }); send(l[1]); };
+      chips.appendChild(b);
+    });
+  }
+  function progress() {
+    var p = { done: [], partly: [], todo: [], optional: [] };
+    try { SECTIONS.forEach(function (s) { var st = sectionState(s); if (st === 'done') p.done.push(s.name); else if (st === 'part') p.partly.push(s.name); else if (st === 'todo') p.todo.push(s.name); else p.optional.push(s.name); }); } catch (e) {}
+    return p;
+  }
+  function send(text) {
+    text = String(text || '').trim();
+    if (!text || busy) return;
+    busy = true;
+    CHAT.push({ role: 'cleaner', text: text }); render(true);
+    post('/chat', { messages: CHAT.map(function (m) { return { role: m.role, text: m.text }; }), lang: LANG, progress: progress() })
+      .then(function (d) {
+        CHAT.push({ role: 'helper', text: (d && d.reply) || 'Sorry, something went wrong. Please try again.' });
+        if (d && d.language && (!LANG || d.language.code !== LANG.code)) setLang(d.language);
+      })
+      .catch(function () { CHAT.push({ role: 'helper', text: 'No signal? Your report still saves on this phone. Try again in a moment.' }); })
+      .then(function () { busy = false; render(false); });
+  }
+  form.onsubmit = function (e) { e.preventDefault(); var t = input.value; input.value = ''; send(t); };
+  // Photos in the chat (e.g. the state of the unit on arrival): shrunk on the phone,
+  // saved with this clean, attached to the report when it's submitted.
+  function shrink(file) {
+    return new Promise(function (resolve) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        var k = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        resolve({ dataBase64: c.toDataURL('image/jpeg', 0.85), contentType: 'image/jpeg', filename: file.name });
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); var r = new FileReader(); r.onload = function () { resolve({ dataBase64: r.result, contentType: file.type, filename: file.name }); }; r.readAsDataURL(file); };
+      img.src = url;
+    });
+  }
+  document.getElementById('hp-photo').onchange = function (e) {
+    var files = Array.prototype.slice.call(e.target.files || []); e.target.value = '';
+    if (!files.length || busy) return;
+    busy = true; CHAT.push({ role: 'cleaner', text: '📷 Sending ' + files.length + ' photo' + (files.length > 1 ? 's' : '') + '…' }); render(false);
+    var ok = 0;
+    files.reduce(function (p, f) { return p.then(function () { return shrink(f).then(function (ph) { return post('/photo', ph).then(function (d) { if (d && d.id) ok++; }); }); }).catch(function () {}); }, Promise.resolve())
+      .then(function () {
+        CHAT.pop(); busy = false;
+        if (!ok) { CHAT.push({ role: 'helper', text: 'The photos didn’t send. Please check your signal and try again.' }); render(false); return; }
+        send('📷 [sent ' + ok + ' photo' + (ok > 1 ? 's' : '') + ']');
+      });
+  };
+  function open() { panel.classList.remove('hidden'); fab.classList.add('hidden'); render(false); }
+  function close() { panel.classList.add('hidden'); fab.classList.remove('hidden'); }
+  fab.onclick = open;
+  document.getElementById('hp-close').onclick = close;
+  document.getElementById('hp-lang').onclick = function () { showChips(!chips.children.length); };
+
+  // -- language: the whole report in the cleaner's language --
+  function setLang(l) {
+    LANG = l; window.HELPER_LANG = l;
+    post('/language', l).catch(function () {});
+    translatePage();
+  }
+  function skip(n) {
+    for (var p = n.parentNode; p; p = p.parentNode) {
+      if (!p.tagName) continue;
+      if (/^(SCRIPT|STYLE|TEXTAREA)$/.test(p.tagName)) return true;
+      // Not translated: chat bubbles (already in their language), language names, the brand, place names.
+      if (p.classList && (p.classList.contains('hp-msg') || p.classList.contains('hp-chip') || p.classList.contains('brand') || p.classList.contains('notr'))) return true;
+    }
+    return false;
+  }
+  function srcOf(n) {
+    var o = ORIG.get(n);
+    if (o !== undefined) {
+      var t = TR[o.trim()];
+      if (n.nodeValue !== o && !(t && n.nodeValue === o.replace(o.trim(), t))) { o = n.nodeValue; ORIG.set(n, o); }
+      return o;
+    }
+    ORIG.set(n, n.nodeValue); return n.nodeValue;
+  }
+  function wanted(s) { return s.length > 1 && s.length <= 600 && /[A-Za-z]{2}/.test(s); }
+  var asking = false;
+  function translatePage() {
+    if (!LANG) return;
+    var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null), nodes = [], n;
+    while ((n = w.nextNode())) if (!skip(n) && n.nodeValue.trim()) nodes.push(n);
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('input[placeholder], textarea[placeholder]'));
+    boxes.forEach(function (i) { if (!PH.has(i)) PH.set(i, i.placeholder); });
+    if (LANG.code === 'en') {
+      nodes.forEach(function (x) { var o = ORIG.get(x); if (o !== undefined && x.nodeValue !== o) x.nodeValue = o; });
+      boxes.forEach(function (i) { i.placeholder = PH.get(i); });
+      return;
+    }
+    function apply() {
+      nodes.forEach(function (x) { var o = srcOf(x), s = o.trim(); if (TR[s]) { var v = o.replace(s, TR[s]); if (x.nodeValue !== v) x.nodeValue = v; } });
+      boxes.forEach(function (i) { var s = PH.get(i).trim(); if (TR[s]) i.placeholder = TR[s]; });
+    }
+    var need = {};
+    nodes.forEach(function (x) { var s = srcOf(x).trim(); if (wanted(s) && !(s in TR)) need[s] = 1; });
+    boxes.forEach(function (i) { var s = PH.get(i).trim(); if (wanted(s) && !(s in TR)) need[s] = 1; });
+    var list = Object.keys(need).slice(0, 300);
+    apply();
+    if (!list.length || asking) return;
+    asking = true;
+    post('/translate', { lang: LANG, strings: list }).then(function (d) {
+      var m = (d && d.map) || {}; list.forEach(function (s) { TR[s] = m[s] || s; });
+    }).catch(function () { list.forEach(function (s) { TR[s] = s; }); }).then(function () { asking = false; translatePage(); });
+  }
+  var t = null;
+  new MutationObserver(function () { if (!LANG || LANG.code === 'en') return; clearTimeout(t); t = setTimeout(translatePage, 250); })
+    .observe(document.body, { childList: true, subtree: true, characterData: true });
+
+  // -- start once the cleaner has arrived --
+  var wait = setInterval(function () {
+    if (!JOB_CTX || !JOB_CTX.job || !JOB_CTX.job.arrivedAt || started) return;
+    started = true; clearInterval(wait);
+    CHAT = (JOB_CTX.chat || []).slice();
+    if (JOB_CTX.lang) { LANG = JOB_CTX.lang; window.HELPER_LANG = LANG; translatePage(); }
+    fab.classList.remove('hidden');
+    if (!CHAT.length && LANG) {
+      // Their language is known from an earlier clean: the helper greets them in it.
+      open(); busy = true; render(true);
+      post('/chat', { messages: [], start: true, lang: LANG, progress: progress() })
+        .then(function (d) { CHAT.push({ role: 'helper', text: (d && d.reply) || ('Hi ' + (first() || 'there') + '! 👋') }); })
+        .catch(function () { CHAT.push({ role: 'helper', text: 'Hi ' + (first() || 'there') + '! 👋' }); })
+        .then(function () { busy = false; render(false); });
+    } else if (!CHAT.length) {
+      CHAT.push({ role: 'helper', text: 'Hi ' + (first() || 'there') + '! 👋 Welcome to ' + JOB_CTX.job.place + '. I\'m your helper today. Which language would you like to use?' });
+      showChips(true); open();
+    }
+  }, 700);
+})();
 </script>
 </body>
 </html>

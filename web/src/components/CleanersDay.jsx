@@ -53,17 +53,19 @@ export default function CleanersDay({ onClose, onOpenUnit }) {
             <h3>{name ? `🧹 ${name}` : '⚠️ No cleaner allocated'} <span className="muted small">{groups[name].length} clean{groups[name].length === 1 ? '' : 's'}</span></h3>
             {groups[name].map((j) => (
               <button key={j.key} className="cd-job" onClick={() => onOpenUnit && j.unitId && onOpenUnit(j.unitId)}>
-                <span className="cd-time">{j.time}</span>
+                <span className="cd-time">{j.time}{j.seq && j.dayCount > 1 ? <span className="muted small"> #{j.seq}</span> : null}</span>
                 <span className="cd-main">
                   <b>{j.place}</b>
                   <span className={`cd-kind ${j.kind}`}>{j.label}</span>
                   <span className="small">👤 {j.guestName || '—'}{j.ref ? <span className="muted"> · {j.ref}</span> : null}</span>
                   {j.notes.map((n, i) => <span key={i} className="small cd-note">📋 {n}</span>)}
+                  {j.condition && <span className="small cd-note">🔎 On arrival: {j.condition}</span>}
                   {j.timeFrom === 'notes' && <span className="muted small">Start time taken from the checkout notes.</span>}
                 </span>
                 {j.cleaner && (
                   <span className="cd-status small">
-                    {j.arrivedAt ? <span className="cd-sent on">🟢 Arrived {hm(j.arrivedAt)}</span>
+                    {j.reportDone ? <span className="cd-sent on">✅ Report sent</span>
+                      : j.arrivedAt ? <span className="cd-sent on">🟢 Arrived {hm(j.arrivedAt)}</span>
                       : j.alertedAt ? <span className="cd-late">🔴 Not arrived</span>
                         : j.nudgedAt ? <span className="cd-late">🟠 Late: asked if all is well</span> : null}
                     {j.reminded && <span className="cd-sent" title="The night-before WhatsApp was sent">✓ Reminded</span>}

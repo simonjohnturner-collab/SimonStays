@@ -377,7 +377,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
                 list.forEach((ph) => { const k = ph.fieldId || ''; (g[k] = g[k] || []).push(ph); });
                 return Object.entries(g).map(([fid, photos]) => (
                   <div className="sub-photos" key={fid || 'photos'}>
-                    <div className="ans-label">{fid ? labelFor(fid, labelById) : 'Photos'} ({photos.length})</div>
+                    <div className="ans-label">{fid === 'arrival_photos' ? '📷 On arrival (sent in the helper chat)' : fid ? labelFor(fid, labelById) : 'Photos'} ({photos.length})</div>
                     <Gallery photos={photos} />
                   </div>
                 ));
@@ -535,14 +535,18 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
                       }
                       if (Object.prototype.hasOwnProperty.call(answers, key)) {
                         doneAns.add(key);
-                        rows.push(<div key={key} className="ans-row"><div className="ans-label">{f.label}</div><div className="ans-val">{formatAnswer(answers[key])}</div></div>);
+                        const orig = answers._original && answers._original[key];
+                        rows.push(<div key={key} className="ans-row"><div className="ans-label">{f.label}</div><div className="ans-val">{formatAnswer(answers[key])}{orig ? <div className="muted small">In the cleaner’s words: {orig}</div> : null}</div></div>);
                       }
                     });
                   });
                 });
                 // Any answers not covered by the template (e.g. date) go up top.
-                Object.entries(answers).forEach(([k, v]) => { if (!doneAns.has(k)) rows.unshift(<div key={'x-' + k} className="ans-row"><div className="ans-label">{known[k] || labelFor(k, labelById)}</div><div className="ans-val">{formatAnswer(v)}</div></div>); });
+                // (Keys starting with "_" are bookkeeping: the cleaner's language, the clean, originals.)
+                Object.entries(answers).forEach(([k, v]) => { if (!doneAns.has(k) && !k.startsWith('_')) rows.unshift(<div key={'x-' + k} className="ans-row"><div className="ans-label">{known[k] || labelFor(k, labelById)}</div><div className="ans-val">{formatAnswer(v)}</div></div>); });
                 const orphan = (sel.photos || []).filter((ph) => !usedPh.has(ph.id));
+                if (answers._arrival) rows.unshift(<div key="x-arrival" className="ans-row"><div className="ans-label">On arrival</div><div className="ans-val">{answers._arrival.arrivedAt ? `Arrived ${new Date(answers._arrival.arrivedAt).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Johannesburg' })}` : ''}{answers._arrival.condition ? `${answers._arrival.arrivedAt ? ' · ' : ''}${answers._arrival.condition}` : ''}</div></div>);
+                if (answers._lang) rows.unshift(<div key="x-lang" className="muted small" style={{ margin: '0 0 8px' }}>🌐 Filled in by the cleaner in another language ({answers._lang}); typed answers are shown in English.</div>);
                 return (<><div className="sub-answers">{rows}</div>{orphan.length > 0 && groupPhotos(orphan)}</>);
               }
 
@@ -550,7 +554,7 @@ function Submissions({ properties, labelById, forms, initialSubmissionId }) {
               return (
                 <>
                   <div className="sub-answers">
-                    {Object.entries(answers).map(([fid, val]) => (
+                    {Object.entries(answers).filter(([fid]) => !fid.startsWith('_')).map(([fid, val]) => (
                       <div key={fid} className="ans-row"><div className="ans-label">{known[fid] || labelFor(fid, labelById)}</div><div className="ans-val">{formatAnswer(val)}</div></div>
                     ))}
                   </div>

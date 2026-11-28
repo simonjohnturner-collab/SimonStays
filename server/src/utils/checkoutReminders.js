@@ -45,11 +45,13 @@ function buildMessage(job, iso, now = new Date()) {
     `👤 Guest: ${job.guestName || '—'}`,
   ];
   if (job.notes.length) lines.push(`📋 ${job.notes.join(' · ')}`);
+  if (job.dayCount > 1) lines.push(`🔢 Clean ${job.seq} of ${job.dayCount}${job.seq === 1 ? ': start with this one' : ''}`);
   lines.push('', `When you arrive, open your clean report and tap "I've arrived": ${jobs.jobLink(job.key)}`, '', 'Thank you!');
   const body = lines.join('\n');
   const contentVariables = {
     1: firstName(job.cleaner), 2: whenOf(iso, now), 3: oneLine(`${job.label} at ${job.place}`, 200),
-    4: job.time, 5: oneLine(job.guestName, 100), 6: oneLine(job.notes.join(' · '), 700),
+    4: job.time, 5: oneLine(job.guestName, 100),
+    6: oneLine([...(job.dayCount > 1 ? [`Clean ${job.seq} of ${job.dayCount}${job.seq === 1 ? ': start with this one' : ''}`] : []), ...job.notes].join(' · '), 700),
     7: jobs.jobToken(job.key),
   };
   return { body, contentVariables };

@@ -1648,3 +1648,5 @@ button.bm-cancel:hover { background: #fdeaea; }
 .cd-status { display:flex; flex-direction:column; align-items:flex-end; gap:2px; white-space:nowrap; }
 .cd-late { color:#b45309; font-weight:700; }
 @media (max-width: 640px) { .cd-status { grid-column:2; align-items:flex-start; } }
+
+.sp-lang { margin-top:6px; }

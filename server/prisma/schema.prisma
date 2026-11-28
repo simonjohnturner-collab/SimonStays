@@ -88,6 +88,10 @@ model ServiceProvider {
   phone       String?
   notes       String?
   propertyIds Json     @default("[]") // ids of properties this provider works in
+  // A cleaner's language for their report and helper, once they've confirmed it.
+  language            String? // e.g. 'zu'
+  languageName        String? // e.g. 'isiZulu'
+  languageConfirmedAt DateTime?
   unitIds     Json     @default("[]") // (dormant) previously per-unit allocation
   createdAt   DateTime @default(now())
 
@@ -516,6 +520,9 @@ model Photo {
   hostId      String?
   hostProfile Host?     @relation("HostPhotos", fields: [hostId], references: [id], onDelete: Cascade)
   fieldId     String? // which form question this photo answers
+  // …or was sent in the cleaning helper chat on arrival (the clean's key), and is
+  // attached to that clean's report when it's submitted.
+  cleanJobKey String?
   data        Bytes // resized JPEG/PNG bytes
   contentHash String? // SHA-256 of the uploaded form photo, so a repeat isn't stored twice
   contentType String
@@ -1026,9 +1033,26 @@ model CleanArrival {
   arrivedAt DateTime?
   nudgedAt  DateTime? // the "you haven't told us you're on site" WhatsApp
   alertedAt DateTime? // the host was told they hadn't arrived
+  lang      String? // the language the cleaner chose for the report and helper (e.g. 'zu')
+  langName  String? // its name as the cleaner sees it (e.g. 'isiZulu')
+  chat      Json? // the helper conversation: [{ role: 'cleaner' | 'helper', text, at }]
+  condition String? // how the cleaner found the unit on arrival, in English (from the helper chat)
   createdAt DateTime  @default(now())
 
   @@index([date])
+}
+
+// Text translated by Claude, saved so each string is translated once per language
+// (the cleaner's report in their language; the shopfront later).
+model Translation {
+  id        String   @id @default(uuid())
+  lang      String // target language code, e.g. 'zu', 'af', 'en'
+  srcHash   String // sha256 of the source text
+  src       String
+  text      String
+  createdAt DateTime @default(now())
+
+  @@unique([lang, srcHash])
 }
 
 // An invoice (PDF or image) attached to a reduced deposit refund as evidence.

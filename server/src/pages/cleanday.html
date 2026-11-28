@@ -43,13 +43,13 @@
     if (!d.jobs.length) app.appendChild(el('p', 'muted', 'You have no cleans this day.'));
     d.jobs.forEach(function(j){
       var a = el('a', 'job'); a.href = j.link;
-      a.appendChild(el('div', 'time', j.time));
+      a.appendChild(el('div', 'time', (j.seq ? j.seq + '. ' : '') + j.time));
       var m = el('div');
       m.appendChild(el('div', 'place', j.place));
       m.appendChild(el('span', 'kind ' + j.kind, j.label));
       if (j.guestName) m.appendChild(el('div', 'muted', 'Guest: ' + j.guestName));
       (j.notes || []).forEach(function(n){ m.appendChild(el('div', 'muted', '📋 ' + n)); });
-      m.appendChild(j.arrivedAt ? el('div', 'on', '✓ Arrived ' + hm(j.arrivedAt)) : el('div', 'go', 'Tap when you arrive →'));
+      m.appendChild(j.reportDone ? el('div', 'on', '✓ Report sent') : j.arrivedAt ? el('div', 'on', '✓ Arrived ' + hm(j.arrivedAt)) : el('div', 'go', 'Tap when you arrive →'));
       a.appendChild(m); app.appendChild(a);
     });
   }).catch(function(e){ app.textContent = ''; app.appendChild(el('h1', null, 'This link isn’t valid')); app.appendChild(el('p', 'muted', e.message || '')); });

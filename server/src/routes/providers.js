@@ -8,7 +8,11 @@ const router = express.Router();
 router.use(authHost);
 
 function fmt(p) {
-  return { id: p.id, name: p.name, role: p.role, phone: p.phone || '', notes: p.notes || '', propertyIds: Array.isArray(p.propertyIds) ? p.propertyIds : [] };
+  return {
+    id: p.id, name: p.name, role: p.role, phone: p.phone || '', notes: p.notes || '', propertyIds: Array.isArray(p.propertyIds) ? p.propertyIds : [],
+    // Confirmed by the cleaner in their report's helper chat.
+    language: p.language || null, languageName: p.languageName || null, languageConfirmedAt: p.languageConfirmedAt || null,
+  };
 }
 function clean(b) {
   return {

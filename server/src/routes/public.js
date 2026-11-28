@@ -786,7 +786,25 @@ router.post('/forms/:id/finalize', async (req, res, next) => {
     const missing = reqPhotoFields.filter((f) => !hasFor(f.id)).map((f) => f.label);
     if (missing.length) return res.status(400).json({ error: 'photos_required', message: 'Please add the required photos.', missing });
     if (sub.status === 'incomplete') await prisma.formSubmission.update({ where: { id: sub.id }, data: { status: 'new' } });
+    // Opened from the cleaner's link: bring in the photos sent in the helper chat
+    // and how they found the unit on arrival.
+    const jobKey = sub.answers && sub.answers._job;
+    if (jobKey) {
+      try {
+        await prisma.photo.updateMany({ where: { cleanJobKey: jobKey, formSubmissionId: null }, data: { formSubmissionId: sub.id } });
+        const arr = await prisma.cleanArrival.findUnique({ where: { jobKey }, select: { condition: true, arrivedAt: true } });
+        if (arr && (arr.condition || arr.arrivedAt)) {
+          await prisma.formSubmission.update({ where: { id: sub.id }, data: { answers: { ...sub.answers, _arrival: { condition: arr.condition || null, arrivedAt: arr.arrivedAt || null } } } });
+        }
+      } catch (e) { console.error('[clean] arrival details not attached', sub.id, e.message); }
+    }
     res.json({ ok: true });
+
+    // Filled in another language: what the cleaner typed is turned into English
+    // for the host (originals kept), after responding.
+    if (sub.answers && sub.answers._lang && sub.answers._lang !== 'en') {
+      require('../utils/translate').reportToEnglish(sub.id).catch((e) => console.error('[translate] report failed', sub.id, e.message));
+    }
 
     // Fire-and-forget: if this clean has a purchase receipt photo, read it with
     // the AI receipt analyzer (after responding, so the cleaner isn't kept waiting).
@@ -883,6 +901,7 @@ function sniffImage(buf) {
   return null;
 }
 
+router.decodeFormPhoto = (body) => decodeFormPhoto(body);
 function decodeFormPhoto(body) {
   let { dataBase64, contentType } = body || {};
   if (!dataBase64) return null;

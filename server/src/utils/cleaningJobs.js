@@ -68,7 +68,8 @@ function timeInNotes(text) {
 const placeOf = (b) => [b.unit?.property?.name, b.unit?.name && `Unit ${b.unit.name}`].filter(Boolean).join(' · ') || 'the unit';
 const hostIdOf = (b) => b.hostId || b.unit?.property?.hostId || null;
 const ownedBy = (hostId) => ({ OR: [{ hostId }, { unit: { property: { hostId } } }] });
-const UNIT = { unit: { include: { property: { select: { name: true, hostId: true } } } } };
+const UNIT = { unit: { include: { property: { select: { name: true, hostId: true, checkInTime: true } } } } };
+const checkInOf = (b) => (b.unit && (b.unit.checkInTime || (b.unit.property && b.unit.property.checkInTime))) || '15:00';
 
 function checkoutJob(b, arrivals) {
   const fromNotes = timeInNotes(b.checkoutNotes);
@@ -76,14 +77,15 @@ function checkoutJob(b, arrivals) {
   const notes = [];
   if (b.lateCheckOut) notes.push(`Late checkout: the guest leaves by ${LATE_TIME}`);
   if (b.extraMattress) notes.push('Collect the extra mattress');
-  if (arrivals.has(b.unitId)) notes.push('A new guest checks in today');
+  const arrivalToday = arrivals.has(b.unitId);
+  if (arrivalToday) notes.push(`⚡ Do this clean first: a new guest checks in from ${checkInOf(b)}`);
   if (b.checkoutNotes && b.checkoutNotes.trim()) notes.push(b.checkoutNotes.trim());
   return {
     key: `co-${b.id}`, kind: 'checkout', label: 'Checkout clean', date: isoDay(shownCheckOut(b)),
     bookingId: b.id, cleanId: null, hostId: hostIdOf(b), unitId: b.unitId, propertyId: b.unit?.propertyId || null,
     place: placeOf(b), guestName: b.guestName || null, ref: b.ref || null,
     cleaner: b.cleaner || null, time, timeFrom: fromNotes ? 'notes' : b.lateCheckOut ? 'late' : 'default',
-    notes, reminded: !!b.checkoutReminderAt,
+    notes, reminded: !!b.checkoutReminderAt, arrivalToday,
   };
 }
 
@@ -98,7 +100,7 @@ function instayJob(c) {
     bookingId: b.id, cleanId: c.id, hostId: hostIdOf(b), unitId: b.unitId, propertyId: b.unit?.propertyId || null,
     place: placeOf(b), guestName: b.guestName || null, ref: b.ref || null,
     cleaner: c.cleaner || null, time: DEFAULT_TIME, timeFrom: 'default',
-    notes, reminded: !!c.reminderAt,
+    notes, reminded: !!c.reminderAt, arrivalToday: false,
   };
 }
 
@@ -122,9 +124,40 @@ async function jobsForDay(iso, { hostId = null } = {}) {
     j.arrivedAt = a ? a.arrivedAt : null;
     j.nudgedAt = a ? a.nudgedAt : null;
     j.alertedAt = a ? a.alertedAt : null;
+    j.condition = a ? a.condition || null : null;
     j.link = jobLink(j.key);
   }
-  return jobs.sort((a, b) => a.time.localeCompare(b.time) || a.place.localeCompare(b.place));
+  // Which cleans already have their report in.
+  const keys = jobs.map((j) => j.key);
+  const sent = keys.length ? await prisma.formSubmission.findMany({
+    where: { type: 'clean', status: { not: 'incomplete' }, OR: keys.map((k) => ({ answers: { path: ['_job'], equals: k } })) },
+    select: { answers: true },
+  }) : [];
+  const done = new Set(sent.map((s) => s.answers && s.answers._job));
+  jobs.forEach((j) => { j.reportDone = done.has(j.key); });
+  // The order: by start time, and among cleans starting at the same time, a unit
+  // with a guest arriving today first (that's the pressure point). A late-checkout
+  // unit can't jump ahead: the cleaner can't get in before its start time.
+  jobs.sort(byPriority);
+  // Each cleaner's clean N of M for the day.
+  const per = {};
+  jobs.forEach((j) => {
+    if (!j.cleaner) { j.seq = null; j.dayCount = null; return; }
+    const k = `${j.hostId}|${String(j.cleaner).trim().toLowerCase()}`;
+    j.seq = (per[k] = (per[k] || 0) + 1);
+  });
+  jobs.forEach((j) => { if (j.cleaner) j.dayCount = per[`${j.hostId}|${String(j.cleaner).trim().toLowerCase()}`]; });
+  return jobs;
+}
+function byPriority(a, b) {
+  return a.time.localeCompare(b.time) || (b.arrivalToday ? 1 : 0) - (a.arrivalToday ? 1 : 0) || a.place.localeCompare(b.place);
+}
+
+// A cleaner's cleans on the day of `job`, in order (for the tabs and the helper).
+async function dayOf(job) {
+  if (!job.cleaner) return [job];
+  const who = String(job.cleaner).trim().toLowerCase();
+  return (await jobsForDay(job.date, { hostId: job.hostId })).filter((j) => String(j.cleaner || '').trim().toLowerCase() === who);
 }
 
 // One clean by its key (from a cleaner's link), with its day.
@@ -163,4 +196,4 @@ async function checkoutJobOf(bookingId) {
   return { iso, job: checkoutJob(b, new Set(arriving.map((a) => a.unitId))) };
 }
 
-module.exports = { jobsForDay, checkoutJobOf, jobByKey, markArrived, jobLink, jobToken, keyFromJobToken, dayLink, dayToken, fromDayToken, timeInNotes, todaySAST, addDays, DEFAULT_TIME, LATE_TIME };
+module.exports = { jobsForDay, dayOf, checkoutJobOf, jobByKey, markArrived, jobLink, jobToken, keyFromJobToken, dayLink, dayToken, fromDayToken, timeInNotes, todaySAST, addDays, DEFAULT_TIME, LATE_TIME };

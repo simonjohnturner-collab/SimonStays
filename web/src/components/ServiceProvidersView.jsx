@@ -71,6 +71,13 @@ export default function ServiceProvidersView({ onClose, properties = [], onChang
               <button className="del" title="Remove" onClick={() => removeRow(r)}>🗑</button>
             </div>
             <input className="sp-notes" placeholder="Notes (rates, availability, speciality…)" value={r.notes || ''} onChange={(e) => editLocal(r.id, { notes: e.target.value })} onBlur={() => saveRow(r)} />
+            {r.role === 'Cleaner' && (
+              <div className="small sp-lang">
+                {r.language
+                  ? <>🌐 Language: <b>{r.languageName || r.language}</b> <span className="muted">✓ confirmed by {r.name.split(' ')[0]}{r.languageConfirmedAt ? ` on ${new Date(r.languageConfirmedAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}</span></>
+                  : <span className="muted">🌐 Language not confirmed yet: the cleaning helper asks on their next clean.</span>}
+              </div>
+            )}
             {properties.length > 0 && (
               <div className="sp-units">
                 <span className="sp-units-label">Works at:</span>
