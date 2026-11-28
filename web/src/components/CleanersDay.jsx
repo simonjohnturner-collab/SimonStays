@@ -4,6 +4,7 @@ import { api } from '../api.js';
 // Who's cleaning where on a day: checkout and in-stay cleans grouped by cleaner,
 // with the start time, guest and notes. Step forward or back a day at a time.
 const addDays = (iso, n) => new Date(Date.parse(iso + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+const hm = (t) => new Date(t).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Johannesburg' });
 const fmtDay = (iso) => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
 
 export default function CleanersDay({ onClose, onOpenUnit }) {
@@ -60,12 +61,19 @@ export default function CleanersDay({ onClose, onOpenUnit }) {
                   {j.notes.map((n, i) => <span key={i} className="small cd-note">📋 {n}</span>)}
                   {j.timeFrom === 'notes' && <span className="muted small">Start time taken from the checkout notes.</span>}
                 </span>
-                {j.cleaner && <span className={`cd-sent small${j.reminded ? ' on' : ''}`} title={j.reminded ? 'The night-before WhatsApp was sent' : 'WhatsApp goes out at 19:00 the night before'}>{j.reminded ? '✓ Reminded' : ''}</span>}
+                {j.cleaner && (
+                  <span className="cd-status small">
+                    {j.arrivedAt ? <span className="cd-sent on">🟢 Arrived {hm(j.arrivedAt)}</span>
+                      : j.alertedAt ? <span className="cd-late">🔴 Not arrived</span>
+                        : j.nudgedAt ? <span className="cd-late">🟠 Late: asked if all is well</span> : null}
+                    {j.reminded && <span className="cd-sent" title="The night-before WhatsApp was sent">✓ Reminded</span>}
+                  </span>
+                )}
               </button>
             ))}
           </section>
         ))}
-        <p className="muted small">Cleaners get a WhatsApp at 19:00 the night before each clean: the guest, the kind of clean, the start time (10:00, or 13:30 after a late checkout, unless the checkout notes give a time) and the notes.</p>
+        <p className="muted small">Cleaners get a WhatsApp at 19:00 the night before each clean with the guest, the kind of clean, the start time (10:00, or 13:30 after a late checkout, unless the checkout notes give a time), the notes and a link to their report. If anything changes overnight they get a summary at 06:30. On arrival they tap “I’ve arrived” in the report; 15 minutes late they’re asked if all is well, and at 30 minutes you’re told.</p>
       </div>
     </div>
   );

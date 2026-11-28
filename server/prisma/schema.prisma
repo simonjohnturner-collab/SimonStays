@@ -999,6 +999,38 @@ model DepositRefund {
   updatedAt   DateTime  @updatedAt
 }
 
+// What a cleaner was told about a day's cleans: the 19:00 reminder ('evening') and,
+// if anything changed overnight, the 06:30 summary ('morning'). The morning run
+// compares the evening snapshot with the day's cleans to find what changed.
+model CleanerNotice {
+  id      String   @id @default(uuid())
+  hostId  String
+  date    String // YYYY-MM-DD of the cleans
+  cleaner String // the cleaner's name, lower-cased (as matched on bookings)
+  kind    String // 'evening' | 'morning'
+  jobs    Json // [{ key, kind, label, place, time, guestName, notes }]
+  sentAt  DateTime @default(now())
+
+  @@unique([hostId, date, cleaner, kind])
+  @@index([date])
+}
+
+// A cleaner arriving for a clean (from the link in their WhatsApp), and the
+// late nudges: to the cleaner 15 minutes after the start, to the host at 30.
+model CleanArrival {
+  id        String    @id @default(uuid())
+  jobKey    String    @unique // co-<bookingId> | in-<bookingId>-<YYYY-MM-DD>
+  hostId    String
+  date      String // YYYY-MM-DD of the clean
+  cleaner   String?
+  arrivedAt DateTime?
+  nudgedAt  DateTime? // the "you haven't told us you're on site" WhatsApp
+  alertedAt DateTime? // the host was told they hadn't arrived
+  createdAt DateTime  @default(now())
+
+  @@index([date])
+}
+
 // An invoice (PDF or image) attached to a reduced deposit refund as evidence.
 model RefundFile {
   id          String        @id @default(uuid())

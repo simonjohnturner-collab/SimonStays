@@ -95,6 +95,17 @@
   .done { background:#fff; border:1px solid var(--line); border-radius:14px; padding:28px 20px; text-align:center; margin-top:20px; }
   .done .tick { font-size:46px; } .done h2 { margin:8px 0 6px; } .done p { color:var(--muted); margin:0 0 18px; }
   .hidden { display:none; }
+  /* Opened from a cleaner's WhatsApp link: the clean, and "I've arrived" first */
+  .jobcard { background:#fff; border:1px solid #d9e6dc; border-radius:14px; padding:16px; margin-bottom:16px; }
+  .jobcard .jk { display:inline-block; font-size:12px; font-weight:700; border-radius:999px; padding:2px 10px; background:#e6f0fa; color:#24507a; }
+  .jobcard .jk.instay { background:#fbf0dc; color:#7a5212; }
+  .jobcard h2 { font-size:20px; margin:8px 0 2px; }
+  .jobcard .jt { font-size:16px; font-weight:700; margin:2px 0 6px; }
+  .jobcard .jn { font-size:14px; color:#4b5563; margin:2px 0; }
+  .jobcard .arrive { display:block; width:100%; margin-top:14px; padding:16px; font:inherit; font-size:18px; font-weight:800; color:#fff; background:#1a7a3a; border:0; border-radius:12px; cursor:pointer; }
+  .jobcard .arrive:disabled { opacity:.6; }
+  .jobcard .arrived { margin-top:10px; color:#1a7a3a; font-weight:700; }
+  .jobcard .other { display:block; margin-top:10px; font-size:14px; color:#1a7a3a; }
 </style>
 </head>
 <body>
@@ -104,6 +115,7 @@
   </div>
 
   <div class="wrap">
+    <div id="jobcard" class="jobcard hidden"></div>
     <form id="form">
       <div class="q"><label class="req" for="cleaner">Name of cleaner</label>
         <select id="cleaner" required><option value="">Select your name…</option></select>
@@ -151,6 +163,9 @@
     };
   })();
   var PROPS = [], TEMPLATE = null, UNIT = null;
+  // Opened from the cleaner's WhatsApp link (?job=): the clean is known, so the
+  // name, day, property and unit are filled in, and "I've arrived" comes first.
+  var JOB = new URLSearchParams(location.search).get('job'), JOB_CTX = null, UNITS_LOADED = false;
   var answers = {}, photoFiles = {}, rendered = [], SUBID = null;
   // Duplicate-clean guard: an existing clean for this unit + checkout day + cleaner.
   var DUP = null, DUP_CHOICE = null, EDITID = null;
@@ -761,7 +776,63 @@
       renderLiveSummary(); renderTodo();
     };
     document.getElementById('unit').onchange = function () { if (this.value) loadForm(this.value); checkDup(); };
+    UNITS_LOADED = true; applyJob();
   }).catch(function () { document.getElementById('prop').innerHTML = '<option value="">Could not load</option>'; });
+
+  // ---- The cleaner's link: the job card and "I've arrived" ----
+  function hm(t) { return new Date(t).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Johannesburg' }); }
+  function renderJobCard() {
+    var j = JOB_CTX.job, card = document.getElementById('jobcard');
+    card.innerHTML = ''; card.classList.remove('hidden');
+    card.appendChild(el('span', 'jk ' + j.kind, j.label));
+    card.appendChild(el('h2', null, j.place));
+    card.appendChild(el('div', 'jt', 'Start at ' + j.time + (j.date !== JOB_CTX.today ? ' · ' + new Date(j.date + 'T12:00:00Z').toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }) : '')));
+    if (j.guestName) card.appendChild(el('div', 'jn', '👤 Guest: ' + j.guestName));
+    (j.notes || []).forEach(function (n) { card.appendChild(el('div', 'jn', '📋 ' + n)); });
+    var form = document.getElementById('form');
+    if (j.arrivedAt) {
+      card.appendChild(el('div', 'arrived', '✓ You arrived at ' + hm(j.arrivedAt) + '. Fill in the report as you go.'));
+      form.classList.remove('hidden');
+    } else {
+      form.classList.add('hidden');
+      var b = el('button', 'arrive', "I've arrived"); b.type = 'button';
+      b.onclick = function () {
+        b.disabled = true; b.textContent = 'One moment…';
+        fetch('/public/cleaning/job/' + encodeURIComponent(JOB) + '/arrive', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (d) {
+          if (!d.arrivedAt) throw new Error();
+          j.arrivedAt = d.arrivedAt; renderJobCard(); window.scrollTo(0, 0);
+        }).catch(function () { b.disabled = false; b.textContent = "I've arrived"; alert('That didn’t go through. Please check your signal and try again.'); });
+      };
+      card.appendChild(b);
+      card.appendChild(el('div', 'jn', 'Tap this when you get to the unit. Your report opens straight after, and it saves as you go.'));
+    }
+    if (JOB_CTX.dayLink) { var a = el('a', 'other', 'See all your cleans for the day →'); a.href = JOB_CTX.dayLink; card.appendChild(a); }
+  }
+  function applyJob() {
+    if (!JOB_CTX || !UNITS_LOADED) return;
+    var j = JOB_CTX.job;
+    var cSel = document.getElementById('cleaner'), match = null;
+    for (var i = 0; i < cSel.options.length; i++) if (cSel.options[i].value.toLowerCase() === String(j.cleaner || '').toLowerCase()) match = cSel.options[i].value;
+    if (match) cSel.value = match;
+    else if (j.cleaner) { cSel.value = '__other'; var o = document.getElementById('cleaner-other'); o.style.display = 'block'; o.value = j.cleaner; }
+    document.getElementById('date').value = j.date;
+    var propSel = document.getElementById('prop'); propSel.value = JOB_CTX.propertyId || ''; if (propSel.onchange) propSel.onchange();
+    var unitSel = document.getElementById('unit'); unitSel.value = JOB_CTX.unitId || '';
+    if (unitSel.value) loadForm(unitSel.value);
+    checkDup();
+    // The clean is known: hide the pickers.
+    ['cleaner', 'date', 'prop', 'unit'].forEach(function (id) { var q = document.getElementById(id).closest('.q'); if (q) q.classList.add('hidden'); });
+  }
+  if (JOB) {
+    document.getElementById('form').classList.add('hidden');
+    fetch('/public/cleaning/job/' + encodeURIComponent(JOB)).then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.message); return d; }); })
+      .then(function (d) { JOB_CTX = d; renderJobCard(); applyJob(); })
+      .catch(function (e) {
+        var card = document.getElementById('jobcard'); card.classList.remove('hidden');
+        card.textContent = (e && e.message) || 'This link isn’t valid any more.';
+        document.getElementById('form').classList.remove('hidden'); JOB = null;
+      });
+  }
 
   // Default the checkout day to today (cleaners clean on the checkout day). Local
   // date, not UTC, so it's right for SA time near midnight.

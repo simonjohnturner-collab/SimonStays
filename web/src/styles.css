@@ -1644,3 +1644,7 @@ button.bm-cancel:hover { background: #fdeaea; }
 .repeat-box .rp-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 .repeat-box .rp-row label { display:flex; flex-direction:column; gap:2px; font-size:12px; color:var(--muted); font-weight:600; margin:0; min-width:0; }
 .repeat-box .rp-row select, .repeat-box .rp-row input { width:100%; min-width:0; box-sizing:border-box; }
+
+.cd-status { display:flex; flex-direction:column; align-items:flex-end; gap:2px; white-space:nowrap; }
+.cd-late { color:#b45309; font-weight:700; }
+@media (max-width: 640px) { .cd-status { grid-column:2; align-items:flex-start; } }

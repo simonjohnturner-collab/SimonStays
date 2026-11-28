@@ -38,6 +38,7 @@ app.use('/public/account/messages', require('./routes/guestMessages'));
 app.use('/public/thread', require('./routes/guestThread'));
 app.use('/public/rate', require('./routes/guestRating'));
 app.use('/public/deposit', require('./routes/guestDeposit'));
+app.use('/public/cleaning', require('./routes/cleanerJob'));
 app.use('/public/documents', require('./routes/documents').publicRouter);
 app.use('/public/account', require('./routes/guestAuth'));
 // Paygate PayWeb3 callbacks (notify + guest return) — public, verified with Paygate.
@@ -68,6 +69,25 @@ app.get(['/team/clean', '/clean', '/report/clean'], (req, res) => {
   res.setHeader('Content-Security-Policy', FORMS_CSP);
   res.setHeader('Cache-Control', 'no-cache, must-revalidate');
   res.type('html').send(cleanHtml);
+});
+// A cleaner's link from their WhatsApp: opens the clean report for that clean,
+// filled in, with "I've arrived" first. (The report page reads ?job=.)
+app.get('/team/job/:token', async (req, res) => {
+  try {
+    const jobs = require('./utils/cleaningJobs');
+    const key = jobs.keyFromJobToken(req.params.token);
+    const found = key && await jobs.jobByKey(key);
+    if (!found) return res.redirect(302, '/team/clean');
+    res.redirect(302, `/team/clean?host=${encodeURIComponent(found.job.hostId)}&job=${encodeURIComponent(req.params.token)}`);
+  } catch (e) { res.redirect(302, '/team/clean'); }
+});
+// All of a cleaner's cleans on a day (the link in the 06:30 change summary).
+const cleanDayHtml = fs.readFileSync(path.join(__dirname, 'pages/cleanday.html'), 'utf8');
+app.get('/team/day/:token', (req, res) => {
+  res.setHeader('Content-Security-Policy', FORMS_CSP);
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Robots-Tag', 'noindex');
+  res.type('html').send(cleanDayHtml);
 });
 app.get(['/team/repair', '/repair', '/report/repair'], (req, res) => {
   res.setHeader('Content-Security-Policy', FORMS_CSP);
@@ -363,6 +383,26 @@ if (require.main === module) {
       } catch (e) { console.error('[checkout-reminder] failed', e.message); }
     }, { timezone: 'Africa/Johannesburg' });
     console.log(`Checkout cleaner reminders scheduled: ${remindExpr} (Africa/Johannesburg)`);
+    // 06:30: a summary to each cleaner whose cleans changed since the 19:00 reminder
+    // (only if something changed). Override with CLEANER_CHANGES_CRON.
+    const morningExpr = process.env.CLEANER_CHANGES_CRON || '30 6 * * *';
+    if (cron.validate(morningExpr)) {
+      cron.schedule(morningExpr, async () => {
+        try {
+          const s = await checkoutReminders.runMorning();
+          console.log('[cleaner-changes]', JSON.stringify(s));
+        } catch (e) { console.error('[cleaner-changes] failed', e.message); }
+      }, { timezone: 'Africa/Johannesburg' });
+      console.log(`Cleaner change summaries scheduled: ${morningExpr} (Africa/Johannesburg)`);
+    }
+    // Every 5 minutes, 06:00-17:55: cleaners 15 min late without "I've arrived" are
+    // asked if all is well; at 30 min the host is told.
+    cron.schedule('*/5 6-17 * * *', async () => {
+      try {
+        const s = await checkoutReminders.runLateChecks();
+        if (s.nudged || s.alerted) console.log('[cleaner-late]', JSON.stringify(s));
+      } catch (e) { console.error('[cleaner-late] failed', e.message); }
+    }, { timezone: 'Africa/Johannesburg' });
   } else if (!checkoutReminders.enabled()) {
     console.warn('[checkout-reminder] NOT scheduled — set TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM to enable WhatsApp reminders.');
   }
