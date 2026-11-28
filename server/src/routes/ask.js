@@ -42,7 +42,10 @@ router.post('/', async (req, res, next) => {
     const property = await prisma.property.findUnique({ where: { id: String(b.propertyId || '') }, select: { id: true } });
     if (!property) return res.status(404).json({ error: 'not_found' });
     const unit = b.unitId ? await prisma.unit.findFirst({ where: { id: String(b.unitId), propertyId: property.id }, select: { id: true } }) : null;
-    const q = await askSimon.ask({ propertyId: property.id, unitId: unit ? unit.id : null, question, sessionId, guestAccountId: req.guestId || null });
+    const LANG_NAMES = { af: 'Afrikaans', zu: 'isiZulu', xh: 'isiXhosa', st: 'Sesotho', fr: 'French', de: 'German', pt: 'Portuguese', es: 'Spanish', zh: 'Mandarin Chinese (Simplified Chinese characters)' };
+    const lc = String((b.lang && b.lang.code) || '').toLowerCase();
+    const lang = LANG_NAMES[lc] ? { code: lc, name: LANG_NAMES[lc] } : null;
+    const q = await askSimon.ask({ propertyId: property.id, unitId: unit ? unit.id : null, question, sessionId, guestAccountId: req.guestId || null, lang });
     res.status(201).json({ question: out(q) });
   } catch (e) { next(e); }
 });

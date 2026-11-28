@@ -296,6 +296,17 @@
   .lightbox .x{ position:absolute; top:14px; right:18px; color:#fff; font-size:34px; }
   /* Guest account: header control, sign-in form, "my trips" */
   .acct-wrap{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  /* 🌐 Language menu */
+  .lang-wrap{ position:relative; }
+  .lang-btn{ font:inherit; font-size:14px; font-weight:600; color:var(--ink); background:#fff; border:1px solid var(--line); border-radius:999px; padding:7px 12px; cursor:pointer; white-space:nowrap; }
+  .lang-btn:hover{ border-color:var(--green); }
+  .lang-menu{ position:absolute; right:0; top:calc(100% + 6px); z-index:40; min-width:180px; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.12); padding:6px; display:none; }
+  .lang-menu.open{ display:block; }
+  .lang-menu button{ display:block; width:100%; text-align:left; font:inherit; font-size:15px; padding:9px 12px; background:none; border:0; border-radius:8px; cursor:pointer; color:var(--ink); }
+  .lang-menu button:hover{ background:#eef6f0; }
+  .lang-menu button.on{ font-weight:700; color:var(--green-d); }
+  .lang-menu .lang-note{ font-size:12px; color:var(--muted); padding:6px 12px 4px; }
+
   .acct-btn{ background:#eef1f4; color:var(--ink); border-radius:8px; padding:8px 14px; font-weight:600; font-size:14px; white-space:nowrap; }
   .acct-btn:hover{ background:#e2e6ea; }
   .acct-name{ font-size:14px; color:var(--ink); font-weight:600; white-space:nowrap; }
@@ -753,7 +764,7 @@
       text=(text||'').trim(); if(!text||busy) return;
       busy=true; items.push({ question:text, answer:'Simon is typing…' }); draw();
       try{
-        var r=await fetch(API+'/public/ask',{method:'POST',headers:headers(),body:JSON.stringify({ propertyId:p.id, unitId:u&&u.id, question:text, sessionId:sid })});
+        var r=await fetch(API+'/public/ask',{method:'POST',headers:headers(),body:JSON.stringify({ propertyId:p.id, unitId:u&&u.id, question:text, sessionId:sid, lang:(window.SS_LANG&&window.SS_LANG())||null })});
         var d=await r.json();
         items.pop();
         if(!r.ok){ busy=false; draw(); box.querySelector('#askMsg').innerHTML='<div class="msg err">'+esc(d.message||'Simon couldn’t answer just now. Please try again.')+'</div>'; return; }
@@ -2361,6 +2372,93 @@
     if(b && (q.get('paid') || q.get('payment')==='cancelled')) paymentReturn(b, q.get('payment')==='cancelled'); })();
   if(location.pathname==='/guestbook' || (location.pathname!=='/' && !location.search)) routeFromPath();
   load();
+})();
+</script>
+
+<script>
+// ---- 🌐 The shopfront in the visitor's language ----
+// The page's text is translated (once per language, saved on the server) and swapped
+// in place as the page renders. Left as they are: the brand, guest reviews, chat
+// messages, prices and anything marked .notr. The choice is remembered on this device.
+(function(){
+  var LANGS=[['en','English'],['af','Afrikaans'],['zu','isiZulu'],['xh','isiXhosa'],['st','Sesotho'],['fr','Français'],['de','Deutsch'],['es','Español'],['pt','Português'],['zh','中文']];
+  var KEY='ss_lang', LANG=null, TR={}, ORIG=new WeakMap(), PH=new WeakMap(), asking=false;
+  try{ var saved=localStorage.getItem(KEY); LANGS.forEach(function(l){ if(l[0]===saved) LANG={code:l[0],name:l[1]}; }); }catch(e){}
+  window.SS_LANG=function(){ return LANG&&LANG.code!=='en'?LANG:null; };
+  var wrap=document.createElement('div'); wrap.className='lang-wrap notr';
+  var btn=document.createElement('button'); btn.type='button'; btn.className='lang-btn'; btn.setAttribute('aria-haspopup','true'); btn.setAttribute('aria-label','Language');
+  var menu=document.createElement('div'); menu.className='lang-menu'; menu.setAttribute('role','menu');
+  function label(){ btn.textContent='🌐 '+(LANG?LANG.name:'English')+(asking?' …':'')+' ▾'; }
+  LANGS.forEach(function(l){
+    var b=document.createElement('button'); b.type='button'; b.textContent=l[1]; b.setAttribute('role','menuitem');
+    b.onclick=function(){ menu.classList.remove('open'); choose({code:l[0],name:l[1]}); };
+    menu.appendChild(b);
+  });
+  var note=document.createElement('div'); note.className='lang-note'; note.textContent='Translated automatically'; menu.appendChild(note);
+  btn.onclick=function(e){ e.stopPropagation(); Array.prototype.forEach.call(menu.querySelectorAll('button'),function(b){ b.classList.toggle('on', b.textContent===(LANG?LANG.name:'English')); }); menu.classList.toggle('open'); };
+  document.addEventListener('click',function(){ menu.classList.remove('open'); });
+  wrap.appendChild(btn); wrap.appendChild(menu);
+  var acct=document.querySelector('.acct-wrap'); if(acct) acct.insertBefore(wrap, acct.firstChild);
+  label();
+
+  // Put the page back in English (before switching language).
+  function restore(){
+    var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null), n;
+    while((n=w.nextNode())){ var o=ORIG.get(n); if(o!==undefined){ var t=TR[o.trim()]; if(n.nodeValue===o||(t&&n.nodeValue===o.replace(o.trim(),t))) n.nodeValue=o; } }
+    Array.prototype.forEach.call(document.querySelectorAll('input[placeholder],textarea[placeholder]'),function(i){ if(PH.has(i)) i.placeholder=PH.get(i); });
+  }
+  function choose(l){
+    restore(); TR={};
+    LANG=l.code==='en'?null:l;
+    try{ if(LANG) localStorage.setItem(KEY,l.code); else localStorage.removeItem(KEY); }catch(e){}
+    document.documentElement.lang=l.code;
+    label(); run();
+  }
+  var SKIP=/^(SCRIPT|STYLE|TEXTAREA|NOSCRIPT|CODE)$/;
+  function skip(n){
+    for(var p=n.parentNode;p&&p!==document;p=p.parentNode){
+      if(!p.tagName) continue;
+      if(SKIP.test(p.tagName)) return true;
+      var c=p.classList; if(!c) continue;
+      if(c.contains('notr')||c.contains('brand')||c.contains('bub')||c.contains('review')||c.contains('leaflet-container')||c.contains('lang-wrap')) return true;
+    }
+    return false;
+  }
+  function srcOf(n){
+    var o=ORIG.get(n);
+    if(o!==undefined){ var t=TR[o.trim()]; if(n.nodeValue!==o&&!(t&&n.nodeValue===o.replace(o.trim(),t))){ o=n.nodeValue; ORIG.set(n,o); } return o; }
+    ORIG.set(n,n.nodeValue); return n.nodeValue;
+  }
+  function wanted(s){ return s.length>1&&s.length<=3000&&/[A-Za-z]{2}/.test(s); }
+  function run(){
+    var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null), nodes=[], n;
+    while((n=w.nextNode())) if(n.nodeValue.trim()&&!skip(n)) nodes.push(n);
+    var boxes=Array.prototype.slice.call(document.querySelectorAll('input[placeholder],textarea[placeholder]')).filter(function(i){ return !skip(i.firstChild||i)&&!(i.closest&&i.closest('.notr,.bub')); });
+    boxes.forEach(function(i){ if(!PH.has(i)) PH.set(i,i.placeholder); });
+    if(!LANG){
+      nodes.forEach(function(x){ var o=ORIG.get(x); if(o!==undefined&&x.nodeValue!==o) x.nodeValue=o; });
+      boxes.forEach(function(i){ i.placeholder=PH.get(i); });
+      return;
+    }
+    var want=LANG.code;
+    nodes.forEach(function(x){ var o=srcOf(x), s=o.trim(); if(TR[s]){ var v=o.replace(s,TR[s]); if(x.nodeValue!==v) x.nodeValue=v; } });
+    boxes.forEach(function(i){ var s=PH.get(i).trim(); if(TR[s]) i.placeholder=TR[s]; });
+    if(asking) return;
+    var need={}; nodes.forEach(function(x){ var s=srcOf(x).trim(); if(wanted(s)&&!(s in TR)) need[s]=1; });
+    boxes.forEach(function(i){ var s=PH.get(i).trim(); if(wanted(s)&&!(s in TR)) need[s]=1; });
+    var list=Object.keys(need).slice(0,150);
+    if(!list.length) return;
+    asking=true; label();
+    fetch('/public/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lang:LANG,strings:list})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if(!LANG||LANG.code!==want) return; var m=(d&&d.map)||{}; list.forEach(function(s){ TR[s]=m[s]||s; }); })
+      .catch(function(){ list.forEach(function(s){ TR[s]=s; }); })
+      .then(function(){ asking=false; label(); run(); });
+  }
+  var t=null;
+  new MutationObserver(function(){ if(!LANG) return; clearTimeout(t); t=setTimeout(run,300); })
+    .observe(document.body,{childList:true,subtree:true,characterData:true});
+  if(LANG){ document.documentElement.lang=LANG.code; run(); }
 })();
 </script>
 </body>

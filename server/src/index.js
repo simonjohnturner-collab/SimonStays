@@ -39,6 +39,7 @@ app.use('/public/thread', require('./routes/guestThread'));
 app.use('/public/rate', require('./routes/guestRating'));
 app.use('/public/deposit', require('./routes/guestDeposit'));
 app.use('/public/cleaning', require('./routes/cleanerJob'));
+app.use('/public/translate', require('./routes/publicTranslate'));
 app.use('/public/documents', require('./routes/documents').publicRouter);
 app.use('/public/account', require('./routes/guestAuth'));
 // Paygate PayWeb3 callbacks (notify + guest return) — public, verified with Paygate.

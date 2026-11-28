@@ -5,8 +5,8 @@ const crypto = require('crypto');
 const prisma = require('../lib/prisma');
 const claude = require('./claude');
 
-const BATCH = 60;
-const MAX_LEN = 600;
+const BATCH = 40;
+const MAX_LEN = 600; // the cleaner's report; the shopfront allows listing descriptions (3000)
 const hash = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 // A language the caller asked for: { code: 'zu', name: 'isiZulu' }. Null if unusable.
@@ -24,7 +24,12 @@ const SCHEMA = {
   additionalProperties: false,
 };
 
-function systemFor(lang) {
+const SHOPFRONT = (lang) => `You translate the text of the SimonStays website from English into ${lang.name} (language code ${lang.code}). SimonStays is a South African marketplace for short stays and monthly rentals, mostly in Johannesburg: the texts are menus, buttons, search and booking steps, policies, and listing and area descriptions. `
+  + 'Write naturally for travellers and tenants, friendly and clear. Keep property, complex, street and area names, addresses, the names "SimonStays", "Township Stays", "Ride Eve" and "Ask Simon", prices (R…), dates as numbers, times, emoji and units (km, m²) unchanged. '
+  + 'Keep any line breaks. Return one translation per input text, in the same order.';
+
+function systemFor(lang, context) {
+  if (context === 'shopfront' && lang.code !== 'en') return SHOPFRONT(lang);
   return lang.code === 'en'
     ? 'You translate short texts written by cleaners at SimonStays, a South African short-stay rental business, into plain English for the owner. '
       + 'The texts may be in any language, or a mix (isiZulu, Sesotho, Afrikaans, Shona, English and so on). Keep the meaning exactly, including '
@@ -36,12 +41,12 @@ function systemFor(lang) {
       + 'where a common English loanword is what people actually say, use it. Return one translation per input text, in the same order.';
 }
 
-async function translateBatch(lang, texts) {
+async function translateBatch(lang, texts, context) {
   const resp = await claude.create({
     model: claude.MODEL,
-    max_tokens: 16000,
+    max_tokens: 32000,
     output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
-    system: systemFor(lang),
+    system: systemFor(lang, context),
     messages: [{ role: 'user', content: JSON.stringify(texts) }],
   });
   const data = claude.jsonOf(resp);
@@ -51,20 +56,25 @@ async function translateBatch(lang, texts) {
 
 // { source text: translation } for each text. Uses saved translations; asks Claude
 // for the rest and saves them. Texts it can't translate map to themselves.
-async function translateTexts(langIn, textsIn) {
+// Options: context ('cleaning' | 'shopfront'), maxLen, maxNew (a cap on texts sent
+// to Claude this call; the rest come back untranslated), onNew(count).
+async function translateTexts(langIn, textsIn, opts = {}) {
   const lang = cleanLang(langIn);
-  const texts = [...new Set((textsIn || []).map((t) => String(t || '').trim()).filter((t) => t && t.length <= MAX_LEN))];
+  const maxLen = opts.maxLen || MAX_LEN;
+  const texts = [...new Set((textsIn || []).map((t) => String(t || '').trim()).filter((t) => t && t.length <= maxLen))];
   const out = {};
   if (!lang || !texts.length) return out;
   const byHash = new Map(texts.map((t) => [hash(t), t]));
   const saved = await prisma.translation.findMany({ where: { lang: lang.code, srcHash: { in: [...byHash.keys()] } } });
   saved.forEach((r) => { out[byHash.get(r.srcHash)] = r.text; });
-  const missing = texts.filter((t) => !(t in out));
+  let missing = texts.filter((t) => !(t in out));
+  if (opts.maxNew != null) missing = missing.slice(0, Math.max(0, opts.maxNew));
+  if (opts.onNew) opts.onNew(missing.length);
   if (missing.length && claude.enabled()) {
     for (let i = 0; i < missing.length; i += BATCH) {
       const part = missing.slice(i, i + BATCH);
       let got = null;
-      try { got = await translateBatch(lang, part); } catch (e) { console.error('[translate] failed', lang.code, e.message); }
+      try { got = await translateBatch(lang, part, opts.context); } catch (e) { console.error('[translate] failed', lang.code, e.message); }
       if (!got) continue;
       for (let k = 0; k < part.length; k++) {
         const text = got[k].trim();

@@ -112,7 +112,7 @@ async function factsFor(propertyId, unitId) {
 }
 
 // Ask Claude. `history` is earlier [{question, answer}] turns in this chat.
-async function callSimon(factsText, question, history = []) {
+async function callSimon(factsText, question, history = [], lang = null) {
   const c = getClient();
   if (!c) return { answer: HOLDING_REPLY, known: false, skipped: 'no_key' };
   const messages = [];
@@ -128,6 +128,8 @@ async function callSimon(factsText, question, history = []) {
     system: [
       { type: 'text', text: SYSTEM },
       { type: 'text', text: factsText, cache_control: { type: 'ephemeral' } },
+      // The guest chose a language on the shopfront (🌐): answer in it.
+      ...(lang && lang.name ? [{ type: 'text', text: `The guest is using the website in ${lang.name}. Write your answer in ${lang.name}.` }] : []),
     ],
     messages,
   };
@@ -164,7 +166,7 @@ async function guestBookingAt(guestAccountId, propertyId) {
 }
 
 // A guest asks a question. Returns the stored AskQuestion.
-async function ask({ propertyId, unitId = null, question, sessionId = null, guestAccountId = null }) {
+async function ask({ propertyId, unitId = null, question, sessionId = null, guestAccountId = null, lang = null }) {
   const facts = await factsFor(propertyId, unitId);
   if (!facts) return null;
   const history = sessionId || guestAccountId
@@ -174,7 +176,7 @@ async function ask({ propertyId, unitId = null, question, sessionId = null, gues
     })).reverse().map((q) => ({ question: q.question, answer: q.hostAnswer || q.answer }))
     : [];
   let r;
-  try { r = await callSimon(facts.text, question, history); }
+  try { r = await callSimon(facts.text, question, history, lang); }
   catch (e) {
     console.error('[ask-simon] Claude call failed:', e.status || '', e.message);
     r = { answer: HOLDING_REPLY, known: false };
